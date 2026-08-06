@@ -511,10 +511,12 @@ bits en `backend\venv32` y **solo pyodbc** dentro. Escucha en `127.0.0.1:8001` y
 exige un token compartido que el guion genera en `backend\datos\puente.token`,
 legible solo por administradores y SYSTEM.
 
-Antes hace falta **Python 3.12 de 32 bits** instalado al lado del de 64 (el
+Antes hace falta **un Python de 32 bits** instalado al lado del de 64 (el
 instalador "Windows installer (32-bit)" de python.org, marcando *Install for all
-users* y **sin** marcar *Add python.exe to PATH*). Después, `py -0` debe listar
-tanto `3.12` como `3.12-32`.
+users* y **sin** marcar *Add python.exe to PATH*). Sirve cualquiera de 3.10 en
+adelante y **no tiene que ser la misma versión que usa la API**: el puente no
+comparte código con ella, solo usa `pyodbc` y la biblioteca estándar. Después,
+`py -0` debe listar alguno acabado en `-32`.
 
 Una vez arriba, en **Conexiones → Nueva → ODBC** aparece la casilla *Cargar el
 driver en el puente de 32 bits*, y la lista de DSN de debajo pasa a enseñar los

@@ -30,14 +30,14 @@
 .PARAMETER Puente32
     Instala ademas el puente ODBC de 32 bits: un segundo interprete, de 32 bits,
     con pyodbc y nada mas. Hace falta cuando el driver del origen solo existe de
-    32 bits y no se puede cambiar —Pervasive/Actian con TotalDealer es el caso—,
+    32 bits y no se puede cambiar --Pervasive/Actian con TotalDealer es el caso--,
     porque un proceso de 64 bits no puede cargar una libreria de 32.
 
     Con -Servicios, ademas lo registra como el servicio AstrolabioPuente32.
 
 .PARAMETER RotarClaveCifrado
     Genera una CLAVE_CIFRADO nueva y sale. Para cuando la anterior se haya visto
-    —una captura de pantalla, un correo—. Barato antes de que haya conexiones
+    --una captura de pantalla, un correo--. Barato antes de que haya conexiones
     guardadas; despues obliga a reescribir sus contrasenas.
 
 .EXAMPLE
@@ -64,6 +64,22 @@ function Bien  { param($t) Write-Host "   OK  $t" -ForegroundColor Green }
 function Aviso { param($t) Write-Host "   !   $t" -ForegroundColor Yellow }
 
 <#
+Para el guion explicando que falta instalar, y nada mas.
+
+`throw` con un texto de varias lineas lo imprime DOS veces: una como mensaje y
+otra dentro del registro de error, con su rastro de PowerShell encima. Para un
+fallo de verdad ese rastro sirve; para un "te falta instalar Python de 32 bits"
+convierte una instruccion clara en una pared roja que hay que leer dos veces.
+#>
+function Rendirse {
+    param([Parameter(Mandatory)] [string] $Texto)
+    Write-Host ''
+    Write-Host $Texto -ForegroundColor Yellow
+    Write-Host ''
+    exit 1
+}
+
+<#
 Llama a un programa externo y devuelve su salida y su codigo.
 
 Existe por dos trampas de Windows PowerShell 5.1, que es el que trae Windows
@@ -71,7 +87,7 @@ Server 2019:
 
 1. Con $ErrorActionPreference = 'Stop', CUALQUIER cosa que un programa externo
    escriba en la salida de error se convierte en un error que aborta el guion
-   —el famoso NativeCommandError—. Y pip, npm y py escriben ahi de continuo
+   --el famoso NativeCommandError--. Y pip, npm y py escriben ahi de continuo
    cosas que no son errores. Aqui se baja la preferencia solo mientras dura la
    llamada y se decide por el codigo de salida, que es lo que de verdad dice si
    fue bien.
@@ -121,7 +137,7 @@ function Correr {
 Deja un proceso como servicio de Windows con NSSM, y lo vuelve a dejar igual si
 ya existia.
 
-Existe porque hay dos servicios —la API y el puente de 32 bits— y el segundo
+Existe porque hay dos servicios --la API y el puente de 32 bits-- y el segundo
 llego despues. Duplicar estas quince lineas es como uno de los dos se queda sin
 el `Start` automatico y nadie se entera hasta el siguiente reinicio del servidor.
 #>
@@ -174,7 +190,7 @@ $tokenPuente = Join-Path $backend 'datos\puente.token'
 # --------------------------------------------------------------------------- #
 #
 # Se hace y se sale: no tiene nada que ver con instalar. Sirve para el caso en
-# que la clave se haya visto —una captura, un correo, un chat—, y solo es barato
+# que la clave se haya visto --una captura, un correo, un chat--, y solo es barato
 # ANTES de que haya conexiones guardadas: las contrasenas ya guardadas estan
 # cifradas con la vieja y quedan ilegibles.
 
@@ -218,7 +234,7 @@ if ($Raiz -match '[^\x20-\x7E]') {
 $ayudaPython = @'
 Falta Python 3.12.
 
-  Bajalo de https://www.python.org/downloads/windows/ — el instalador
+  Bajalo de https://www.python.org/downloads/windows/ -- el instalador
   "Windows installer (64-bit)". En el instalador marca las dos casillas:
 
     [x] Add python.exe to PATH
@@ -232,18 +248,18 @@ Falta Python 3.12.
 '@
 
 $py = Get-Command py -ErrorAction SilentlyContinue
-if (-not $py) { throw $ayudaPython }
+if (-not $py) { Rendirse $ayudaPython }
 
 # Comillas: el codigo de Python va entre comillas DOBLES y por dentro solo lleva
-# comillas simples. Al reves —simples fuera, dobles dentro— PowerShell se come
+# comillas simples. Al reves --simples fuera, dobles dentro-- PowerShell se come
 # las dobles al pasarselas al programa y Python recibe algo que no compila.
 $r = Correr py @('-3.12', '-c', "import sys; print('%d.%d' % sys.version_info[:2])")
-if ($r.Codigo -ne 0) { throw $ayudaPython }
+if ($r.Codigo -ne 0) { Rendirse $ayudaPython }
 $version = $r.Texto.Trim()
 
 $r = Correr py @('-3.12', '-c', "import struct; print(struct.calcsize('P') * 8)")
 if ($r.Codigo -ne 0 -or $r.Texto.Trim() -ne '64') {
-    throw "Python $version no es de 64 bits (dice: $($r.Texto.Trim())).`n$ayudaPython"
+    Rendirse "Python $version no es de 64 bits (dice: $($r.Texto.Trim())).`n$ayudaPython"
 }
 Bien "Python $version de 64 bits"
 
@@ -260,28 +276,33 @@ $odbc = "$env:SystemRoot\System32\odbcad32.exe"
 if (Test-Path $odbc) { Bien 'Administrador ODBC de 64 bits presente' }
 
 $ayudaPython32 = @'
-Falta Python 3.12 de 32 bits, que es lo que necesita el puente.
+Falta un Python de 32 bits, que es lo que necesita el puente.
 
-  Bajalo de https://www.python.org/downloads/windows/ — esta vez el instalador
-  "Windows installer (32-bit)". Se instala AL LADO del de 64 bits, no lo
-  reemplaza: Windows los mantiene aparte y `py` sabe cual es cual.
+  Bajalo de https://www.python.org/downloads/windows/ -- esta vez el instalador
+  "Windows installer (32-bit)". Cualquiera de 3.10 en adelante sirve: el puente
+  solo usa pyodbc y la biblioteca estandar. Se instala AL LADO del de 64 bits,
+  no lo reemplaza: Windows los mantiene aparte y `py` sabe cual es cual.
 
   En el instalador marca "Install for all users". NO marques "Add python.exe to
   PATH": el de 64 bits ya esta ahi y el que gane el PATH seria cuestion de azar.
 
-  Despues, `py -0` tiene que listar tanto 3.12 como 3.12-32.
+  Despues, `py -0` tiene que listar alguno acabado en -32.
 '@
 
 if ($Puente32) {
-    # El sufijo -32 es como el lanzador de Python distingue las dos instalaciones.
-    $r = Correr py @('-3.12-32', '-c', "import struct; print(struct.calcsize('P') * 8)")
-    if ($r.Codigo -ne 0) { throw $ayudaPython32 }
-    if ($r.Texto.Trim() -ne '32') {
-        throw ("'py -3.12-32' contesto $($r.Texto.Trim()) bits, no 32. " +
-               "Sin un interprete de 32 bits el puente no sirve de nada, " +
-               "porque lo unico que aporta es poder cargar ese driver.`n$ayudaPython32")
+    # El sufijo -32 es como el lanzador de Python distingue las dos
+    # instalaciones. Se prueban varias versiones en vez de exigir una concreta:
+    # el puente no comparte codigo con la API --solo pyodbc y la biblioteca
+    # estandar-- asi que le vale cualquiera, y pedir justo la que la API usa
+    # obligaria a instalar un Python mas por gusto.
+    $etiqueta32 = $null
+    foreach ($tag in @('-3.13-32', '-3.12-32', '-3.11-32', '-3.10-32')) {
+        $r = Correr py @($tag, '-c', "import struct; print(struct.calcsize('P') * 8)")
+        if ($r.Codigo -eq 0 -and $r.Texto.Trim() -eq '32') { $etiqueta32 = $tag; break }
     }
-    Bien 'Python 3.12 de 32 bits presente'
+    if (-not $etiqueta32) { Rendirse $ayudaPython32 }
+    $r = Correr py @($etiqueta32, '-c', "import sys; print('%d.%d' % sys.version_info[:2])")
+    Bien "Python $($r.Texto.Trim()) de 32 bits presente (py $etiqueta32)"
 
     $odbc32 = "$env:SystemRoot\SysWOW64\odbcad32.exe"
     # El nombre despista: el de System32 es el de 64 bits y el de SysWOW64 el de
@@ -322,7 +343,9 @@ if ($Puente32) {
     Paso 'Puente ODBC de 32 bits'
 
     if (-not (Test-Path $python32)) {
-        $r = Correr py @('-3.12-32', '-m', 'venv', (Join-Path $backend 'venv32'))
+        # $etiqueta32 lo dejo la comprobacion de requisitos: es el que resulto
+        # ser de 32 bits en ESTA maquina, no uno fijado aqui.
+        $r = Correr py @($etiqueta32, '-m', 'venv', (Join-Path $backend 'venv32'))
         if ($r.Codigo -ne 0) { throw "No se pudo crear el venv de 32 bits:`n$($r.Texto)" }
         Bien 'venv32 creado'
     } else {
@@ -330,7 +353,7 @@ if ($Puente32) {
     }
 
     # Solo pyodbc. Ni pyarrow ni duckdb: no tienen ruedas de 32 bits, y el puente
-    # no las necesita porque no toca ni Arrow ni Parquet — de eso se encarga el
+    # no las necesita porque no toca ni Arrow ni Parquet -- de eso se encarga el
     # proceso de 64 bits con las filas ya recibidas.
     $r = Correr $python32 @('-m', 'pip', 'install', '--upgrade', 'pip', '--quiet')
     if ($r.Codigo -ne 0) { throw "Fallo actualizar pip en venv32:`n$($r.Texto)" }
@@ -540,7 +563,7 @@ if ($Servicios) {
         Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
                           -OutFile $zip -UseBasicParsing
 
-        # Se enseña la huella para que se pueda comparar con la de nssm.cc. No se
+        # Se ensena la huella para que se pueda comparar con la de nssm.cc. No se
         # comprueba contra un valor escrito aqui: una huella copiada a mano en un
         # guion da una seguridad que no es real.
         Aviso "SHA256 de lo descargado: $((Get-FileHash $zip -Algorithm SHA256).Hash)"
