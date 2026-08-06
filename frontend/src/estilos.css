@@ -913,6 +913,33 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 
 .ok-texto { color: var(--ok); }
 .error-texto { color: var(--critico); }
+.critico-texto { color: var(--critico); }
+.aviso-texto { color: var(--aviso); }
+
+/* La cabecera de una conexion pliega sus datasets. El triangulo es solo la
+   señal: lo que se pulsa es toda la cabecera, porque con cuarenta sucursales
+   acertarle cuarenta veces a diez pixeles es trabajo de verdad. */
+.tarjeta-con .plegar {
+  background: none;
+  border: 0;
+  color: var(--texto-suave);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.tarjeta-con .plegar:hover { color: var(--texto); }
+.tarjeta-con .detalle-con { word-break: break-all; }
+
+/* La barra de busqueda y filtros de la pantalla de conexiones. */
+.barra-filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 2px;
+}
+.barra-filtros input[type='search'] { min-width: 0; }
 .aviso-caja.ok-caja {
   background: color-mix(in srgb, var(--ok) 12%, transparent);
   color: var(--ok);
