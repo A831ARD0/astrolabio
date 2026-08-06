@@ -537,6 +537,7 @@ def test_editar_una_conexion_conserva_sus_datasets(cliente, cab_admin,
     assert "ventas_que_sobrevive" in nombres
 
 
+@necesita_mysql
 def test_editar_no_devuelve_la_contrasena(cliente, cab_admin, conexion_mysql):
     r = cliente.patch(f"/api/conexiones/{conexion_mysql}", headers=cab_admin,
                       json={"config": {"password": "otra-cosa-que-no-se-ve"}})

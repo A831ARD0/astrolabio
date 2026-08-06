@@ -53,6 +53,14 @@ versionado es [semántico](https://semver.org/lang/es/).
   Docker. Las instrucciones anteriores usaban un contenedor, que es justo lo que
   no arranca cuando Docker está en el modo equivocado.
 
+### Arreglado
+
+- **Una prueba armaba JSON pegando una ruta con una f-string** y en Windows eso
+  produce JSON inválido: `C:\Users` lleva un `\U` que no es un escape válido.
+  En Linux colaba porque las rutas no tienen barras invertidas. Lo encontró el
+  trabajo de integración continua en Windows el mismo día que se añadió, que era
+  exactamente para lo que estaba.
+
 ### Cambiado
 
 - `api` ya solo escucha en `127.0.0.1:8000`. Quien entra de fuera pasa por Caddy,

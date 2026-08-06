@@ -17,6 +17,7 @@ contra un servidor SMTP de verdad probaria smtplib, que ya esta probado.
 from __future__ import annotations
 
 import csv
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -299,8 +300,11 @@ def conexion_archivo(tmp_path_factory, cliente, cab_admin):
         w.writerow([2, "200.25"])
 
     with CrearSesion() as s:
+        # json.dumps, no una f-string: en Windows la ruta lleva '\' y pegarla a
+        # mano produce JSON invalido ("C:\Users" tiene un \U que no es escape).
+        # En Linux colaba, y esa clase de fallo solo aparece en el servidor.
         con = Conexion(nombre=f"archivos_avisos_{carpeta.name}", tipo="archivo",
-                       config_cifrada=cifrar(f'{{"ruta_base": "{carpeta}"}}'))
+                       config_cifrada=cifrar(json.dumps({"ruta_base": str(carpeta)})))
         s.add(con)
         s.flush()
         ok = Dataset(nombre=f"ventas_ok_{carpeta.name}", conexion_id=con.id,
