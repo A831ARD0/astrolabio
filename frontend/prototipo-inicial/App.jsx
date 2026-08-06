@@ -27,7 +27,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <span className="app-title">Bonn BI — Prototipo</span>
+        <span className="app-title">Astrolabio — Prototipo inicial</span>
         <nav className="tabs">
           {TABS.map((t) => (
             <button

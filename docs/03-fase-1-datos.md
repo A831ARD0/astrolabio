@@ -318,7 +318,7 @@ otra vez por eso enseña que el botón es arbitrario.
 
 El fallo de verdad no era el orden, era el silencio. Con el nombre vacío, `Probar` y
 `Guardar` estaban los dos desactivados y **nada decía por qué** — y el texto de
-ejemplo del campo Nombre (`bonn_servidor`) se leía como un valor escrito, así que el
+ejemplo del campo Nombre (`ventas_servidor`) se leía como un valor escrito, así que el
 formulario parecía completo.
 
 Dos arreglos, los dos de una línea:
