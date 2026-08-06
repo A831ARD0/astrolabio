@@ -171,6 +171,23 @@ transformación. Es una propuesta, no un cambio automático.
 ⚠️ Un dataset con horario propio que además es paso de un flujo **se carga dos
 veces**. A veces es lo que se quiere; conviene saberlo.
 
+### Tareas
+
+**Tareas** es la pantalla de la mañana: todo lo que corre solo, en una sola tabla.
+Los flujos y las cargas con horario propio aparecen juntos, porque a las 8 de la
+mañana lo que importa es qué corrió anoche y cómo salió, no de qué tipo era.
+
+Cada fila dice el horario, cuándo corrió por última vez, cómo salió y cuándo vuelve
+a correr. El triángulo de la izquierda **despliega los pasos en su orden**, así que
+no hay que abrir el flujo para saber qué hace.
+
+Lo que falló sale arriba. Los filtros de la barra —*Fallaron*, *Corriendo*, *Bien*,
+*Sin correr*, *Sin horario*— y el buscador, que también busca por tabla y por
+conexión, sirven para responder «¿quién carga esta tabla?».
+
+Aquí no se edita nada: **Abrir** lleva a Flujos o a Conexiones, que es donde se
+cambia. **Ejecutar** lanza un flujo a mano.
+
 ---
 
 ## 5. Transformar

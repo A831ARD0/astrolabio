@@ -483,6 +483,12 @@ C:\astrolabio\backend\venv\Scripts\python -c "import pyodbc; print(pyodbc.driver
 Eso mismo lo enseña la pantalla de conexiones al elegir el origen Pervasive, y
 preselecciona el driver detectado.
 
+**Estos orígenes no tienen esquemas.** El DSN ya apunta a los datos y `SQLTables`
+devuelve las tablas sin catálogo ni esquema, así que el explorador no ofrece
+ninguno que elegir y las lista todas. En un origen que sí los tenga —un MySQL por
+ODBC, por ejemplo— cada tabla se queda con el que declare el driver y los
+catálogos del motor (`information_schema`, `mysql`, `pg_catalog`…) no se enseñan.
+
 #### Cuando el driver solo existe de 32 bits: el puente
 
 Lo de arriba supone que se puede instalar el cliente de 64 bits. A veces no: la

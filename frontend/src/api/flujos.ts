@@ -24,6 +24,9 @@ export interface Flujo {
   proxima_corrida: string | null
   ultima_ejecucion: string | null
   ultimo_estado: string | null
+  /** Cuánto tardó y qué dijo la última corrida, sin abrir el historial. */
+  ultima_ms: number | null
+  ultimo_mensaje: string | null
   /** Problemas de orden deducidos del linaje. Se recalculan al leer. */
   avisos: string[]
 }

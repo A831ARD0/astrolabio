@@ -60,6 +60,11 @@ class Salida(BaseModel):
     proxima_corrida: str | None
     ultima_ejecucion: str | None
     ultimo_estado: str | None
+    # Cuanto tardo y que dijo la ultima corrida. Van en la lista y no solo en el
+    # historial porque la pantalla de tareas tiene que responder "como salio"
+    # sin abrir cada flujo.
+    ultima_ms: int | None
+    ultimo_mensaje: str | None
     avisos: list[str]
 
 
@@ -78,6 +83,8 @@ def _salida(sesion: SesionDep, f: Flujo) -> Salida:
         ultima_ejecucion=(f.ultima_ejecucion.isoformat()
                           if f.ultima_ejecucion else None),
         ultimo_estado=ultima.estado.value if ultima else None,
+        ultima_ms=ultima.ms if ultima else None,
+        ultimo_mensaje=ultima.mensaje if ultima else None,
         # Los avisos se recalculan al leer: el orden puede quedar mal por un
         # cambio en otra parte (una transformación que ahora lee de otro dataset),
         # no solo al guardar el flujo.

@@ -125,6 +125,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: var(--r);
   cursor: pointer;
   white-space: nowrap;
+  /* Un <a class="btn"> tiene que verse igual que un <button class="btn">: sin
+     esto se queda azul y subrayado al lado de los demas. */
+  color: inherit;
+  text-decoration: none;
 }
 .btn:hover:not(:disabled) { background: var(--fondo-hover); border-color: var(--borde-fuerte); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -919,7 +923,7 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 /* La cabecera de una conexion pliega sus datasets. El triangulo es solo la
    señal: lo que se pulsa es toda la cabecera, porque con cuarenta sucursales
    acertarle cuarenta veces a diez pixeles es trabajo de verdad. */
-.tarjeta-con .plegar {
+.plegar {
   background: none;
   border: 0;
   color: var(--texto-suave);
@@ -928,8 +932,19 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   padding: 0 2px;
   line-height: 1;
 }
-.tarjeta-con .plegar:hover { color: var(--texto); }
+.plegar:hover { color: var(--texto); }
 .tarjeta-con .detalle-con { word-break: break-all; }
+
+/* Los pasos de una tarea, desplegados bajo su fila. El numero de orden va a la
+   vista porque el orden es justo lo que se viene a mirar. */
+.pasos-tarea {
+  margin: 4px 0 6px;
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pasos-tarea li::marker { color: var(--texto-tenue); font-size: 11px; }
 
 /* La barra de busqueda y filtros de la pantalla de conexiones.
 

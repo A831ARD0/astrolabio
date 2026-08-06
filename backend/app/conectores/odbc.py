@@ -337,25 +337,33 @@ class ConectorODBC(Conector):
         try:
             cur = con.cursor()
             donde = self._donde(esquema, con)
-            if not donde:
-                raise ErrorConector(
-                    "Hace falta indicar el esquema o la base de datos")
+            # Sin esquema ni base indicados NO se falla. Hay motores -Pervasive
+            # y en general los de fichero- donde el DSN ya apunta a los datos y
+            # el concepto de esquema no existe: pedirlo es pedir algo que el
+            # origen no tiene, y antes esto dejaba la conexion inservible.
+            # Se listan todas las tablas visibles y cada una se queda con el
+            # esquema que declare el driver, que puede ser ninguno.
             try:
                 filas = list(cur.tables(**donde))
             except pyodbc.Error as e:
                 raise ErrorConector(_limpio(e)) from e
             destino = esquema or self.config.get("database")
-            return [
-                TablaOrigen(
-                    esquema=destino, nombre=f.table_name,
+            salida = []
+            for f in filas:
+                if (f.table_type or "").upper() not in ("TABLE", "VIEW", "BASE TABLE"):
+                    continue
+                propio = destino or f.table_cat or f.table_schem or None
+                # Al listar sin filtro se cuelan los catalogos del motor.
+                if not destino and propio and propio.lower() in SISTEMA:
+                    continue
+                salida.append(TablaOrigen(
+                    esquema=propio, nombre=f.table_name,
                     # ODBC no da un estimado de filas barato. Se deja en None en
                     # vez de inventar un cero, que se leeria como "tabla vacia".
                     filas_estimadas=None,
                     es_vista=(f.table_type or "").upper() == "VIEW",
-                )
-                for f in filas
-                if (f.table_type or "").upper() in ("TABLE", "VIEW", "BASE TABLE")
-            ]
+                ))
+            return salida
         finally:
             con.close()
 

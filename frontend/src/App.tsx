@@ -13,6 +13,7 @@ import { Modelo } from './paginas/Modelo'
 import { Modelos } from './paginas/Modelos'
 import { Tablero } from './paginas/Tablero'
 import { Tableros } from './paginas/Tableros'
+import { Tareas } from './paginas/Tareas'
 
 export function App() {
   const yo = useYo()
@@ -58,6 +59,12 @@ export function App() {
               <NavLink to="/etl" className={({ isActive }) => (isActive ? 'activo' : '')}>
                 Transformar
               </NavLink>
+              {/* Tareas va antes que Flujos porque es la que se mira a diario:
+                  qué corrió anoche. Flujos es donde se arma, y eso se hace una
+                  vez. */}
+              <NavLink to="/tareas" className={({ isActive }) => (isActive ? 'activo' : '')}>
+                Tareas
+              </NavLink>
               <NavLink to="/flujos" className={({ isActive }) => (isActive ? 'activo' : '')}>
                 Flujos
               </NavLink>
@@ -94,6 +101,7 @@ export function App() {
           <Route path="/tableros/:id" element={<Tablero />} />
           <Route path="/conexiones" element={<Conexiones />} />
           <Route path="/etl" element={<Etl />} />
+          <Route path="/tareas" element={<Tareas />} />
           <Route path="/flujos" element={<Flujos />} />
           <Route path="/avisos" element={<Avisos />} />
           <Route path="/gobierno" element={<Gobierno />} />
