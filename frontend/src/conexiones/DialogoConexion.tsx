@@ -408,8 +408,8 @@ export function DialogoConexion({
               </label>
               <span className="chico tenue">
                 Para los orígenes cuyo driver solo existe de 32 bits, como Pervasive
-                con TotalDealer. Un proceso de 64 bits no puede cargar una librería
-                de 32, así que la carga la hace otro proceso.
+                o Actian Zen. Un proceso de 64 bits no puede cargar una librería de
+                32, así que la carga la hace otro proceso.
               </span>
             </div>
           )}

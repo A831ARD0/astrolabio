@@ -6,7 +6,7 @@ Esta carpeta está vacía a propósito, y su contenido está en `.gitignore`.
 
 Algunos orígenes necesitan un driver ODBC que **no se puede descargar**: sale del
 instalador licenciado del fabricante. El caso que motivó esto es **Actian Zen /
-Pervasive PSQL**, que es por donde salen los datos de TotalDealer.
+Pervasive PSQL**, sobre el que corren muchos sistemas de gestión antiguos.
 
 Si dejas aquí el paquete del cliente de Linux, la construcción de la imagen lo
 instala y lo registra sola. Si no dejas nada, la imagen se construye igual y sin

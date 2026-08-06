@@ -64,7 +64,7 @@ class Config(BaseSettings):
 
     # --- puente ODBC de 32 bits ---
     # Para los origenes cuyo driver solo existe de 32 bits (Pervasive/Actian con
-    # TotalDealer es el caso tipico). Un proceso de 64 bits no puede cargar una
+    # Pervasive/Actian es el caso tipico). Un proceso de 64 bits no puede cargar
     # libreria de 32, asi que el driver lo carga otro proceso y se le habla por
     # aqui. Solo lo usan las conexiones que lo piden con `puente: true`.
     puente_url: str = "http://127.0.0.1:8001"

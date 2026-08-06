@@ -30,7 +30,7 @@
 .PARAMETER Puente32
     Instala ademas el puente ODBC de 32 bits: un segundo interprete, de 32 bits,
     con pyodbc y nada mas. Hace falta cuando el driver del origen solo existe de
-    32 bits y no se puede cambiar --Pervasive/Actian con TotalDealer es el caso--,
+    32 bits y no se puede cambiar --Pervasive/Actian es el caso tipico--,
     porque un proceso de 64 bits no puede cargar una libreria de 32.
 
     Con -Servicios, ademas lo registra como el servicio AstrolabioPuente32.

@@ -242,7 +242,7 @@ Cuatro cosas propias de Windows que conviene saber:
 
 > ### ⚠️ ODBC en Windows: los drivers de Windows NO sirven dentro de Docker
 >
-> Esto es importante para el caso de TotalDealer sobre Pervasive/Actian.
+> Esto es importante para cualquier origen sobre Pervasive/Actian.
 >
 > Un contenedor de Docker en Windows es **Linux**. Un driver ODBC de Windows es una
 > DLL, y **una DLL no se carga en Linux** — da igual que el DSN esté perfectamente
@@ -285,7 +285,7 @@ Un servicio de systemd con `uvicorn`, y Caddy o nginx delante. Lo esencial:
 ### Sin Docker, nativo en Windows Server
 
 **Esta es la instalación recomendada si el servidor es Windows Server 2019 y los
-datos salen de Pervasive/TotalDealer**, por dos razones que se juntan:
+datos salen de Pervasive/Actian**, por dos razones que se juntan:
 
 - En Server 2019 **no hay contenedores Linux**: WSL 2 pide compilación 19041 o
   superior, Docker Desktop no se soporta en Windows Server, y LCOW —el apaño que
@@ -470,9 +470,9 @@ crea los DSN de las agencias en el **Administrador de orígenes de datos ODBC (6
 bits)** — `odbcad32.exe` de `C:\Windows\System32`, no el de `SysWOW64`, que es el
 de 32 bits.
 
-Un DSN es local a la máquina donde se crea: los que están hoy en el servidor de
-TotalDealer no existen para Astrolabio hasta que se creen también aquí. Y va
-**una conexión por agencia**, porque va un DSN por agencia.
+Un DSN es local a la máquina donde se crea: los que están hoy en el servidor del
+sistema de origen no existen para Astrolabio hasta que se creen también aquí. Y
+va **una conexión por sucursal**, porque va un DSN por sucursal.
 
 Comprueba qué ve Astrolabio:
 
@@ -486,8 +486,9 @@ preselecciona el driver detectado.
 #### Cuando el driver solo existe de 32 bits: el puente
 
 Lo de arriba supone que se puede instalar el cliente de 64 bits. A veces no: la
-aplicación que ya usa ese driver —TotalDealer con Pervasive es el caso típico—
-exige el de 32 bits, y en una máquina solo cabe una versión del cliente.
+aplicación que ya usa ese driver —un sistema de gestión sobre Pervasive es el
+caso típico— exige el de 32 bits, y en una máquina solo cabe una versión del
+cliente.
 
 Entonces aparece este error, y no hay configuración que lo arregle:
 
