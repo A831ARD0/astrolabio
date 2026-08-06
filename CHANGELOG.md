@@ -42,6 +42,13 @@ versionado es [semántico](https://semver.org/lang/es/).
   volumen, finales de línea, cómo salir del error `no matching manifest for
   windows(...)` —Docker en modo contenedores de Windows—, y por qué **un driver
   ODBC de Windows no se puede cargar dentro de un contenedor Linux**.
+- **Instalación nativa en Windows Server**, con NSSM como servicio, Caddy delante,
+  los DSN de 64 bits y el respaldo por el Programador de tareas. Es la salida para
+  **Windows Server 2019**, donde no hay contenedores Linux —WSL 2 pide compilación
+  19041+, Docker Desktop no se soporta en Server y LCOW está descontinuado— y
+  además es la única donde el driver ODBC de Pervasive carga de verdad.
+- **Las pruebas corren también en `windows-latest`.** Hay instalaciones que van a
+  vivir en Windows Server; que funcione ahí tiene que estar probado, no supuesto.
 - Las claves de producción se generan con **PowerShell puro**, sin `openssl` y sin
   Docker. Las instrucciones anteriores usaban un contenedor, que es justo lo que
   no arranca cuando Docker está en el modo equivocado.

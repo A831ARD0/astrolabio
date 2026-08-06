@@ -26,10 +26,12 @@ Para quien instala y mantiene Astrolabio. Si lo que buscas es usarlo, ese es el
 | CPU | 2 núcleos | 4+ |
 | RAM | 4 GB | 16 GB |
 | Disco | 20 GB | Lo que ocupen tus Parquet ×3 |
-| SO | Linux, macOS o Windows | Cualquiera de los tres, con Docker |
+| SO | Linux, macOS o Windows | Linux o Windows Server |
 
 **Con Docker no necesitas instalar nada más**: Python y Node viven dentro de las
-imágenes, y la interfaz se compila durante la construcción.
+imágenes, y la interfaz se compila durante la construcción. Funciona en Linux,
+macOS y Windows **10/11 o Server 2022** — en Windows Server 2019 no, porque no
+tiene WSL 2; ahí la instalación es nativa, y está explicada en §4.
 
 Sin Docker: **Python 3.12+**, **Node 20+** (solo para compilar la interfaz) y
 `unixodbc` si vas a usar conectores ODBC.
@@ -179,7 +181,7 @@ ODBC más abajo: es lo único que cambia de verdad.**
 > |---|---|
 > | **Windows Server 2022** (compilación 20348) con Docker Desktop o Docker Engine en WSL 2 | Lo recomendable si el servidor se puede actualizar |
 > | **Una máquina virtual Linux** en Hyper-V —Ubuntu Server 24.04— y Docker dentro | No toca el Windows de al lado. Es lo que yo haría en un 2019 que no se puede mover |
-> | **Astrolabio nativo en Windows**, sin Docker | Python 3.12 y Node 20 instalados, la API como servicio. Es la única que además resuelve lo de Pervasive, porque ahí sí carga el driver de Windows |
+> | **Astrolabio nativo en Windows**, sin Docker — [instrucciones abajo](#sin-docker-nativo-en-windows-server) | Python 3.12 y Node 20 instalados, la API como servicio. Es la única que además resuelve lo de Pervasive, porque ahí sí carga el driver de Windows. **Es la recomendada en Server 2019** |
 >
 > Que la máquina sea Windows Server 2019 tiene una consecuencia buena: como el
 > driver de Pervasive es de Windows, **la tercera opción mata dos pájaros**. Lee
@@ -271,7 +273,7 @@ Cuatro cosas propias de Windows que conviene saber:
 > a hacer tableros. La decisión de Pervasive depende de qué licencia consiga
 > sistemas, y no debería frenar todo lo demás.
 
-### Sin Docker
+### Sin Docker, en Linux
 
 Un servicio de systemd con `uvicorn`, y Caddy o nginx delante. Lo esencial:
 
@@ -279,6 +281,120 @@ Un servicio de systemd con `uvicorn`, y Caddy o nginx delante. Lo esencial:
 - `WorkingDirectory` en `backend/`.
 - Las variables de entorno en el archivo de la unidad o en un `EnvironmentFile`.
 - Un solo trabajador, o el programador en uno solo.
+
+### Sin Docker, nativo en Windows Server
+
+**Esta es la instalación recomendada si el servidor es Windows Server 2019 y los
+datos salen de Pervasive/TotalDealer**, por dos razones que se juntan:
+
+- En Server 2019 **no hay contenedores Linux**: WSL 2 pide compilación 19041 o
+  superior, Docker Desktop no se soporta en Windows Server, y LCOW —el apaño que
+  existía— está descontinuado.
+- El driver ODBC de Pervasive es de Windows. Nativo **sí carga**; dentro de un
+  contenedor Linux, no. Ver el aviso de ODBC más arriba.
+
+El código no usa nada exclusivo de POSIX y todas las rutas van por `pathlib`. Hay
+un trabajo de integración continua que corre las pruebas en `windows-latest`, así
+que esto está probado y no supuesto.
+
+Instala **Python 3.12**, **Node 20** y **Git for Windows**. En PowerShell, como
+administrador:
+
+```powershell
+git config --global core.autocrlf false
+git clone https://github.com/a831ard0/astrolabio.git C:\astrolabio
+cd C:\astrolabio\backend
+py -3.12 -m venv venv
+.\venv\Scripts\pip install -r requirements.txt
+```
+
+La interfaz se compila una vez y queda en `frontend\dist`:
+
+```powershell
+cd C:\astrolabio\frontend
+npm ci
+npm run build
+```
+
+Las variables van en el entorno de la máquina (no en un `.env` suelto, que acaba
+copiado a donde no debe). Genera las claves con los comandos de PowerShell de más
+arriba y:
+
+```powershell
+[Environment]::SetEnvironmentVariable('ASTROLABIO_ENTORNO','produccion','Machine')
+[Environment]::SetEnvironmentVariable('ASTROLABIO_CLAVE_SECRETA','<la-secreta>','Machine')
+[Environment]::SetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO','<la-de-cifrado>','Machine')
+```
+
+Compruébalo antes de montar el servicio —esto tiene que responder `{"estado":"ok"}`:
+
+```powershell
+cd C:\astrolabio\backend
+.\venv\Scripts\python -m uvicorn app.main:app --port 8000
+```
+
+#### Como servicio de Windows
+
+Para que arranque solo al reiniciar y se levante si se cae, con
+[NSSM](https://nssm.cc) (un ejecutable, sin instalador):
+
+```powershell
+nssm install Astrolabio C:\astrolabio\backend\venv\Scripts\python.exe
+nssm set Astrolabio AppParameters "-m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+nssm set Astrolabio AppDirectory C:\astrolabio\backend
+nssm set Astrolabio AppStdout C:\astrolabio\registros\salida.log
+nssm set Astrolabio AppStderr C:\astrolabio\registros\error.log
+nssm set Astrolabio Start SERVICE_AUTO_START
+nssm start Astrolabio
+```
+
+- **`--host 127.0.0.1`, no `0.0.0.0`.** Quien entra de fuera pasa por Caddy, que
+  es el que lleva HTTPS y las cabeceras de seguridad.
+- **Un solo proceso.** Con varios, el programador duplica las cargas (ver §3).
+- Ponlo a correr con una **cuenta de servicio sin privilegios de administrador**
+  (`nssm set Astrolabio ObjectName <dominio\cuenta> <clave>`), con permiso de
+  escritura solo sobre `C:\astrolabio\backend\datos`.
+
+Delante, Caddy —que en Windows es un solo `caddy.exe`— con el `Caddyfile` del
+repositorio, cambiando `root * /srv` por `root * C:\astrolabio\frontend\dist`:
+
+```powershell
+nssm install AstrolabioWeb C:\caddy\caddy.exe
+nssm set AstrolabioWeb AppParameters "run --config C:\astrolabio\Caddyfile"
+nssm start AstrolabioWeb
+```
+
+#### El ODBC de Pervasive, aquí sí
+
+Instala en **este mismo servidor** el cliente de Pervasive/Actian de **64 bits** y
+crea los DSN de las agencias en el **Administrador de orígenes de datos ODBC (64
+bits)** — `odbcad32.exe` de `C:\Windows\System32`, no el de `SysWOW64`, que es el
+de 32 bits.
+
+Un DSN es local a la máquina donde se crea: los que están hoy en el servidor de
+TotalDealer no existen para Astrolabio hasta que se creen también aquí. Y va
+**una conexión por agencia**, porque va un DSN por agencia.
+
+Comprueba qué ve Astrolabio:
+
+```powershell
+C:\astrolabio\backend\venv\Scripts\python -c "import pyodbc; print(pyodbc.drivers()); print(pyodbc.dataSources())"
+```
+
+Eso mismo lo enseña la pantalla de conexiones al elegir el origen Pervasive, y
+preselecciona el driver detectado.
+
+#### Respaldo en Windows
+
+Sin Docker, los metadatos son un archivo normal, pero **no lo copies con
+`Copy-Item`**: una copia hecha a mitad de una escritura parece buena y no lo es.
+
+```powershell
+C:\astrolabio\backend\venv\Scripts\python -c "import sqlite3; o=sqlite3.connect(r'C:\astrolabio\backend\datos\astrolabio.db'); d=sqlite3.connect(r'C:\respaldos\astrolabio.db'); o.backup(d); d.close(); o.close()"
+```
+
+Ponlo en el Programador de tareas, diario, y **prueba una restauración**: parar el
+servicio, copiar el respaldo encima, arrancar.
 
 ### La lista antes de abrir
 
