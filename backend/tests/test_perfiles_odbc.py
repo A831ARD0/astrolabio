@@ -109,6 +109,20 @@ def test_todos_los_perfiles_libres_se_pueden_armar():
         assert c._cadena()
 
 
+def test_la_pista_explica_el_choque_de_32_contra_64():
+    from app.conectores.odbc import _pista_dsn
+    pista = _pista_dsn({"dsn": "VW_MATRIZ"}, "[IM014] [Microsoft][Administrador de "
+                       "controladores ODBC] La arquitectura del DSN especificado "
+                       "no coincide entre el controlador y la aplicacion.")
+    assert "32" in pista and "64" in pista
+    assert "puente" in pista
+
+
+def test_la_pista_no_estorba_cuando_el_fallo_es_otro():
+    from app.conectores.odbc import _pista_dsn
+    assert _pista_dsn({"dsn": "X"}, "Login failed for user 'x'.") == ""
+
+
 def test_todos_los_perfiles_declaran_sus_campos():
     """Un campo de la plantilla que no este en `campos` no se puede llenar."""
     import re

@@ -580,10 +580,27 @@ def _pista_dsn(cfg: dict, mensaje: str) -> str:
     es invisible para un proceso de 64, y son dos registros distintos— o de que se
     configuro en la maquina del origen y no en esta. El driver no distingue esos
     tres casos; aqui se dicen los tres, con la lista de los que si se ven.
+
+    El primo hermano es IM014, "la arquitectura del DSN no coincide": ese si es
+    claro sobre QUE pasa, pero no sobre que hacer, y lo que hay que hacer no es
+    obvio cuando el driver de 32 bits no se puede cambiar.
     """
-    if "data source name not found" not in mensaje.lower():
-        return ""
+    bajo = mensaje.lower()
     pedido = str(cfg.get("dsn") or "").strip()
+
+    if "im014" in bajo or "architecture" in bajo or "arquitectura" in bajo:
+        return (
+            "\n\nEs el choque de 32 contra 64 bits: el DSN apunta a un driver de "
+            "32 bits y Astrolabio corre en 64. No es configuracion — un proceso "
+            "de 64 bits no puede cargar una libreria de 32, nunca.\n"
+            "Salidas: instalar el driver del origen de 64 bits (el DSN se vuelve "
+            "a crear en C:\\Windows\\System32\\odbcad32.exe), o —cuando el de 32 "
+            "no se puede tocar porque otra aplicacion depende de el— un puente "
+            "que hable ODBC desde un proceso de 32 bits aparte."
+        )
+
+    if "data source name not found" not in bajo:
+        return ""
     if not pedido:
         return ""
     try:
