@@ -63,6 +63,22 @@ jobs:
           ASTROLABIO_DEMO_RAPIDO: '1'
         run: pytest -q
 
+      # El guion de instalacion se escribe en una maquina que no es Windows, asi
+      # que aqui es donde se comprueba que al menos es PowerShell valido y que
+      # sus requisitos previos se detectan bien. Una errata de sintaxis
+      # descubierta en el servidor de produccion es una tarde perdida.
+      - name: El guion de instalacion es PowerShell valido
+        working-directory: .
+        run: |
+          $errores = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path .\instalar-windows.ps1), [ref]$null, [ref]$errores) | Out-Null
+          if ($errores) { $errores | ForEach-Object { Write-Error $_ }; exit 1 }
+          Write-Host "Sintaxis correcta."
+      - name: El guion detecta sus requisitos
+        working-directory: .
+        run: .\instalar-windows.ps1 -Comprobar
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

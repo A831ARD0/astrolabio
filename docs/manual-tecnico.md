@@ -297,18 +297,58 @@ El código no usa nada exclusivo de POSIX y todas las rutas van por `pathlib`. H
 un trabajo de integración continua que corre las pruebas en `windows-latest`, así
 que esto está probado y no supuesto.
 
-Instala **Python 3.12**, **Node 20** y **Git for Windows**. En PowerShell, como
-administrador:
+#### Lo que hay que instalar antes
+
+| | Dónde | Ojo con |
+|---|---|---|
+| **Python 3.12** | [python.org](https://www.python.org/downloads/windows/) → *Windows installer (**64-bit**)* | Marca **Add python.exe to PATH** e **Install for all users** (lo segundo hace falta para correrlo como servicio) |
+| **Node 20+** | [nodejs.org](https://nodejs.org) → *Windows Installer (.msi), 64-bit* | Solo se usa para compilar la interfaz, una vez |
+| **Git for Windows** | [git-scm.com](https://git-scm.com/download/win) | |
+
+> **Python tiene que ser de 64 bits.** Con el de 32, DuckDB se queda en unos 3 GB
+> de memoria y una consulta sobre millones de filas se muere. Y además cargaría
+> los drivers ODBC de 32 bits, que es justo de lo que hay que salir. Compruébalo
+> con `py -0` (tiene que listar `3.12`) y:
+>
+> ```powershell
+> py -3.12 -c "import struct; print(struct.calcsize('P') * 8)"
+> ```
+
+#### El guion que hace todo
 
 ```powershell
 git config --global core.autocrlf false
 git clone https://github.com/a831ard0/astrolabio.git C:\astrolabio
+cd C:\astrolabio
+.\instalar-windows.ps1
+```
+
+Crea el entorno de Python, instala las dependencias, compila la interfaz, genera
+las dos claves si faltan y **comprueba que la API arranca y responde** antes de
+darse por bueno. Se puede volver a correr: no pisa nada que ya esté bien.
+
+Si `Get-ExecutionPolicy` lo impide:
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
+> **Las claves generadas no se vuelven a generar nunca.** Si `CLAVE_CIFRADO` ya
+> existe, el guion no la toca — cambiarla deja **ilegibles todas las contraseñas
+> de las conexiones ya guardadas**, sin recuperación posible. El guion la imprime
+> una vez: cópiala a tu gestor de secretos en ese momento.
+
+Y para dejarlo como servicio, en una consola **de administrador** y con
+[NSSM](https://nssm.cc) en el `PATH`:
+
+```powershell
+.\instalar-windows.ps1 -Servicios
+```
+
+#### A mano, si prefieres verlo paso a paso
+
+```powershell
 cd C:\astrolabio\backend
 py -3.12 -m venv venv
 .\venv\Scripts\pip install -r requirements.txt
 ```
-
-La interfaz se compila una vez y queda en `frontend\dist`:
 
 ```powershell
 cd C:\astrolabio\frontend
@@ -316,9 +356,9 @@ npm ci
 npm run build
 ```
 
-Las variables van en el entorno de la máquina (no en un `.env` suelto, que acaba
-copiado a donde no debe). Genera las claves con los comandos de PowerShell de más
-arriba y:
+Las variables van en el entorno de la máquina, no en un `.env` suelto que acaba
+copiado a donde no debe. Con las claves de los comandos de PowerShell de más
+arriba:
 
 ```powershell
 [Environment]::SetEnvironmentVariable('ASTROLABIO_ENTORNO','produccion','Machine')
@@ -326,7 +366,8 @@ arriba y:
 [Environment]::SetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO','<la-de-cifrado>','Machine')
 ```
 
-Compruébalo antes de montar el servicio —esto tiene que responder `{"estado":"ok"}`:
+Y la prueba de humo antes de montar el servicio — tiene que responder
+`{"estado":"ok"}`:
 
 ```powershell
 cd C:\astrolabio\backend
