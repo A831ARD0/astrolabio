@@ -23,6 +23,7 @@ que vuelve a mirar filas que ya se habian traido.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,8 @@ from app.config import config
 from app.modelos_db import CargaEjecucion, Conexion, Dataset, EstadoCarga
 from app.seguridad import descifrar
 from app.ventanas import VentanaInvalida
+
+log = logging.getLogger(__name__)
 from app.ventanas import resolver as resolver_ventana
 
 
@@ -128,6 +131,8 @@ def ejecutar_carga(
         conector = crear(conexion.tipo, json.loads(descifrar(conexion.config_cifrada)))
     except ErrorConector as e:
         _fallar(sesion, ejec, ds, actor, str(e))
+    except Exception as e:
+        _fallar(sesion, ejec, ds, actor, _inesperado(e, "al abrir la conexion"))
 
     try:
         r = conector.ingestar(PeticionIngesta(
@@ -146,6 +151,14 @@ def ejecutar_carga(
         ), str(ruta_dataset(ds.nombre)))
     except ErrorConector as e:
         _fallar(sesion, ejec, ds, actor, str(e))
+    except Exception as e:
+        # Lo que el conector no supo traducir: un fallo de pyarrow, de duckdb, un
+        # permiso al escribir el Parquet, un driver que devuelve algo raro. Antes
+        # se escapaba de aqui, y entonces pasaban DOS cosas malas a la vez: el
+        # usuario veia "Error 500" pelado, y el rollback de la sesion se llevaba
+        # por delante el registro de la ejecucion, asi que el historial decia
+        # "todavia no se ha cargado nunca". Sin mensaje y sin rastro.
+        _fallar(sesion, ejec, ds, actor, _inesperado(e, f"al traer {ds.tabla_origen}"))
 
     ejec.estado = EstadoCarga.exito
     ejec.filas = r.filas
@@ -200,6 +213,22 @@ def _venia_fallando(sesion: Session, dataset_id: int, esta: int) -> bool:
         .order_by(CargaEjecucion.id.desc()).limit(1)
     )
     return previa == EstadoCarga.error
+
+
+def _inesperado(e: Exception, donde: str) -> str:
+    """
+    Un fallo que nadie previo, dicho de forma que se pueda actuar.
+
+    El rastro completo va al registro del servidor y NO al mensaje: puede traer
+    rutas, consultas y hasta valores de las filas, y eso acaba en la pantalla de
+    quien no deberia verlo. Lo que sube es el tipo y el texto de la excepcion,
+    que es lo que permite buscar; el rastro esta a un `Get-Content` de distancia
+    para quien administra la maquina.
+    """
+    log.exception("Fallo inesperado %s", donde)
+    texto = str(e).strip() or "sin mensaje"
+    return (f"Fallo inesperado {donde}: {type(e).__name__}: {texto}. "
+            f"El detalle completo esta en el registro del servidor.")
 
 
 def _fallar(sesion: Session, ejec: CargaEjecucion, ds: Dataset,

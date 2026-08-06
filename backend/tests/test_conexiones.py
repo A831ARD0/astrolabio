@@ -163,6 +163,43 @@ def test_ingesta_completa(cliente, cab_admin, conexion_mysql):
 
 
 @necesita_mysql
+def test_un_fallo_inesperado_se_registra_y_se_explica(cliente, cab_admin,
+                                                      conexion_mysql, monkeypatch):
+    """
+    Lo que pasaba antes con cualquier excepcion que el conector no traducia: la
+    pantalla decia "Error 500" pelado y el historial decia "todavia no se ha
+    cargado nunca", porque al propagar la excepcion el rollback se llevaba el
+    registro de la ejecucion. Sin mensaje y sin rastro, justo cuando mas falta
+    hacen.
+    """
+    r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets", headers=cab_admin,
+                     json={"nombre": "sucursal_revienta", "tabla": "cat_sucursal"})
+    assert r.status_code == 201, r.text
+    ds = r.json()["id"]
+
+    # Un fallo que NO es ErrorConector: es la familia entera que se escapaba.
+    def revienta(*_a, **_k):
+        raise MemoryError("no cupo en memoria")
+
+    monkeypatch.setattr("app.conectores.mysql.ConectorMySQL.ingestar", revienta)
+
+    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
+    assert r.status_code == 400, r.text          # no 500
+    detalle = r.json()["detail"]
+    assert "MemoryError" in detalle              # que fue
+    assert "cat_sucursal" in detalle             # donde
+    assert "no cupo en memoria" in detalle
+
+    # Y sobre todo: quedo en el historial, que es lo que se mira despues.
+    h = cliente.get(f"/api/conexiones/datasets/{ds}/historial", headers=cab_admin)
+    assert h.status_code == 200, h.text
+    ejecuciones = h.json()["ejecuciones"]
+    assert len(ejecuciones) == 1
+    assert ejecuciones[0]["estado"] == "error"
+    assert "MemoryError" in ejecuciones[0]["mensaje"]
+
+
+@necesita_mysql
 def test_ingesta_incremental_trae_solo_lo_nuevo(cliente, cab_admin, conexion_mysql):
     r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets",
                      headers=cab_admin,
