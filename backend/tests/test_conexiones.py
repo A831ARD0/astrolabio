@@ -662,3 +662,67 @@ def test_la_misma_tabla_dos_veces_no_choca_de_nombre(cliente, cab_admin,
     assert (primero.status_code, segundo.status_code) == (201, 201), segundo.text
     assert primero.json()["nombre"] != segundo.json()["nombre"]
     assert segundo.json()["nombre"].endswith("_2")
+
+
+# --------------------------------------------------------------------------- #
+# Traer las mismas tablas desde varias conexiones
+# --------------------------------------------------------------------------- #
+
+@necesita_mysql
+def test_en_lote_crea_una_por_conexion_y_no_se_detiene_al_fallar(cliente, cab_admin):
+    """
+    El caso real: cuarenta sucursales con el mismo sistema detrás. Siempre hay
+    alguna apagada y alguna a la que le falta una tabla; abortar el lote entero
+    por eso obligaria a repetirlo adivinando cuales ya se hicieron.
+    """
+    ids = []
+    for n in ("lote_a", "lote_b"):
+        r = cliente.post("/api/conexiones", headers=cab_admin, json={
+            "nombre": n, "tipo": "mysql",
+            "config": {"host": "127.0.0.1", "port": 3306, "user": "root",
+                       "password": "", "database": BASE}})
+        assert r.status_code == 201, r.text
+        ids.append(r.json()["id"])
+
+    r = cliente.post("/api/conexiones/datasets/en-lote", headers=cab_admin, json={
+        "conexiones": [*ids, 999999],                 # una que no existe
+        "tablas": [{"tabla": "cat_marca"},
+                   {"tabla": "no_existe_en_ningun_lado"}]})
+    assert r.status_code == 200, r.text
+    d = r.json()
+
+    # Una por conexion viva y tabla que existe.
+    assert len(d["creados"]) == 2
+    assert {c["conexion"] for c in d["creados"]} == {"lote_a", "lote_b"}
+    # El nombre sale de conexion + tabla, sin que nadie lo escriba.
+    assert {c["nombre"] for c in d["creados"]} == {"lote_a__cat_marca",
+                                                   "lote_b__cat_marca"}
+
+    # Lo que fallo se dice, con el motivo y sin tumbar lo demas.
+    motivos = {f["motivo"] for f in d["fallidos"]}
+    assert any("no existe" in m.lower() for m in motivos)
+    assert len(d["fallidos"]) == 3        # 2 tablas inexistentes + 1 conexion
+
+
+@necesita_mysql
+def test_repetir_el_lote_no_duplica(cliente, cab_admin, conexion_mysql):
+    """
+    Volver a lanzarlo es lo normal cuando la primera vez fallo media docena de
+    sucursales. No debe crear una segunda copia de las que ya estaban.
+    """
+    cuerpo = {"conexiones": [conexion_mysql], "tablas": [{"tabla": "cat_sucursal"}]}
+    primero = cliente.post("/api/conexiones/datasets/en-lote", headers=cab_admin,
+                           json=cuerpo).json()
+    segundo = cliente.post("/api/conexiones/datasets/en-lote", headers=cab_admin,
+                           json=cuerpo).json()
+
+    assert len(primero["creados"]) + len(primero["omitidos"]) == 1
+    assert len(segundo["creados"]) == 0
+    assert len(segundo["omitidos"]) == 1
+    assert segundo["omitidos"][0]["motivo"] == "Ya se traía"
+
+
+def test_en_lote_lo_pide_un_editor_no_un_lector(cliente, cab_lector):
+    r = cliente.post("/api/conexiones/datasets/en-lote", headers=cab_lector,
+                     json={"conexiones": [1], "tablas": [{"tabla": "x"}]})
+    assert r.status_code == 403

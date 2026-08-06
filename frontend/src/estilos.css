@@ -940,7 +940,15 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 
    Los margenes negativos son para que la barra tape el ancho completo: sin
    ellos, el contenido se ve pasar por los lados a traves de los 26px de relleno
-   de la pagina. */
+   de la pagina.
+
+   Y `.pagina.pegada` quita el relleno DE ARRIBA, que lo pasa a la cabecera. Con
+   el relleno en la pagina, `top: 0` pega la barra a 22px del borde visible --el
+   relleno forma parte del area que scrollea-- y por ese hueco se veia pasar el
+   contenido por encima de la barra. */
+.pagina.pegada { padding-top: 0; }
+.pagina.pegada > .cabecera-pagina { padding-top: 22px; }
+
 .barra-filtros {
   display: flex;
   align-items: center;
@@ -1138,3 +1146,15 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   text-align: left;
 }
 .enlace:hover { text-decoration: underline; }
+
+/* Una fila de lista con casilla: en el lote se marcan decenas seguidas, asi que
+   toda la fila tiene que ser pulsable, no solo el cuadrito. */
+.fila-lista {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.fila-lista:hover { background: var(--fondo-hover); }

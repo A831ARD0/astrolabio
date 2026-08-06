@@ -31,6 +31,7 @@ import { useYo } from '../api/hooks'
 import { DialogoConexion } from '../conexiones/DialogoConexion'
 import { Explorador } from '../conexiones/Explorador'
 import { PanelDataset } from '../conexiones/PanelDataset'
+import { TraerEnLote } from '../conexiones/TraerEnLote'
 
 /** Los estados por los que de verdad se filtra al entrar por la mañana. */
 type Estado = 'todos' | 'error' | 'sin_datos' | 'cargado'
@@ -248,6 +249,7 @@ export function Conexiones() {
   const datasets = useDatasets()
 
   const [nueva, setNueva] = useState(false)
+  const [traerVarias, setTraerVarias] = useState(false)
   const [editando, setEditando] = useState<Conexion | null>(null)
   const [explorando, setExplorando] = useState<number | null>(null)
   const [abierto, setAbierto] = useState<Dataset | null>(null)
@@ -294,21 +296,13 @@ export function Conexiones() {
   const mostrados = grupos.reduce((n, g) => n + g.visibles.length, 0)
 
   return (
-    <div className="pagina">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <div>
-          <h1>Conexiones</h1>
-          <p className="suave chico">
-            De dónde vienen los datos y qué se ha traído de cada uno. Las credenciales
-            se guardan cifradas y no vuelven a salir.
-          </p>
-        </div>
-        {esAdmin && (
-          <button className="btn primario" style={{ marginLeft: 'auto' }}
-                  onClick={() => setNueva(true)}>
-            + Nueva conexión
-          </button>
-        )}
+    <div className="pagina pegada">
+      <div className="cabecera-pagina">
+        <h1>Conexiones</h1>
+        <p className="suave chico">
+          De dónde vienen los datos y qué se ha traído de cada uno. Las credenciales
+          se guardan cifradas y no vuelven a salir.
+        </p>
       </div>
 
       {conexiones.isError && (
@@ -321,6 +315,13 @@ export function Conexiones() {
           {esAdmin
             ? ' Empieza por una: un MySQL, o una carpeta con archivos.'
             : ' Pídele a un administrador que cree la primera.'}
+          {esAdmin && (
+            <div style={{ marginTop: 10 }}>
+              <button className="btn primario" onClick={() => setNueva(true)}>
+                + Nueva conexión
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -348,7 +349,7 @@ export function Conexiones() {
                 ? `${mostrados} de ${total} datasets en ${grupos.length} conexion${grupos.length === 1 ? '' : 'es'}`
                 : `${total} dataset${total === 1 ? '' : 's'} en ${cons.length} conexion${cons.length === 1 ? '' : 'es'}`}
             </span>
-            <div className="acciones">
+            <div className="acciones" style={{ marginLeft: 'auto' }}>
               <button className="btn chico" onClick={() => setPlegadas(new Set())}>
                 Abrir todas
               </button>
@@ -356,6 +357,19 @@ export function Conexiones() {
                       onClick={() => setPlegadas(new Set(cons.map((c) => c.id)))}>
                 Plegar todas
               </button>
+              {/* Los botones de crear viven en la barra, que es lo único que se
+                  queda a la vista. Arriba del todo obligaban a subir la página
+                  entera para dar de alta algo. */}
+              {esAdmin && (
+                <>
+                  <button className="btn chico" onClick={() => setTraerVarias(true)}>
+                    + Traer tablas
+                  </button>
+                  <button className="btn chico primario" onClick={() => setNueva(true)}>
+                    + Conexión
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -394,6 +408,7 @@ export function Conexiones() {
       )}
 
       {nueva && <DialogoConexion alCerrar={() => setNueva(false)} />}
+      {traerVarias && <TraerEnLote alCerrar={() => setTraerVarias(false)} />}
       {/* `key`: el diálogo toma su estado inicial de la conexión, así que abrir
           otra tiene que montarlo de nuevo, no reutilizar el formulario anterior. */}
       {editando && (

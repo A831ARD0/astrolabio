@@ -274,6 +274,29 @@ export function useDatasets() {
   })
 }
 
+/** Lo que contesta «traer estas tablas desde estas conexiones». */
+export interface ResultadoLote {
+  creados: { conexion_id: number; conexion: string; tabla: string; id: number; nombre: string }[]
+  omitidos: { conexion_id: number; conexion: string; tabla: string; nombre: string; motivo: string }[]
+  fallidos: { conexion_id: number; conexion: string; tabla: string; motivo: string }[]
+}
+
+/**
+ * Crea un dataset por cada (conexión, tabla) y NO se detiene en el primero que
+ * falla: con cuarenta sucursales siempre hay alguna apagada. Lo que salió mal
+ * viene en `fallidos`, con su motivo.
+ */
+export function useTraerEnLote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: {
+      conexiones: number[]
+      tablas: { esquema?: string | null; tabla: string }[]
+    }) => api.post<ResultadoLote>('/conexiones/datasets/en-lote', v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: clavesCon.datasets }),
+  })
+}
+
 export function useCrearDataset(conexionId: number | null) {
   const qc = useQueryClient()
   return useMutation({

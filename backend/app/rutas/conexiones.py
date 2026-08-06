@@ -583,6 +583,114 @@ def muestra(conexion_id: int, tabla: str, sesion: SesionDep,
 # Datasets e ingesta
 # --------------------------------------------------------------------------- #
 
+class TablaPedida(BaseModel):
+    esquema: str | None = None
+    tabla: str
+    columna_incremental: str | None = None
+    particionar_por: str | None = None
+
+
+class TraerEnLote(BaseModel):
+    """
+    Las mismas tablas desde varias conexiones de una vez.
+
+    El caso que lo motiva: cuarenta sucursales con el mismo sistema detrás, cada
+    una en su base. Traer cinco tablas de las cuarenta son doscientos recorridos
+    por el diálogo de crear dataset, y doscientos nombres que inventar.
+    """
+    conexiones: list[int] = Field(min_length=1)
+    tablas: list[TablaPedida] = Field(min_length=1)
+
+
+@router.post("/datasets/en-lote")
+def traer_en_lote(cuerpo: TraerEnLote, sesion: SesionDep,
+                  actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Crea un dataset por cada (conexión, tabla), y **no se detiene en el primero
+    que falla**.
+
+    Con cuarenta sucursales siempre hay alguna apagada, alguna a la que le falta
+    una tabla, y alguna donde ya se había traído. Abortar el lote entero por eso
+    obligaría a repetirlo adivinando cuáles ya se hicieron. Cada una va por su
+    cuenta y al final se dice qué pasó con cada una.
+
+    Las tablas se comprueban contra el catálogo de cada conexión —una consulta
+    por conexión, no por tabla— porque crear cuarenta datasets rotos y
+    descubrirlo de madrugada es peor que tardar unos segundos aquí.
+    """
+    creados: list[dict] = []
+    omitidos: list[dict] = []
+    fallidos: list[dict] = []
+
+    for conexion_id in cuerpo.conexiones:
+        fila = sesion.get(Conexion, conexion_id)
+        if fila is None:
+            fallidos.append({"conexion_id": conexion_id, "conexion": "?",
+                             "tabla": "*", "motivo": "La conexión ya no existe"})
+            continue
+
+        # Una sola vuelta al catálogo por conexión: con cuarenta sucursales, una
+        # por tabla serían doscientas consultas.
+        try:
+            lista = _conector(fila).listar_tablas()
+            catalogo = {(t.esquema, t.nombre) for t in lista}
+            # Sin esquema tambien, porque un pedido sin esquema debe encontrar la
+            # tabla que el catalogo devuelve con el suyo puesto.
+            sueltas = {t.nombre for t in lista}
+        except HTTPException as e:
+            fallidos.append({"conexion_id": conexion_id, "conexion": fila.nombre,
+                             "tabla": "*", "motivo": str(e.detail)})
+            continue
+        except ErrorConector as e:
+            fallidos.append({"conexion_id": conexion_id, "conexion": fila.nombre,
+                             "tabla": "*", "motivo": str(e)})
+            continue
+
+        for pedida in cuerpo.tablas:
+            comun = {"conexion_id": conexion_id, "conexion": fila.nombre,
+                     "tabla": pedida.tabla}
+
+            if (pedida.esquema, pedida.tabla) not in catalogo and \
+                    pedida.tabla not in sueltas:
+                fallidos.append({**comun,
+                                 "motivo": "No existe en esta conexión"})
+                continue
+
+            # Repetir el lote no debe duplicar: es lo normal cuando la primera
+            # vez falló media docena de sucursales y se vuelve a lanzar.
+            ya = sesion.scalar(select(Dataset).where(
+                Dataset.conexion_id == conexion_id,
+                func.coalesce(Dataset.esquema_origen, "") == (pedida.esquema or ""),
+                Dataset.tabla_origen == pedida.tabla))
+            if ya is not None:
+                omitidos.append({**comun, "nombre": ya.nombre,
+                                 "motivo": "Ya se traía"})
+                continue
+
+            nombre = _nombre_libre(
+                sesion, nombre_sugerido(fila.nombre, pedida.esquema, pedida.tabla))
+            ds = Dataset(
+                nombre=nombre, conexion_id=conexion_id,
+                esquema_origen=pedida.esquema, tabla_origen=pedida.tabla,
+                columna_incremental=pedida.columna_incremental,
+                particionar_por=pedida.particionar_por, creado_por=actor.id,
+                zona_horaria="America/Mexico_City",
+            )
+            sesion.add(ds)
+            # flush por dataset: el siguiente `_nombre_libre` tiene que ver este
+            # nombre, o dos sucursales con el mismo nombre base chocarían.
+            sesion.flush()
+            creados.append({**comun, "id": ds.id, "nombre": nombre})
+
+    registrar(sesion, accion="datasets_en_lote", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="dataset", objeto_id=None,
+              detalle={"creados": len(creados), "omitidos": len(omitidos),
+                       "fallidos": len(fallidos),
+                       "tablas": [t.tabla for t in cuerpo.tablas],
+                       "conexiones": cuerpo.conexiones})
+    return {"creados": creados, "omitidos": omitidos, "fallidos": fallidos}
+
+
 @router.post("/{conexion_id}/datasets", status_code=201)
 def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
                   actor: Usuario = Depends(exigir_rol(Rol.editor))):
