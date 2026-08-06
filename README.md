@@ -81,7 +81,14 @@ Abre <http://localhost:5173> y entra con `admin@example.com` / `astrolabio-demo-
 > No es un filtro que se pueda quitar: el predicado se inyecta en el SQL, y el
 > total sin desglosar también viene filtrado.
 
-Con Docker: `docker compose up` (ver el [manual técnico](docs/manual-tecnico.md)).
+Con Docker, sin instalar Python ni Node —vale igual en Linux, macOS y Windows—:
+
+```bash
+cp .env.ejemplo .env && docker compose up -d --build
+```
+
+Detalles, y lo que hay que saber de ODBC en un servidor Windows, en el
+[manual técnico](docs/manual-tecnico.md).
 
 ## Las pantallas
 
@@ -142,4 +149,4 @@ con atrás y adelante, y que el fin de un flujo dispare otro flujo.
 ofrecerlo como servicio o incluirlo en un producto cerrado sin publicar tus
 cambios, hay una [licencia comercial](COMERCIAL.md).
 
-Copyright © 2026 Abelardo Ramírez.
+Copyright © 2026 Abelardo Wilfrido Ramírez García.

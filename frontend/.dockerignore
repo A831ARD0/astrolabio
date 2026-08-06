@@ -1,0 +1,5 @@
+# node_modules del disco no sirve dentro de la imagen —puede traer binarios de
+# otro sistema operativo— y copiarlo hace la construccion lentisima.
+node_modules
+dist
+.vite

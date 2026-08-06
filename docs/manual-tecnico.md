@@ -26,9 +26,12 @@ Para quien instala y mantiene Astrolabio. Si lo que buscas es usarlo, ese es el
 | CPU | 2 núcleos | 4+ |
 | RAM | 4 GB | 16 GB |
 | Disco | 20 GB | Lo que ocupen tus Parquet ×3 |
-| SO | Linux, macOS o Docker | Linux con Docker |
+| SO | Linux, macOS o Windows | Cualquiera de los tres, con Docker |
 
-Software: **Python 3.12+**, **Node 20+** (solo para compilar la interfaz), y
+**Con Docker no necesitas instalar nada más**: Python y Node viven dentro de las
+imágenes, y la interfaz se compila durante la construcción.
+
+Sin Docker: **Python 3.12+**, **Node 20+** (solo para compilar la interfaz) y
 `unixodbc` si vas a usar conectores ODBC.
 
 La memoria es lo que marca el límite real: DuckDB trabaja en memoria y una consulta
@@ -129,16 +132,107 @@ cp .env.ejemplo .env
 openssl rand -hex 32
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-cd frontend && npm ci && npm run build && cd ..    # deja frontend/dist
-docker compose up -d
+docker compose up -d --build
 ```
 
-Dos contenedores: `api` (FastAPI) y `web` (Caddy, que sirve la interfaz compilada y
-hace de puerta a la API). Dos y no cinco a propósito: con un mantenedor, cada
-servicio de más es algo más que administrar, respaldar y que puede fallar de noche.
+Dos contenedores: `api` (FastAPI) y `web` (Caddy, que sirve la interfaz y hace de
+puerta a la API). Dos y no cinco a propósito: con un mantenedor, cada servicio de
+más es algo más que administrar, respaldar y que puede fallar de noche.
+
+La interfaz **se compila dentro de Docker**, en una etapa que se descarta: el
+servidor no necesita Node. `api` solo escucha en `127.0.0.1:8000`; quien entra de
+fuera pasa por Caddy, que es el que lleva HTTPS y las cabeceras de seguridad.
 
 Para HTTPS con certificado automático, pon tu dominio en el `Caddyfile` en lugar de
 `:80`. Caddy lo pide y lo renueva solo.
+
+### En un servidor Windows
+
+Funciona igual, con Docker Desktop sobre WSL 2 (o Docker Engine en WSL 2). Los
+contenedores son Linux; Windows solo los hospeda. **Lee antes el aviso sobre ODBC
+más abajo: es lo único que cambia de verdad.**
+
+Instala **Docker Desktop for Windows** y **Git for Windows**, y en PowerShell:
+
+```powershell
+git clone https://github.com/a831ard0/astrolabio.git
+cd astrolabio
+Copy-Item .env.ejemplo .env
+```
+
+Genera las dos claves —`openssl` no viene con Windows, así que se sacan del propio
+contenedor, sin instalar nada:
+
+```powershell
+docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_hex(32))"
+docker run --rm python:3.12-slim sh -c "pip install -q cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+```
+
+Ponlas en `.env` (`ASTROLABIO_CLAVE_SECRETA` y `ASTROLABIO_CLAVE_CIFRADO`), pon
+`ASTROLABIO_ENTORNO=produccion`, y levanta:
+
+```powershell
+docker compose up -d --build
+```
+
+Comprueba que está vivo y entra en <http://localhost>:
+
+```powershell
+docker compose ps
+curl.exe http://localhost/api/salud
+```
+
+Cuatro cosas propias de Windows que conviene saber:
+
+- **Que arranque solo al reiniciar el servidor.** En Docker Desktop → *Settings* →
+  *General*, marca *Start Docker Desktop when you log in*. Los contenedores traen
+  `restart: unless-stopped`, así que vuelven solos. Si el servidor no inicia sesión
+  de nadie —lo normal en un servidor—, usa **Docker Engine dentro de WSL 2** con
+  `systemd` activado en vez de Docker Desktop, o registra Docker Desktop como
+  tarea programada al arranque.
+- **Los datos viven en volúmenes de Docker, no en `C:\`.** Es lo que se quiere:
+  los volúmenes están en el disco de WSL 2 y ahí SQLite funciona bien. Montar
+  `datos/` en una carpeta de Windows o en una unidad de red **rompe el bloqueo de
+  archivos de SQLite** y corrompe los metadatos. No lo hagas.
+- **Por eso el respaldo se saca del volumen**, no copiando una carpeta (ver §5,
+  hay una versión para Windows).
+- **Los finales de línea.** `git config --global core.autocrlf false` antes de
+  clonar. Con `autocrlf true`, Git convierte los archivos a CRLF y los guiones que
+  corren dentro de los contenedores Linux fallan con un error que no menciona
+  nada de esto.
+
+> ### ⚠️ ODBC en Windows: los drivers de Windows NO sirven dentro de Docker
+>
+> Esto es importante para el caso de TotalDealer sobre Pervasive/Actian.
+>
+> Un contenedor de Docker en Windows es **Linux**. Un driver ODBC de Windows es una
+> DLL, y **una DLL no se carga en Linux** — da igual que el DSN esté perfectamente
+> configurado en el Administrador de orígenes de datos de la máquina anfitriona: el
+> contenedor no lo ve y no podría usarlo aunque lo viera.
+>
+> Los DSN, además, son locales a la máquina donde se crearon.
+>
+> Las opciones, en orden de sensatez:
+>
+> | | Cuándo |
+> |---|---|
+> | **Instalar el cliente Linux del fabricante dentro de la imagen** | Actian publica cliente para Linux. Si sistemas consigue la licencia, se agrega al `backend/Dockerfile` y se registra en `/etc/odbcinst.ini`. Es la salida limpia y deja todo en Docker |
+> | **Correr el backend nativo en Windows**, sin Docker, con el cliente Pervasive de **64 bits** | Si solo existe el cliente Windows. Python 3.12 + un servicio; Caddy puede seguir en Docker o instalarse aparte |
+> | **Un puente**: el backend en Docker y un pequeño servicio en Windows que exponga los datos de Pervasive | Solo si las otras dos se cierran. Es una pieza más que mantener |
+>
+> Recuerda el otro problema, que es anterior a Docker: los DSN de las agencias
+> están en el Administrador ODBC **de 32 bits**, y ningún proceso de 64 bits puede
+> cargar un driver de 32 bits. Haga falta Linux o Windows, el cliente tiene que ser
+> de 64 bits.
+>
+> **Lo que sí funciona hoy en Docker sobre Windows:** MySQL/MariaDB (conector
+> nativo), archivos CSV/Excel/Parquet, y por ODBC todo lo que tenga driver de
+> Linux —MariaDB ya viene instalado en la imagen, PostgreSQL y SQL Server son una
+> línea de `apt-get` en el `Dockerfile`, que está comentado con cuál—.
+>
+> Mi recomendación: **monta Docker ya** con los orígenes que sí funcionan y empieza
+> a hacer tableros. La decisión de Pervasive depende de qué licencia consiga
+> sistemas, y no debería frenar todo lo demás.
 
 ### Sin Docker
 
@@ -179,6 +273,22 @@ sqlite3 datos/astrolabio.db ".backup '/respaldos/astrolabio-$(date +%F).db'"
 
 `.backup` y no `cp`: copiar el archivo mientras hay una escritura a medias produce
 un respaldo que parece bueno y no lo es.
+
+**Con Docker** los metadatos están en un volumen, así que el respaldo sale de
+dentro del contenedor. Vale igual en Linux, macOS y Windows (PowerShell):
+
+```powershell
+docker compose exec api python -c "import sqlite3,datetime; o=sqlite3.connect('/app/datos/astrolabio.db'); d=sqlite3.connect('/app/datos/respaldo.db'); o.backup(d); d.close(); o.close()"
+docker compose cp api:/app/datos/respaldo.db "C:\respaldos\astrolabio-$(Get-Date -f yyyy-MM-dd).db"
+docker compose exec api rm /app/datos/respaldo.db
+```
+
+Restaurar: parar los contenedores, `docker compose cp` del respaldo a
+`api:/app/datos/astrolabio.db`, y volver a levantar.
+
+> **No sustituyas el volumen por una carpeta de Windows ni por una unidad de red
+> para "poder respaldar copiando".** SQLite necesita bloqueo de archivos, y ahí no
+> lo tiene: el resultado es una base corrupta, casi siempre descubierta tarde.
 
 > **Guarda `CLAVE_CIFRADO` junto al respaldo, en un gestor de secretos.** Un
 > respaldo de metadatos sin esa clave restaura todo menos las contraseñas de las

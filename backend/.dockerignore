@@ -1,0 +1,8 @@
+# Nada de esto debe entrar en la imagen. `datos/` sobre todo: son las credenciales
+# cifradas y los Parquet de la maquina de desarrollo.
+venv
+datos
+__pycache__
+*.pyc
+.pytest_cache
+tests

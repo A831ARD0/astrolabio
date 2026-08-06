@@ -1,7 +1,14 @@
-# Astrolabio — desarrollo y produccion con las MISMAS imagenes.
+# Astrolabio — las MISMAS imagenes en desarrollo y en produccion.
 #
-#   Desarrollo (tu Mac):  docker compose up
-#   Produccion (Linux):   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose up -d
+#
+# La diferencia entre desarrollo y produccion es el archivo `.env`, no un compose
+# distinto: con `ASTROLABIO_ENTORNO=produccion` el arranque exige las dos claves
+# de verdad y se niega a levantar con las de ejemplo.
+#
+# Funciona igual en Linux, macOS y Windows (Docker Desktop con WSL 2). En Windows,
+# ojo con los drivers ODBC: los contenedores son Linux y NO pueden cargar un driver
+# de Windows. Esta explicado en el manual tecnico, seccion de Windows.
 #
 # Dos servicios a proposito. Con un solo mantenedor, cada servicio extra es algo
 # mas que administrar, respaldar y que puede fallar de noche.
@@ -23,18 +30,24 @@ services:
       # base analitica y Parquet
       - analitico:/app/analitico
     ports:
-      - "8000:8000"
+      # Solo a la maquina local: quien entra de fuera pasa por Caddy, que es el
+      # que tiene HTTPS y las cabeceras de seguridad. Publicar 8000 al exterior
+      # deja una puerta sin nada de eso delante.
+      - "127.0.0.1:8000:8000"
 
   web:
-    image: caddy:2-alpine
+    # Se construye —no es la imagen pelada de Caddy— porque la etapa de node
+    # compila la interfaz aqui dentro. Asi el servidor no necesita Node.
+    build: ./frontend
     restart: unless-stopped
     depends_on:
       - api
     volumes:
+      # El Caddyfile va montado, no dentro de la imagen: cambiar el dominio no
+      # deberia obligar a reconstruir nada.
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_datos:/data
       - caddy_config:/config
-      - ./frontend/dist:/srv:ro
     ports:
       - "80:80"
       - "443:443"

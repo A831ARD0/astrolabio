@@ -20,6 +20,22 @@ versionado es [semántico](https://semver.org/lang/es/).
 
   El tipo y el perfil de ODBC quedan fijos: cambiarlos sería otra conexión.
 
+- **La interfaz se compila dentro de Docker.** Antes `docker compose` esperaba
+  encontrar `frontend/dist` ya compilado en el disco, así que el servidor
+  necesitaba Node además de Docker. Ahora hay una etapa de construcción que se
+  descarta y la imagen final solo lleva Caddy y los archivos estáticos.
+- **Instrucciones para un servidor Windows**, con Docker Desktop sobre WSL 2:
+  cómo generar las claves sin `openssl`, arranque automático, respaldo desde el
+  volumen, finales de línea, y por qué **un driver ODBC de Windows no se puede
+  cargar dentro de un contenedor Linux**.
+
+### Cambiado
+
+- `api` ya solo escucha en `127.0.0.1:8000`. Quien entra de fuera pasa por Caddy,
+  que es el que lleva HTTPS y las cabeceras de seguridad.
+- Se quitó la referencia a un `docker-compose.prod.yml` que no existía: la
+  diferencia entre desarrollo y producción es el `.env`, no un compose distinto.
+
 Lo que falta y está decidido que se hará: más conectores nativos (PostgreSQL,
 SQL Server, SQLite), una barra de selecciones con atrás y adelante, y que el fin de
 un flujo dispare otro flujo. La lista completa vive al final de cada documento de
