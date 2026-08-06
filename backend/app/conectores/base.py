@@ -28,13 +28,40 @@ class ErrorConector(Exception):
 # Identificadores validos. Todo nombre de tabla o columna que venga de fuera pasa
 # por aqui antes de entrar en un SQL: no se pueden ligar como parametros, asi que
 # se validan en vez de escaparse.
+#
+# Esto vale para los nombres que ponemos NOSOTROS —los del destino, que salen del
+# catalogo de Astrolabio y siempre son limpios—. Para los del ORIGEN no vale: hay
+# bases reales con tablas llamadas 'NF Header' o columnas con acentos, y rechazar
+# el nombre significa no poder traer la tabla nunca. Esas van por `cita_origen`.
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]{0,63}$")
+
+# Lo unico que no se puede escapar dentro de un identificador entrecomillado.
+# Un NUL corta la cadena en el driver y un salto de linea rompe el SQL.
+_IMPOSIBLE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def valida_ident(nombre: str) -> str:
     if not _IDENT.match(nombre):
         raise ErrorConector(f"Nombre de identificador no valido: {nombre!r}")
     return nombre
+
+
+def cita_origen(nombre: str, cita: str = '"') -> str:
+    """
+    Entrecomilla un identificador que viene del ORIGEN, escapandolo en vez de
+    rechazarlo.
+
+    La regla del SQL entrecomillado es que la comilla se dobla dentro: un nombre
+    con comilla no puede cerrar el identificador y colar SQL detras. Con eso, un
+    espacio, un acento o un guion dejan de ser un problema y siguen sin serlo las
+    inyecciones. El corchete de SQL Server abre y cierra distinto: ahi lo que se
+    dobla es el que cierra.
+    """
+    if not nombre or _IMPOSIBLE.search(nombre):
+        raise ErrorConector(f"Nombre de identificador no valido: {nombre!r}")
+    if cita == "[":
+        return "[" + nombre.replace("]", "]]") + "]"
+    return cita + nombre.replace(cita, cita * 2) + cita
 
 
 def comillas(nombre: str) -> str:
@@ -162,7 +189,7 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
         # venir como texto con cadenas vacias mezcladas. Un CAST duro tumba la
         # carga completa; TRY_CAST manda lo ilegible a su propia particion y
         # reporta cuantas filas fueron, en vez de fallar o de callarlo.
-        col = comillas(p.particionar_por)
+        col = cita_origen(p.particionar_por)
         sin_fecha = con.execute(
             f"SELECT COUNT(*) FROM {tabla} WHERE TRY_CAST({col} AS DATE) IS NULL"
         ).fetchone()[0]
@@ -198,7 +225,7 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
     marca_max = None
     if p.columna_incremental:
         v = con.execute(
-            f"SELECT MAX({comillas(p.columna_incremental)}) FROM {tabla}"
+            f"SELECT MAX({cita_origen(p.columna_incremental)}) FROM {tabla}"
         ).fetchone()[0]
         marca_max = str(v) if v is not None else None
 

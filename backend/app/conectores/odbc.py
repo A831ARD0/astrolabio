@@ -58,7 +58,7 @@ import pyodbc
 from app.conectores import perfiles_odbc as perfiles
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
-    ResultadoPrueba, TablaOrigen, escribir_lote, valida_ident,
+    ResultadoPrueba, TablaOrigen, cita_origen, escribir_lote,
 )
 
 # Esquemas/catalogos que son del motor y no de nadie.
@@ -235,11 +235,15 @@ class ConectorODBC(Conector):
         return motor, cita, catalogo
 
     def _cita(self, nombre: str, cita: str) -> str:
-        """Comillas del ORIGEN. Corchete de SQL Server: abre y cierra distinto."""
-        valida_ident(nombre)
-        if cita == "[":
-            return f"[{nombre}]"
-        return f"{cita}{nombre}{cita}"
+        """
+        Comillas del ORIGEN, con la comilla doblada dentro.
+
+        Antes esto exigia un identificador de manual —letras, digitos y guion
+        bajo— y con eso no se podia traer 'NF Header', que es como se llama una
+        tabla de verdad en el Pervasive de una agencia. El nombre del origen no
+        lo elegimos nosotros.
+        """
+        return cita_origen(nombre, cita)
 
     def _donde(self, esquema: str | None, con: pyodbc.Connection) -> dict:
         """Argumentos de catalogo/esquema para las funciones de catalogo de ODBC."""

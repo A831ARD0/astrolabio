@@ -16,7 +16,7 @@ import duckdb
 
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
-    ResultadoPrueba, TablaOrigen, comillas, limpiar_destino,
+    ResultadoPrueba, TablaOrigen, cita_origen, limpiar_destino,
 )
 
 EXTENSIONES = {".csv", ".tsv", ".txt", ".parquet", ".xlsx", ".xls"}
@@ -159,7 +159,7 @@ class ConectorArchivos(Conector):
                 columnas: list[str] | None = None) -> tuple[list[str], list[tuple]]:
         rel = tabla if esquema in (None, ".") else f"{esquema}/{tabla}"
         ruta = self._resolver(rel)
-        cols = ", ".join(comillas(c) for c in columnas) if columnas else "*"
+        cols = ", ".join(cita_origen(c) for c in columnas) if columnas else "*"
         con = duckdb.connect()
         try:
             self._relacion(con, ruta)

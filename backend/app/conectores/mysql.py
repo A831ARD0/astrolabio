@@ -20,14 +20,21 @@ import pymysql
 
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
-    ResultadoPrueba, TablaOrigen, escribir_lote, valida_ident,
+    ResultadoPrueba, TablaOrigen, cita_origen, escribir_lote,
 )
-from app.conectores.base import comillas as _ident_duck
+#: Comillas de DuckDB para nombres que vienen del ORIGEN: tabla y columnas de
+#: MySQL leidas a traves del escaneador. Son nombres ajenos, se escapan.
+from app.conectores.base import cita_origen as _ident_duck
 
 
 def _ident(nombre: str) -> str:
-    """Comillas de MySQL — para el SQL que ejecuta pymysql."""
-    return f"`{valida_ident(nombre)}`"
+    """
+    Comillas de MySQL — para el SQL que ejecuta pymysql.
+
+    El nombre del origen no lo elegimos nosotros: puede llevar espacios o
+    acentos. Se escapa doblando el acento grave, no se rechaza.
+    """
+    return cita_origen(nombre, "`")
 
 
 class ConectorMySQL(Conector):
