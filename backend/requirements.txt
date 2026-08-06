@@ -1,0 +1,52 @@
+# Versiones fijas a proposito: una plataforma de datos que cambia de version sola
+# es una plataforma en la que una cifra puede cambiar sin que nadie tocara nada.
+# Para subirlas: cambiar aqui, correr `pytest` y `pip-audit`, y mirar el resultado.
+
+# API
+fastapi==0.141.1
+uvicorn[standard]==0.39.0
+python-multipart==0.0.32
+pydantic-settings==2.14.2
+pydantic[email]==2.13.4
+
+# Metadatos
+SQLAlchemy==2.0.51
+alembic==1.18.0
+
+# Programador de cargas (jobstore sobre la misma base de metadatos)
+APScheduler==3.11.3
+
+# Conectores
+PyMySQL==1.2.0
+# ODBC: el comodin para Pervasive/Actian, SQL Server, Informix y demas. pyodbc
+# necesita unixodbc en el sistema (la imagen ya lo trae) y ADEMAS el driver de
+# cada origen, que se instala por separado: unixodbc solo es el intermediario.
+pyodbc==5.3.0
+# Arrow es lo que hace que ODBC sea usable: los tipos que declara el driver se
+# respetan y el lote entra en DuckDB de golpe. Con insercion fila por fila la misma
+# carga tardaba 4.6 veces mas.
+pyarrow==25.0.0
+
+# Seguridad
+passlib[argon2]==1.7.4
+PyJWT==2.13.0
+cryptography==50.0.0
+
+# Motor analitico y SQL
+duckdb==1.4.5
+sqlglot==30.14.0
+polars==1.36.1
+numpy==2.2.6
+pandas==2.3.3
+openpyxl==3.1.5
+lxml==6.1.1
+PyYAML==6.0.3
+
+# Avisos
+# El correo va por smtplib, que es de la libreria estandar. httpx es lo que manda
+# el webhook (Teams, Slack), y ademas es el cliente que usan las pruebas.
+httpx==0.28.1
+
+# Pruebas y revision
+pytest==9.1.1
+pip-audit==2.9.0

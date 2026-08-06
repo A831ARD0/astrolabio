@@ -1,0 +1,206 @@
+"""
+La definicion del modelo como estructura, y su ida y vuelta a YAML.
+
+Por que existe esta capa aparte del motor: el motor
+(`semantic/engine.py`) lee del YAML **solo lo que necesita para compilar SQL** e
+ignora el resto — jerarquias, perspectivas, descripciones, la disposicion del
+lienzo. Si la interfaz guardara serializando los objetos del motor, cada vez que
+alguien tocara una relacion se **perderia en silencio** todo lo que el motor no
+mira.
+
+Asi que el camino de guardado no pasa por los objetos del motor: se edita el
+mapa crudo del YAML y el motor solo se usa para VALIDAR que lo editado compila.
+Lo que el motor no entiende, sobrevive.
+
+Limitacion consciente: los comentarios del YAML si se pierden al guardar desde la
+interfaz (`safe_load` no los conserva). Quien quiera comentarios los pone editando
+el texto, que la interfaz tambien permite.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from semantic.politica import PoliticaDef, revisar_politicas
+
+TIPOS_CAMPO = ("entero", "decimal", "texto", "fecha", "booleano")
+ROLES_CAMPO = ("clave", "clave_externa", "dimension", "medida_base")
+CARDINALIDADES = ("muchos_a_uno", "uno_a_uno", "muchos_a_muchos")
+DIRECCIONES = ("ambas", "una")
+
+
+class _Base(BaseModel):
+    # extra="allow": todo lo que la interfaz no conozca (una clave nueva, algo
+    # que agregue una version futura) se conserva tal cual en vez de borrarse.
+    model_config = ConfigDict(extra="allow")
+
+
+class CampoDef(_Base):
+    nombre: str = Field(min_length=1, max_length=120)
+    tipo: Literal[TIPOS_CAMPO]           # type: ignore[valid-type]
+    rol: Literal[ROLES_CAMPO]            # type: ignore[valid-type]
+    etiqueta: str | None = None
+    visible: bool = True
+    pii: bool = False
+
+
+class OrigenDef(_Base):
+    tabla: str = Field(min_length=1, max_length=160)
+
+
+class EntidadDef(_Base):
+    nombre: str = Field(min_length=1, max_length=120)
+    tipo: Literal["dimension", "hecho"]
+    origen: OrigenDef
+    campos: list[CampoDef] = Field(min_length=1)
+    clave_primaria: str | None = None
+    grano: list[str] = []
+
+    @field_validator("campos")
+    @classmethod
+    def sin_campos_repetidos(cls, v: list[CampoDef]) -> list[CampoDef]:
+        nombres = [c.nombre for c in v]
+        repetidos = {n for n in nombres if nombres.count(n) > 1}
+        if repetidos:
+            raise ValueError(f"campos repetidos: {', '.join(sorted(repetidos))}")
+        return v
+
+
+class RelacionDef(_Base):
+    desde: list[str] = Field(min_length=2, max_length=2)   # [entidad, campo]
+    hasta: list[str] = Field(min_length=2, max_length=2)
+    cardinalidad: Literal[CARDINALIDADES]                  # type: ignore[valid-type]
+    direccion_filtro: Literal[DIRECCIONES] = "ambas"       # type: ignore[valid-type]
+
+
+class MetricaDef(_Base):
+    nombre: str = Field(min_length=1, max_length=120)
+    etiqueta: str
+    entidad: str
+    expresion: str = Field(min_length=1)
+    formato: str = "numero"
+
+
+class Definicion(_Base):
+    """
+    El modelo completo. `disposicion` guarda la posicion de cada nodo en el
+    lienzo: va dentro del modelo a proposito, para que abrirlo en otra maquina se
+    vea igual, y viaje con la version.
+    """
+    modelo: str = Field(min_length=1, max_length=120)
+    version: int = 1
+    entidades: list[EntidadDef] = Field(min_length=1)
+    relaciones: list[RelacionDef] = []
+    metricas: list[MetricaDef] = []
+    politicas: list[PoliticaDef] = []
+    disposicion: dict[str, dict[str, float]] = {}
+
+    @field_validator("entidades")
+    @classmethod
+    def sin_entidades_repetidas(cls, v: list[EntidadDef]) -> list[EntidadDef]:
+        nombres = [e.nombre for e in v]
+        repetidos = {n for n in nombres if nombres.count(n) > 1}
+        if repetidos:
+            raise ValueError(f"entidades repetidas: {', '.join(sorted(repetidos))}")
+        return v
+
+    def revisar_referencias(self) -> list[str]:
+        """
+        Errores que Pydantic no puede ver porque cruzan objetos: una relacion que
+        apunta a una entidad inexistente, una metrica sobre una entidad que no
+        esta, una clave primaria que no es campo de su entidad.
+
+        Se revisa aqui y no al compilar porque el mensaje tiene que decir QUE
+        esta mal, no reventar con un KeyError a mitad de una consulta.
+        """
+        errores: list[str] = []
+        entidades = {e.nombre: e for e in self.entidades}
+
+        for e in self.entidades:
+            campos = {c.nombre for c in e.campos}
+            if e.clave_primaria and e.clave_primaria not in campos:
+                errores.append(
+                    f"La entidad '{e.nombre}' declara clave primaria "
+                    f"'{e.clave_primaria}', que no esta entre sus campos.")
+            for g in e.grano:
+                if g not in campos:
+                    errores.append(
+                        f"El grano de '{e.nombre}' menciona '{g}', "
+                        f"que no es uno de sus campos.")
+
+        for i, r in enumerate(self.relaciones, 1):
+            for extremo, (ent, campo) in (("desde", r.desde), ("hasta", r.hasta)):
+                if ent not in entidades:
+                    errores.append(
+                        f"La relacion {i} ({extremo}) apunta a la entidad "
+                        f"'{ent}', que no existe.")
+                elif campo not in {c.nombre for c in entidades[ent].campos}:
+                    errores.append(
+                        f"La relacion {i} ({extremo}) usa el campo "
+                        f"'{ent}.{campo}', que no existe.")
+            if r.desde[0] == r.hasta[0]:
+                errores.append(
+                    f"La relacion {i} une '{r.desde[0]}' consigo misma.")
+
+        for m in self.metricas:
+            if m.entidad not in entidades:
+                errores.append(
+                    f"La metrica '{m.nombre}' vive en la entidad '{m.entidad}', "
+                    f"que no existe.")
+
+        nombres_metrica = [m.nombre for m in self.metricas]
+        for n in {n for n in nombres_metrica if nombres_metrica.count(n) > 1}:
+            errores.append(f"Hay mas de una metrica llamada '{n}'.")
+
+        # Una metrica y una entidad con el mismo nombre hacen ambigua cualquier
+        # referencia en la interfaz.
+        for n in set(nombres_metrica) & set(entidades):
+            errores.append(
+                f"'{n}' es a la vez nombre de metrica y de entidad.")
+
+        errores.extend(self._politicas()[0])
+        return errores
+
+    def revisar_politicas(self) -> tuple[list[str], list[str]]:
+        """(errores, avisos) de las politicas. Los avisos no impiden guardar."""
+        return self._politicas()
+
+    def _politicas(self) -> tuple[list[str], list[str]]:
+        campos_por_entidad = {
+            e.nombre: {c.nombre for c in e.campos} for e in self.entidades
+        }
+        return revisar_politicas(
+            [p.model_dump(exclude_none=True, mode="json") for p in self.politicas],
+            campos_por_entidad,
+        )
+
+    def a_yaml(self) -> str:
+        return volcar_yaml(self.model_dump(exclude_none=True, mode="json"))
+
+
+def volcar_yaml(crudo: dict) -> str:
+    """
+    Vuelca el mapa a YAML en un orden estable.
+
+    El orden importa: este archivo se versiona y se revisa en diff. Si las claves
+    salieran en orden alfabetico o al azar, cada guardado produciria un diff
+    ilegible y nadie revisaria nada.
+    """
+    orden = ["modelo", "version", "entidades", "relaciones", "metricas",
+             "politicas", "disposicion"]
+    ordenado = {k: crudo[k] for k in orden if k in crudo and crudo[k] not in ([], {})}
+    for k, v in crudo.items():                      # claves futuras al final
+        if k not in ordenado and k not in orden:
+            ordenado[k] = v
+    return yaml.safe_dump(ordenado, allow_unicode=True, sort_keys=False,
+                          default_flow_style=False, width=100)
+
+
+def desde_yaml(texto: str) -> Definicion:
+    crudo = yaml.safe_load(texto)
+    if not isinstance(crudo, dict):
+        raise ValueError("El YAML del modelo debe ser un mapa de claves.")
+    return Definicion.model_validate(crudo)

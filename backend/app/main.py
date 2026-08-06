@@ -1,0 +1,101 @@
+"""Astrolabio — punto de entrada de la API."""
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, select
+
+from app import programador
+from app.config import VERSION, config
+from app.db import CrearSesion
+from app.esquema import actualizar as actualizar_esquema
+from app.modelos_db import Rol, Usuario
+from app.rutas import (
+    auth, avisos, catalogo, conexiones, dashboards, flujos, gobierno, modelos,
+    transformaciones,
+)
+from app.seguridad import hashear
+
+log = logging.getLogger("astrolabio")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+@asynccontextmanager
+async def ciclo_de_vida(_: FastAPI):
+    """
+    Arranque y apagado. Es un `lifespan` y no `@app.on_event` porque los eventos
+    estan obsoletos desde Starlette 0.26 y avisan en cada corrida de pruebas.
+
+    `arranque` se define mas abajo a proposito: el orden de lectura del archivo es
+    primero que es la app y luego que hace al arrancar.
+    """
+    arranque()
+    yield
+    programador.detener()
+
+
+app = FastAPI(
+    title="Astrolabio",
+    description="Plataforma de BI: conectar, transformar, modelar y publicar",
+    version=VERSION,
+    lifespan=ciclo_de_vida,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config().origenes_cors,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(avisos.router)
+app.include_router(catalogo.router)
+app.include_router(conexiones.router)
+app.include_router(dashboards.router)
+app.include_router(flujos.router)
+app.include_router(gobierno.router)
+app.include_router(modelos.router)
+app.include_router(transformaciones.router)
+
+
+def arranque() -> None:
+    # Migraciones, no create_all: create_all crea tablas pero no las altera, y
+    # una columna nueva sobre una base con datos dejaba el arranque roto.
+    actualizar_esquema()
+
+    with CrearSesion() as sesion:
+        hay_usuarios = sesion.scalar(select(func.count()).select_from(Usuario))
+        if not hay_usuarios:
+            # Contraseña temporal, visible solo en el log del primer arranque.
+            import secrets
+            temporal = secrets.token_urlsafe(12)
+            sesion.add(Usuario(
+                email=config().correo_admin, nombre="Administrador",
+                hash_contrasena=hashear(temporal), rol=Rol.administrador,
+            ))
+            sesion.commit()
+            log.warning(
+                "\n%s\n  Usuario administrador creado\n"
+                "    correo     : %s\n"
+                "    contrasena : %s\n"
+                "  Cambiala en el primer ingreso. No se vuelve a mostrar.\n%s",
+                "=" * 66, config().correo_admin, temporal, "=" * 66,
+            )
+
+    # Despues de las migraciones: el jobstore necesita su tabla, y sincronizar()
+    # necesita leer los datasets.
+    programador.arrancar()
+
+    log.info("Astrolabio arriba — entorno=%s  metadatos=%s  analitico=%s",
+             config().entorno, config().url_metadatos, config().ruta_duckdb)
+
+
+
+
+@app.get("/api/salud", tags=["sistema"])
+def salud():
+    return {"estado": "ok", "version": app.version, "entorno": config().entorno}

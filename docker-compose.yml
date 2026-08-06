@@ -1,0 +1,46 @@
+# Astrolabio — desarrollo y produccion con las MISMAS imagenes.
+#
+#   Desarrollo (tu Mac):  docker compose up
+#   Produccion (Linux):   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Dos servicios a proposito. Con un solo mantenedor, cada servicio extra es algo
+# mas que administrar, respaldar y que puede fallar de noche.
+
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ASTROLABIO_ENTORNO: ${ASTROLABIO_ENTORNO:-desarrollo}
+      ASTROLABIO_CLAVE_SECRETA: ${ASTROLABIO_CLAVE_SECRETA:-cambiame-en-produccion}
+      ASTROLABIO_CLAVE_CIFRADO: ${ASTROLABIO_CLAVE_CIFRADO:-}
+      ASTROLABIO_RUTA_DUCKDB: /app/analitico/astrolabio.duckdb
+      ASTROLABIO_DUCKDB_SOLO_LECTURA: "false"
+      ASTROLABIO_ORIGENES_CORS: '["http://localhost:5173"]'
+    volumes:
+      # metadatos: un solo archivo SQLite. Respaldar = copiar este directorio.
+      - metadatos:/app/datos
+      # base analitica y Parquet
+      - analitico:/app/analitico
+    ports:
+      - "8000:8000"
+
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+      - ./frontend/dist:/srv:ro
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  metadatos:
+  analitico:
+  caddy_datos:
+  caddy_config:

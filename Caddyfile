@@ -1,0 +1,47 @@
+# Caddy sirve la interfaz ya compilada y hace de puerta a la API.
+#
+# Dos motivos para que la API no se exponga sola: el navegador habla con un solo
+# origen (así no hace falta CORS en producción), y Caddy resuelve HTTPS con
+# certificados automáticos, que es lo que hace realista poner esto en un servidor.
+#
+# En desarrollo se usa el servidor de Vite y este archivo no interviene.
+
+{
+	# Cambia esto por un correo real para que Let's Encrypt avise si un
+	# certificado va a caducar sin renovarse.
+	email admin@example.com
+}
+
+# Para producción: pon aquí el nombre del servidor (astrolabio.tuempresa.com) y
+# Caddy pedirá el certificado solo. `:80` sirve por HTTP, que es lo que se quiere
+# mientras se prueba en una red interna.
+:80 {
+	encode gzip zstd
+
+	# Todo lo que empiece por /api va al backend, tal cual.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# El resto es la interfaz. `try_files` con index.html al final es lo que hace
+	# que recargar en /tableros/3 no devuelva 404: las rutas las resuelve React.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# Cabeceras de seguridad. La aplicación no carga nada de fuera, así que la
+		# política de contenido puede ser estricta de verdad.
+		# `worker-src blob:` es por el editor de SQL (Monaco), que arranca sus
+		# trabajadores desde un blob; sin eso, la pantalla de ETL se queda sin
+		# resaltado y con un error en la consola.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		# Un año de HTTPS obligatorio. Quítalo si sirves por HTTP en una red interna.
+		# Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

@@ -1,0 +1,264 @@
+"""
+Flujos: qué se carga y qué se recalcula, en orden y a una hora.
+
+Un flujo es la respuesta a "cada día a las 6, trae las ventas y recalcula el
+resumen por sucursal". Reúne en un solo sitio lo que antes eran cargas programadas
+por separado y transformaciones ejecutadas a mano.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+
+from app import programador
+from app.auditoria import registrar
+from app.cargas import Actor
+from app.dependencias import SesionDep, exigir_rol
+from app.flujos import (
+    ErrorFlujo, ejecutar as ejecutar_flujo, revisar_orden, revisar_pasos,
+    sugerir_orden,
+)
+from app.modelos_db import Flujo, Rol, Usuario
+
+router = APIRouter(prefix="/api/flujos", tags=["flujos"])
+
+
+# --------------------------------------------------------------------------- #
+# Esquemas
+# --------------------------------------------------------------------------- #
+
+class PasoFlujo(BaseModel):
+    tipo: str
+    id: int
+    nombre: str | None = None
+
+
+class Guardar(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    descripcion: str | None = None
+    pasos: list[PasoFlujo] = []
+    al_fallar: str = "detener"
+
+
+class Programacion(BaseModel):
+    cron: str = Field(description="5 campos: minuto hora dia mes dia_semana")
+    zona_horaria: str = "America/Mexico_City"
+    activa: bool = True
+
+
+class Salida(BaseModel):
+    id: int
+    nombre: str
+    descripcion: str | None
+    pasos: list[dict]
+    al_fallar: str
+    cron: str | None
+    zona_horaria: str
+    programacion_activa: bool
+    proxima_corrida: str | None
+    ultima_ejecucion: str | None
+    ultimo_estado: str | None
+    avisos: list[str]
+
+
+# --------------------------------------------------------------------------- #
+# Utilidades
+# --------------------------------------------------------------------------- #
+
+def _salida(sesion: SesionDep, f: Flujo) -> Salida:
+    ultima = f.ejecuciones[0] if f.ejecuciones else None
+    proxima = programador.proxima_corrida_flujo(f.id)
+    return Salida(
+        id=f.id, nombre=f.nombre, descripcion=f.descripcion,
+        pasos=f.pasos or [], al_fallar=f.al_fallar, cron=f.cron,
+        zona_horaria=f.zona_horaria, programacion_activa=f.programacion_activa,
+        proxima_corrida=proxima.isoformat() if proxima else None,
+        ultima_ejecucion=(f.ultima_ejecucion.isoformat()
+                          if f.ultima_ejecucion else None),
+        ultimo_estado=ultima.estado.value if ultima else None,
+        # Los avisos se recalculan al leer: el orden puede quedar mal por un
+        # cambio en otra parte (una transformación que ahora lee de otro dataset),
+        # no solo al guardar el flujo.
+        avisos=revisar_orden(sesion, f.pasos or []),
+    )
+
+
+def _obtener(sesion: SesionDep, id_: int) -> Flujo:
+    f = sesion.get(Flujo, id_)
+    if f is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Flujo no encontrado")
+    return f
+
+
+def _validar(sesion: SesionDep, cuerpo: Guardar) -> list[dict]:
+    if cuerpo.al_fallar not in ("detener", "continuar"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "al_fallar debe ser 'detener' o 'continuar'")
+    pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
+    errores = revisar_pasos(sesion, pasos)
+    if errores:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            {"errores": errores})
+    # El nombre de cada paso se guarda junto al id para que el historial siga
+    # siendo legible aunque después se borre el dataset.
+    from app.flujos import _nombre_de
+
+    for p in pasos:
+        p["nombre"] = _nombre_de(sesion, p) or p.get("nombre")
+    return pasos
+
+
+# --------------------------------------------------------------------------- #
+# Rutas
+# --------------------------------------------------------------------------- #
+
+@router.get("", response_model=list[Salida])
+def listar(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
+    return [_salida(sesion, f)
+            for f in sesion.scalars(select(Flujo).order_by(Flujo.nombre))]
+
+
+@router.get("/disponibles")
+def disponibles(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """Lo que se puede poner como paso: datasets con carga, y transformaciones."""
+    from app.modelos_db import Dataset, Transformacion as TransformacionDB
+
+    return {
+        "cargas": [
+            {"id": d.id, "nombre": d.nombre, "tabla": d.tabla_origen,
+             "cron_propio": d.cron}
+            for d in sesion.scalars(select(Dataset).order_by(Dataset.nombre))
+        ],
+        "transformaciones": [
+            {"id": t.id, "nombre": t.nombre, "lee_de": t.lee_de or {}}
+            for t in sesion.scalars(select(TransformacionDB)
+                                    .order_by(TransformacionDB.nombre))
+        ],
+    }
+
+
+@router.post("/sugerir-orden")
+def sugerir(cuerpo: Guardar, sesion: SesionDep,
+            _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Propone el orden correcto a partir del linaje, agregando las cargas que hagan
+    falta. Es una propuesta que se revisa, no un cambio: puede haber razones para
+    el orden que tenía.
+    """
+    pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
+    propuesta = sugerir_orden(sesion, pasos)
+    return {"pasos": propuesta, "avisos": revisar_orden(sesion, propuesta)}
+
+
+@router.post("", response_model=Salida, status_code=201)
+def crear(cuerpo: Guardar, sesion: SesionDep,
+          actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    if sesion.scalar(select(func.count()).select_from(Flujo)
+                     .where(Flujo.nombre == cuerpo.nombre)):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Ya existe un flujo con ese nombre")
+    pasos = _validar(sesion, cuerpo)
+
+    f = Flujo(nombre=cuerpo.nombre, descripcion=cuerpo.descripcion, pasos=pasos,
+              al_fallar=cuerpo.al_fallar, creado_por=actor.id)
+    sesion.add(f)
+    sesion.flush()
+    registrar(sesion, accion="flujo_creado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"nombre": f.nombre, "pasos": len(pasos)})
+    return _salida(sesion, f)
+
+
+@router.put("/{id_}", response_model=Salida)
+def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
+               actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    pasos = _validar(sesion, cuerpo)
+    f.nombre = cuerpo.nombre
+    f.descripcion = cuerpo.descripcion
+    f.pasos = pasos
+    f.al_fallar = cuerpo.al_fallar
+    registrar(sesion, accion="flujo_actualizado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"nombre": f.nombre, "pasos": len(pasos)})
+    return _salida(sesion, f)
+
+
+@router.post("/{id_}/ejecutar")
+def ejecutar(id_: int, sesion: SesionDep,
+             actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    try:
+        return ejecutar_flujo(sesion, f, Actor(id=actor.id, email=actor.email))
+    except ErrorFlujo as e:
+        # 400 con el detalle: el flujo no se completó, pero el historial ya tiene
+        # el resultado de cada paso, incluidos los que sí salieron bien.
+        ultima = f.ejecuciones[0] if f.ejecuciones else None
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, {
+            "mensaje": str(e),
+            "pasos": (ultima.detalle or {}).get("pasos", []) if ultima else [],
+        })
+
+
+@router.get("/{id_}/historial")
+def historial(id_: int, sesion: SesionDep,
+              _: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    return {"ejecuciones": [
+        {"id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
+         "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
+         "cuando": e.creado_en.isoformat()}
+        for e in f.ejecuciones[:30]
+    ]}
+
+
+@router.put("/{id_}/programacion", response_model=Salida)
+def programar(id_: int, cuerpo: Programacion, sesion: SesionDep,
+              actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    try:
+        programador.validar_cron(cuerpo.cron, cuerpo.zona_horaria)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    f.cron = cuerpo.cron
+    f.zona_horaria = cuerpo.zona_horaria
+    f.programacion_activa = cuerpo.activa
+    # Confirmar antes de tocar el programador: su jobstore escribe en la misma
+    # base y dos escritores sobre el mismo SQLite se bloquean entre sí.
+    sesion.commit()
+    programador.aplicar_flujo(f)
+
+    registrar(sesion, accion="flujo_programado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"cron": f.cron, "zona": f.zona_horaria,
+                       "activa": f.programacion_activa})
+    return _salida(sesion, f)
+
+
+@router.delete("/{id_}/programacion", status_code=204)
+def desprogramar(id_: int, sesion: SesionDep,
+                 actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    f.cron = None
+    f.programacion_activa = False
+    sesion.commit()
+    programador.quitar_flujo(f.id)
+    registrar(sesion, accion="flujo_desprogramado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"nombre": f.nombre})
+
+
+@router.delete("/{id_}", status_code=204)
+def borrar(id_: int, sesion: SesionDep,
+           actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    f = _obtener(sesion, id_)
+    nombre = f.nombre
+    sesion.delete(f)
+    sesion.commit()
+    programador.quitar_flujo(id_)
+    registrar(sesion, accion="flujo_borrado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=id_,
+              detalle={"nombre": nombre})

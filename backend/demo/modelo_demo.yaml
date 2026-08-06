@@ -1,0 +1,207 @@
+# Definicion del modelo semantico — formato de texto, versionable en git.
+# La UI genera este archivo; el usuario nunca lo escribe a mano. Pero existe como
+# texto a proposito: es diffable, revisable y exportable. Sin encierro en una BD.
+
+modelo: demo_comercial
+version: 1
+
+entidades:
+
+  # ---------- Dimensiones ----------
+  - nombre: cat_sucursal
+    tipo: dimension
+    origen: {tabla: cat_sucursal}
+    clave_primaria: sucursal_id
+    campos:
+      - {nombre: sucursal_id,     tipo: entero, rol: clave}
+      - {nombre: sucursal_nombre, tipo: texto,  rol: dimension, etiqueta: Sucursal}
+      - {nombre: marca_id,        tipo: entero, rol: clave_externa}
+      - {nombre: region_id,       tipo: entero, rol: clave_externa}
+      - {nombre: nombre_conexion, tipo: texto,  rol: dimension, visible: false}
+
+  - nombre: cat_marca
+    tipo: dimension
+    origen: {tabla: cat_marca}
+    clave_primaria: marca_id
+    campos:
+      - {nombre: marca_id,     tipo: entero, rol: clave}
+      - {nombre: marca_nombre, tipo: texto,  rol: dimension, etiqueta: Marca}
+
+  - nombre: cat_region
+    tipo: dimension
+    origen: {tabla: cat_region}
+    clave_primaria: region_id
+    campos:
+      - {nombre: region_id,     tipo: entero, rol: clave}
+      - {nombre: region_nombre, tipo: texto,  rol: dimension, etiqueta: Estado}
+
+  - nombre: dim_calendario
+    tipo: dimension
+    origen: {tabla: dim_calendario}
+    clave_primaria: fecha
+    campos:
+      - {nombre: fecha,      tipo: fecha,  rol: clave}
+      - {nombre: anio,       tipo: entero, rol: dimension, etiqueta: Año}
+      - {nombre: mes,        tipo: entero, rol: dimension, etiqueta: Mes}
+      - {nombre: anio_mes,   tipo: entero, rol: dimension, etiqueta: Año-Mes}
+      - {nombre: trimestre,  tipo: entero, rol: dimension, etiqueta: Trimestre}
+      - {nombre: es_habil,   tipo: booleano, rol: dimension, etiqueta: Es hábil}
+    jerarquias:
+      - {nombre: Tiempo, niveles: [anio, trimestre, mes, fecha]}
+
+  - nombre: dim_vehiculo
+    tipo: dimension
+    origen: {tabla: dim_vehiculo}
+    clave_primaria: vehiculo_id
+    campos:
+      - {nombre: vehiculo_id, tipo: entero, rol: clave}
+      - {nombre: modelo,      tipo: texto,  rol: dimension, etiqueta: Modelo}
+      - {nombre: marca_id,    tipo: entero, rol: clave_externa}
+      - {nombre: segmento,    tipo: texto,  rol: dimension, etiqueta: Segmento}
+
+  - nombre: dim_cliente
+    tipo: dimension
+    origen: {tabla: dim_cliente}
+    clave_primaria: cliente_id
+    campos:
+      - {nombre: cliente_id,       tipo: entero, rol: clave}
+      - {nombre: cliente_nombre,   tipo: texto,  rol: dimension, etiqueta: Cliente, pii: true}
+      - {nombre: segmento_cliente, tipo: texto,  rol: dimension, etiqueta: Segmento cliente}
+
+  # ---------- Hechos ----------
+  - nombre: fact_venta
+    tipo: hecho
+    origen: {tabla: fact_venta}
+    grano: [venta_id]
+    campos:
+      - {nombre: venta_id,         tipo: entero, rol: clave}
+      - {nombre: sucursal_id,      tipo: entero, rol: clave_externa}
+      - {nombre: cliente_id,       tipo: entero, rol: clave_externa}
+      - {nombre: vehiculo_id,      tipo: entero, rol: clave_externa}
+      - {nombre: fecha_emision,    tipo: fecha,  rol: clave_externa}
+      - {nombre: serie,            tipo: texto,  rol: dimension, etiqueta: Serie}
+      - {nombre: es_cancelacion,   tipo: booleano, rol: dimension, etiqueta: Es cancelación}
+      - {nombre: monto_base,     tipo: decimal, rol: medida_base}
+      - {nombre: monto_impuesto,           tipo: decimal, rol: medida_base}
+      - {nombre: monto_costo, tipo: decimal, rol: medida_base}
+      - {nombre: monto_bonus,         tipo: decimal, rol: medida_base}
+      - {nombre: monto_bonus_cancel,  tipo: decimal, rol: medida_base}
+      - {nombre: unidades,         tipo: entero,  rol: medida_base}
+
+  - nombre: fact_servicio
+    tipo: hecho
+    origen: {tabla: fact_servicio}
+    grano: [servicio_id]
+    campos:
+      - {nombre: servicio_id,      tipo: entero, rol: clave}
+      - {nombre: sucursal_id,      tipo: entero, rol: clave_externa}
+      - {nombre: vehiculo_id,      tipo: entero, rol: clave_externa}
+      - {nombre: cliente_id,       tipo: entero, rol: clave_externa}
+      - {nombre: fecha_apertura,   tipo: fecha,  rol: clave_externa}
+      - {nombre: tipo_os,          tipo: texto,  rol: dimension, etiqueta: Tipo de OS}
+      - {nombre: monto_mano_obra,  tipo: decimal, rol: medida_base}
+      - {nombre: horas_facturadas, tipo: decimal, rol: medida_base}
+
+  - nombre: fact_refaccion
+    tipo: hecho
+    origen: {tabla: fact_refaccion}
+    grano: [refaccion_id]
+    campos:
+      - {nombre: refaccion_id,   tipo: entero, rol: clave}
+      - {nombre: sucursal_id,    tipo: entero, rol: clave_externa}
+      - {nombre: fecha_venta,    tipo: fecha,  rol: clave_externa}
+      - {nombre: linea_producto, tipo: texto,  rol: dimension, etiqueta: Línea de producto}
+      - {nombre: monto_venta,    tipo: decimal, rol: medida_base}
+      - {nombre: monto_costo,    tipo: decimal, rol: medida_base}
+      - {nombre: piezas,         tipo: entero,  rol: medida_base}
+
+  # Grano mucho mas grueso: sucursal x mes. Origen del fan trap.
+  - nombre: fact_presupuesto
+    tipo: hecho
+    origen: {tabla: fact_presupuesto}
+    grano: [sucursal_id, anio_mes]
+    campos:
+      - {nombre: presupuesto_id,    tipo: entero, rol: clave}
+      - {nombre: sucursal_id,       tipo: entero, rol: clave_externa}
+      - {nombre: anio_mes,          tipo: entero, rol: clave_externa}
+      - {nombre: objetivo_unidades, tipo: entero,  rol: medida_base}
+      - {nombre: objetivo_monto,    tipo: decimal, rol: medida_base}
+
+  # Sin relaciones: el detector de problemas debe marcarla como huerfana.
+  - nombre: tbl_encuesta_clima
+    tipo: hecho
+    origen: {tabla: tbl_encuesta_clima}
+    grano: [encuesta_id]
+    campos:
+      - {nombre: encuesta_id,     tipo: entero, rol: clave}
+      - {nombre: sucursal_texto,  tipo: texto,  rol: dimension}
+      - {nombre: resultado,       tipo: decimal, rol: medida_base}
+      - {nombre: anio,            tipo: entero, rol: dimension}
+
+relaciones:
+  - {desde: [fact_venta, sucursal_id],       hasta: [cat_sucursal, sucursal_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_venta, cliente_id],        hasta: [dim_cliente, cliente_id],     cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_venta, vehiculo_id],       hasta: [dim_vehiculo, vehiculo_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_venta, fecha_emision],     hasta: [dim_calendario, fecha],       cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_servicio, sucursal_id],    hasta: [cat_sucursal, sucursal_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_servicio, vehiculo_id],    hasta: [dim_vehiculo, vehiculo_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_servicio, cliente_id],     hasta: [dim_cliente, cliente_id],     cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_servicio, fecha_apertura], hasta: [dim_calendario, fecha],       cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_refaccion, sucursal_id],   hasta: [cat_sucursal, sucursal_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_refaccion, fecha_venta],   hasta: [dim_calendario, fecha],       cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_presupuesto, sucursal_id], hasta: [cat_sucursal, sucursal_id],   cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [fact_presupuesto, anio_mes],    hasta: [dim_calendario, anio_mes],    cardinalidad: muchos_a_muchos, direccion_filtro: ambas}
+  - {desde: [cat_sucursal, region_id],       hasta: [cat_region, region_id],       cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  # Las dos siguientes crean la RUTA AMBIGUA hacia cat_marca:
+  #   fact_venta -> cat_sucursal -> cat_marca   (la marca de la agencia)
+  #   fact_venta -> dim_vehiculo -> cat_marca   (la marca del vehiculo)
+  - {desde: [cat_sucursal, marca_id],        hasta: [cat_marca, marca_id],         cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+  - {desde: [dim_vehiculo, marca_id],        hasta: [cat_marca, marca_id],         cardinalidad: muchos_a_uno, direccion_filtro: ambas}
+
+metricas:
+  - nombre: monto_venta
+    etiqueta: Venta
+    entidad: fact_venta
+    expresion: SUM(monto_base)
+    formato: moneda
+
+  - nombre: monto_utilidad
+    etiqueta: Utilidad
+    entidad: fact_venta
+    # Replica exacta de la formula del Qlik actual (Hechos Venta.txt:57)
+    expresion: SUM(monto_base - monto_impuesto - monto_costo + monto_bonus + monto_bonus_cancel)
+    formato: moneda
+
+  - nombre: unidades_vendidas
+    etiqueta: Unidades
+    entidad: fact_venta
+    expresion: SUM(unidades)
+    formato: entero
+
+  - nombre: venta_mano_obra
+    etiqueta: Venta de mano de obra
+    entidad: fact_servicio
+    expresion: SUM(monto_mano_obra)
+    formato: moneda
+
+  - nombre: venta_refacciones
+    etiqueta: Venta de refacciones
+    entidad: fact_refaccion
+    expresion: SUM(monto_venta)
+    formato: moneda
+
+  - nombre: objetivo_unidades
+    etiqueta: Objetivo de unidades
+    entidad: fact_presupuesto
+    expresion: SUM(objetivo_unidades)
+    formato: entero
+
+politicas:
+  # Seguridad por fila: quien tiene el atributo region_id solo ve las sucursales
+  # de su region. El rol es 'lector' —uno de los tres que existen— y no un nombre
+  # inventado: una politica que apunta a un rol inexistente se guarda sin quejarse
+  # y no filtra nada, que es la peor forma de fallar aqui.
+  - nombre: rls_por_region
+    entidad: cat_sucursal
+    predicado: "region_id = {{ usuario.region_id }}"
+    aplica_a_roles: [lector]

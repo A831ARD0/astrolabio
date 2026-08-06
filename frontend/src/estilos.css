@@ -1,0 +1,1089 @@
+/*
+ * Estilos de Astrolabio.
+ *
+ * Sin librería de componentes: los tokens de abajo son el sistema. Una
+ * herramienta de BI se mira durante horas, así que el color se reserva para el
+ * dato y para el aviso — la interfaz se queda en grises.
+ */
+
+:root {
+  --fondo: #0e1117;
+  --fondo-panel: #151a23;
+  --fondo-alto: #1c222d;
+  --fondo-hover: #232a37;
+  --borde: #2a3240;
+  --borde-fuerte: #3a4453;
+
+  --texto: #e6e9ef;
+  --texto-suave: #98a2b3;
+  --texto-tenue: #667085;
+
+  --acento: #4c8dff;
+  --acento-suave: #1d3557;
+  --hecho: #f0a35e;
+  --hecho-suave: #3a2a17;
+  --critico: #f2545b;
+  --critico-suave: #3d1a1e;
+  --aviso: #e8b339;
+  --aviso-suave: #3a2f13;
+  --ok: #3fb950;
+
+  --r: 6px;
+  --sombra: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --fondo: #f7f8fa;
+    --fondo-panel: #ffffff;
+    --fondo-alto: #f0f2f5;
+    --fondo-hover: #e8ebef;
+    --borde: #dde1e7;
+    --borde-fuerte: #c3cad4;
+    --texto: #1a1f28;
+    --texto-suave: #5a6472;
+    --texto-tenue: #8a94a3;
+    --acento: #1f6feb;
+    --acento-suave: #dbe8ff;
+    --hecho: #b45309;
+    --hecho-suave: #fdf0dd;
+    --critico: #cf222e;
+    --critico-suave: #ffe3e5;
+    --aviso: #9a6700;
+    --aviso-suave: #fff5d6;
+    --sombra: 0 8px 24px rgba(16, 24, 40, 0.12);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ---------------------------------------------------------------- cascarón */
+
+/* El cascarón ocupa la ventana y no se desplaza: lo que desborda se desplaza
+   dentro de su propio panel. Si el documento entero pudiera desplazarse en
+   horizontal, una ruta larga en el diagnóstico movería el lienzo de sitio. */
+.app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  height: 48px;
+  flex: 0 0 48px;
+  background: var(--fondo-panel);
+  border-bottom: 1px solid var(--borde);
+}
+
+.marca {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.marca span { color: var(--texto-tenue); font-weight: 400; font-size: 12px; }
+.marca .simbolo { width: 20px; height: 20px; color: var(--acento); flex: none; }
+
+.nav { display: flex; gap: 2px; }
+.nav a {
+  padding: 5px 11px;
+  border-radius: var(--r);
+  color: var(--texto-suave);
+  text-decoration: none;
+}
+.nav a:hover { background: var(--fondo-hover); color: var(--texto); }
+.nav a.activo { background: var(--acento-suave); color: var(--acento); }
+
+.derecha { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.cuerpo { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+
+/* ------------------------------------------------------------- primitivas */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--fondo-alto);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--fondo-hover); border-color: var(--borde-fuerte); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+.btn.primario:hover:not(:disabled) { filter: brightness(1.1); background: var(--acento); }
+.btn.peligro { color: var(--critico); border-color: var(--critico-suave); }
+.btn.chico { padding: 3px 8px; font-size: 12px; }
+
+.campo { display: flex; flex-direction: column; gap: 4px; }
+.campo > label { font-size: 12px; color: var(--texto-suave); }
+
+input[type='text'], input[type='password'], input[type='number'], select, textarea {
+  padding: 6px 9px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: -1px;
+  border-color: var(--acento);
+}
+textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
+
+/**
+ * Un texto de ejemplo NO debe poder confundirse con un valor escrito. Sin esto,
+ * el gris por defecto del navegador se parece demasiado al del texto real, y un
+ * campo vacío se lee como lleno — con un botón desactivado y sin explicación al
+ * lado. Cursiva además del color: quien no distinga los grises lo ve igual.
+ */
+::placeholder { color: var(--texto-tenue); opacity: 1; font-style: italic; }
+
+/**
+ * Una casilla marcada y bloqueada tiene que verse MARCADA. El navegador la dibuja
+ * tan tenue que se lee como desmarcada, y entonces una columna que sí se trae
+ * parece que no — el mismo error que el texto de ejemplo que parecía un valor.
+ */
+input[type='checkbox']:disabled { opacity: 1; cursor: not-allowed; }
+input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
+
+.etiqueta {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 550;
+  background: var(--fondo-alto);
+  color: var(--texto-suave);
+  border: 1px solid var(--borde);
+}
+.etiqueta.hecho { background: var(--hecho-suave); color: var(--hecho); border-color: transparent; }
+.etiqueta.dim { background: var(--acento-suave); color: var(--acento); border-color: transparent; }
+.etiqueta.critico { background: var(--critico-suave); color: var(--critico); border-color: transparent; }
+.etiqueta.aviso { background: var(--aviso-suave); color: var(--aviso); border-color: transparent; }
+
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.suave { color: var(--texto-suave); }
+.tenue { color: var(--texto-tenue); }
+.chico { font-size: 12px; }
+
+.error-caja {
+  padding: 9px 11px;
+  background: var(--critico-suave);
+  border: 1px solid var(--critico);
+  border-radius: var(--r);
+  color: var(--critico);
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.aviso-caja {
+  padding: 9px 11px;
+  background: var(--aviso-suave);
+  border: 1px solid var(--aviso);
+  border-radius: var(--r);
+  color: var(--aviso);
+  font-size: 13px;
+}
+
+.vacio {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--texto-tenue);
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------------- ingreso */
+
+.ingreso {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(1200px 600px at 50% -10%, var(--fondo-alto), var(--fondo));
+}
+.ingreso form {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 26px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+}
+.ingreso h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
+
+/* --------------------------------------------------------------- páginas */
+
+.pagina { flex: 1; min-height: 0; overflow: auto; padding: 22px 26px; }
+.pagina h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.01em; }
+.pagina h2 { font-size: 15px; margin: 22px 0 8px; }
+
+.tarjetas { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-top: 16px; }
+.tarjeta {
+  display: block;
+  padding: 14px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.tarjeta:hover { border-color: var(--acento); }
+.tarjeta h3 { margin: 0 0 4px; font-size: 14px; }
+
+/* -------------------------------------------------------- editor del modelo */
+
+.editor { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
+
+.izq {
+  width: 232px;
+  flex: 0 0 232px;
+  border-right: 1px solid var(--borde);
+  background: var(--fondo-panel);
+  overflow: auto;
+}
+.der {
+  width: 380px;
+  flex: 0 0 380px;
+  border-left: 1px solid var(--borde);
+  background: var(--fondo-panel);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.centro { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+.seccion { border-bottom: 1px solid var(--borde); }
+.seccion > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-tenue);
+}
+.seccion > header .cuenta { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.seccion .contenido { padding: 0 8px 10px; }
+
+.lista { display: flex; flex-direction: column; gap: 1px; }
+.lista button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+.lista button:hover { background: var(--fondo-hover); }
+.lista button.sel { background: var(--acento-suave); color: var(--acento); }
+.lista button .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lista button .dcha { margin-left: auto; font-size: 11px; color: var(--texto-tenue); }
+
+.punto { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 7px; }
+.punto.hecho { background: var(--hecho); }
+.punto.dimension { background: var(--acento); }
+
+.barra-editor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--borde);
+  background: var(--fondo-panel);
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+/* La nota de versión cede espacio antes de que la barra empuje al panel de la
+   derecha: en una pantalla angosta se encoge, no desborda. */
+.barra-editor input[type='text'] { min-width: 70px; }
+.pestanas { display: flex; gap: 2px; }
+.pestanas button {
+  padding: 5px 11px;
+  background: none;
+  border: 0;
+  border-radius: var(--r);
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+.pestanas button:hover { background: var(--fondo-hover); }
+.pestanas button.activo { background: var(--fondo-alto); color: var(--texto); }
+
+.sin-guardar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--aviso);
+  font-size: 12.5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.sin-guardar::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--aviso); }
+
+.lienzo { flex: 1; min-height: 0; position: relative; }
+
+/* ------------------------------------------------------- nodos del lienzo */
+
+.nodo {
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 7px;
+  overflow: hidden;
+  font-size: 12.5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+.nodo.sel { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
+.nodo.problema { border-color: var(--critico); }
+.nodo.huerfana { border-style: dashed; }
+
+.nodo > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--borde);
+  background: var(--fondo-alto);
+}
+.nodo.tipo-hecho > header { background: var(--hecho-suave); color: var(--hecho); }
+.nodo.tipo-dimension > header { background: var(--acento-suave); color: var(--acento); }
+.nodo > header .tabla { margin-left: auto; font-size: 10.5px; font-weight: 400; opacity: 0.75; }
+.aviso-nodo {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--critico);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+}
+
+.nodo ul { list-style: none; margin: 0; padding: 4px 0; max-height: 220px; overflow: auto; }
+.nodo li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--texto-suave);
+}
+.nodo li .rol { margin-left: auto; font-family: var(--sans); font-size: 10px; color: var(--texto-tenue); }
+.nodo li.clave { color: var(--texto); font-weight: 600; }
+.nodo li.medida_base { color: var(--ok); }
+.nodo li .pii { color: var(--aviso); font-size: 10px; }
+.nodo > footer { padding: 3px 9px 5px; font-size: 10.5px; color: var(--texto-tenue); }
+
+.react-flow__handle { width: 8px; height: 8px; background: var(--borde-fuerte); border: 1px solid var(--fondo-panel); }
+.react-flow__handle:hover { background: var(--acento); }
+.react-flow__edge-path { stroke: var(--borde-fuerte); stroke-width: 1.6; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--acento); stroke-width: 2.4; }
+.react-flow__edge.ambigua .react-flow__edge-path { stroke: var(--critico); stroke-width: 2.2; }
+.react-flow__edge.m2m .react-flow__edge-path { stroke-dasharray: 5 3; stroke: var(--aviso); }
+.react-flow__edge-text { fill: var(--texto-tenue); font-size: 10px; font-family: var(--mono); }
+.react-flow__edge-textbg { fill: var(--fondo); }
+.react-flow__attribution { display: none; }
+.react-flow__controls-button {
+  background: var(--fondo-panel);
+  border-bottom: 1px solid var(--borde);
+  fill: var(--texto-suave);
+}
+.react-flow__controls-button:hover { background: var(--fondo-hover); }
+.react-flow__minimap {
+  width: 168px;
+  height: 118px;
+  background: var(--fondo-alto);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+/* Por CSS y no por props: un `var(--x)` en un atributo de SVG no se resuelve. */
+.react-flow__minimap-mask { fill: color-mix(in srgb, var(--texto-tenue) 22%, transparent); }
+.react-flow__minimap-node { fill: var(--acento); stroke: none; }
+
+/* ------------------------------------------------------------- inspector */
+
+.inspector { padding: 12px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-width: 0; }
+.inspector > * { min-width: 0; }
+.inspector h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.inspector .fila { display: flex; gap: 8px; }
+.inspector .fila > * { flex: 1; min-width: 0; }
+
+/* Ancho fijo: sin esto el selector de rol empuja las dos últimas columnas fuera
+   del panel, y son casillas que hay que poder marcar. */
+table.campos { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+table.campos th:nth-child(2) { width: 58px; }
+table.campos th:nth-child(3) { width: 104px; }
+table.campos th:nth-child(4), table.campos th:nth-child(5) { width: 30px; }
+table.campos select { width: 100%; }
+table.campos td:first-child { overflow: hidden; text-overflow: ellipsis; }
+table.campos th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--borde);
+}
+table.campos td { padding: 2px 5px; border-bottom: 1px solid var(--borde); }
+table.campos td:first-child { font-family: var(--mono); font-size: 11.5px; }
+table.campos select { padding: 2px 4px; font-size: 11.5px; }
+table.campos tr:hover td { background: var(--fondo-alto); }
+
+/* ----------------------------------------------------------- diagnóstico */
+
+.problemas { display: flex; flex-direction: column; gap: 6px; }
+.problema {
+  padding: 8px 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--borde);
+  background: var(--fondo-alto);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.problema:hover { border-color: var(--borde-fuerte); }
+.problema.critico { border-left: 3px solid var(--critico); }
+.problema.advertencia { border-left: 3px solid var(--aviso); }
+.problema .quien { font-family: var(--mono); font-size: 11.5px; margin-bottom: 2px; }
+.problema .msg { font-size: 12px; color: var(--texto-suave); }
+.problema { overflow-wrap: anywhere; }
+.problema .rutas { margin-top: 5px; display: flex; flex-direction: column; gap: 2px; }
+.problema .rutas code { font-size: 11px; color: var(--critico); }
+
+/* ------------------------------------------------------------ resultados */
+
+.tabla-envoltura { overflow: auto; border: 1px solid var(--borde); border-radius: var(--r); }
+table.datos { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.datos th {
+  position: sticky;
+  top: 0;
+  background: var(--fondo-alto);
+  text-align: left;
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--borde);
+  font-weight: 550;
+  white-space: nowrap;
+}
+table.datos td { padding: 4px 9px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+table.datos td.num { text-align: right; font-family: var(--mono); }
+
+/* ------------------------------------------------------------------ yaml */
+
+.yaml { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.yaml .aviso-caja { margin: 10px 12px 0; }
+
+/* -------------------------------------------------------------- tableros */
+
+.rejilla { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px 40px; }
+
+.widget {
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.widget.sel { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
+
+.widget > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--borde);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.widget > header .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget > header .tenue { margin-left: auto; font-weight: 400; }
+.editor .widget > header { cursor: move; }
+
+.cuerpo-widget { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+
+/* KPI: la cifra manda, todo lo demás se aparta. */
+.kpi {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+}
+.kpi.varios {
+  grid-auto-flow: column;
+  gap: 8px;
+  place-items: center stretch;
+}
+.kpi-uno { text-align: center; min-width: 0; }
+.kpi .cifra {
+  font-size: clamp(20px, 2.6vw, 40px);
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .rotulo {
+  font-size: 11.5px;
+  color: var(--texto-suave);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.widget-texto { padding: 10px 12px; white-space: pre-wrap; overflow: auto; height: 100%; }
+
+/* Asas de redimensionado de react-grid-layout */
+.react-resizable-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: se-resize;
+  opacity: 0.5;
+}
+.react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--texto-tenue);
+  border-bottom: 2px solid var(--texto-tenue);
+}
+.react-grid-item.react-grid-placeholder {
+  background: var(--acento);
+  opacity: 0.16;
+  border-radius: 8px;
+}
+
+/* ------------------------------------------------- filtro asociativo */
+
+.filtro { height: 100%; display: flex; flex-direction: column; padding: 6px 8px 4px; }
+.filtro > header { display: flex; align-items: center; gap: 6px; padding: 0 2px 5px; }
+.filtro > header .nom {
+  font-size: 12px;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filtro > header .btn { margin-left: auto; }
+.filtro .buscar { margin-bottom: 5px; }
+
+.filtro .valores { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.filtro .valor {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 3px 6px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.filtro .valor .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filtro .valor .marca {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--borde-fuerte);
+}
+.filtro .valor:hover { background: var(--fondo-hover); }
+
+/* Los cuatro estados. El color dice el estado, y además hay forma y opacidad:
+   quien no distingue verde de gris tiene que poder leerlo igual. */
+.filtro .valor.seleccionado { background: var(--acento-suave); color: var(--acento); font-weight: 550; }
+.filtro .valor.seleccionado .marca { background: var(--acento); border-color: var(--acento); }
+.filtro .valor.posible { color: var(--texto); }
+.filtro .valor.alternativo { color: var(--texto-tenue); }
+.filtro .valor.alternativo .marca { border-style: dashed; }
+.filtro .valor.excluido { color: var(--texto-tenue); opacity: 0.5; }
+.filtro .valor.excluido .txt { text-decoration: line-through; }
+
+.etiqueta.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); border-color: transparent; }
+.etiqueta.aviso { background: var(--aviso-suave); color: var(--aviso); border-color: transparent; }
+
+/* ---------------------------------------------------------------- modales */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+  padding: 20px;
+}
+.modal {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+}
+.modal > header {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--borde);
+  font-weight: 600;
+}
+.modal > .cont { padding: 16px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+/* Una tabla con `overflow: auto` dentro de una columna flex se encoge a nada
+   cuando el diálogo ya no tiene alto: acaba de 2 px, con las filas dentro y sin
+   verse. El alto lo pone su propio max-height, no el reparto del flex. */
+.modal > .cont > .tabla-envoltura { flex: none; }
+.modal > footer {
+  padding: 11px 16px;
+  border-top: 1px solid var(--borde);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+}
+/** Por qué no se puede pulsar el botón, junto al botón. */
+.modal > footer .pista { margin-right: auto; flex: 1 1 190px; min-width: 0; }
+
+/* Elegir un camino cuando el modelo es ambiguo: es una decisión, no un error. */
+.elegir-ruta {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  height: 100%;
+}
+.elegir-ruta p { margin: 0 0 2px; font-size: 12px; color: var(--texto-suave); }
+.elegir-ruta .btn { justify-content: flex-start; text-align: left; }
+.elegir-ruta .btn .mono { font-size: 11.5px; overflow-wrap: anywhere; }
+
+/* Menú de exportación del widget */
+.exportar { margin-left: auto; position: relative; flex: 0 0 auto; }
+.menu-exportar {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 190px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  box-shadow: var(--sombra);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.menu-exportar > button {
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.menu-exportar > button:hover { background: var(--fondo-hover); }
+
+/* ------------------------------------------------------------------- ETL */
+
+.etl-cuerpo { flex: 1; min-height: 0; overflow: auto; padding: 10px 0 30px; }
+
+.etl-origenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 20px;
+  font-size: 12px;
+}
+.chip button {
+  background: none;
+  border: 0;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  padding: 0 2px;
+}
+.chip button:hover { color: var(--critico); }
+
+.pasos { display: flex; flex-direction: column; gap: 6px; padding: 0 12px; }
+
+.paso {
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.paso.abierto { border-color: var(--acento); }
+.paso > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.paso > header:hover { background: var(--fondo-alto); }
+.paso > header .orden {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  border-radius: 50%;
+  background: var(--fondo-alto);
+  border: 1px solid var(--borde);
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+.paso.abierto > header .orden {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+.paso > header .nom { font-weight: 550; }
+.paso > header .acciones { margin-left: auto; display: flex; gap: 3px; }
+
+.paso-detalle { padding: 10px; border-top: 1px solid var(--borde); }
+.paso-cuerpo { display: flex; flex-direction: column; gap: 9px; }
+
+.fila-condicion { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fila-condicion > select, .fila-condicion > input { width: auto; flex: 1 1 130px; min-width: 100px; }
+.fila-condicion > .campo { flex: 1 1 180px; }
+
+.casillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2px 10px;
+  max-height: 200px;
+  overflow: auto;
+  padding: 4px 0;
+}
+.casilla { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.casilla input { width: auto; }
+
+.agregar-paso { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.btn.chico.peligro { color: var(--critico); }
+
+/* --------------------------------------------------------------- flujos */
+
+.paso.con-aviso { border-color: var(--aviso); }
+.aviso-paso {
+  padding: 7px 10px;
+  border-top: 1px solid var(--borde);
+  background: var(--aviso-suave);
+  color: var(--aviso);
+  font-size: 12px;
+}
+.paso > header .etiqueta { flex: 0 0 auto; }
+
+.corrida {
+  background: var(--fondo-alto);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  padding: 6px 8px;
+}
+.corrida summary { cursor: pointer; }
+.corrida table { margin-top: 6px; }
+
+/* ------------------------------------------------------------- gobierno */
+
+.atributos { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.chip.como-boton {
+  cursor: pointer;
+  background: var(--fondo-alto);
+}
+.chip.como-boton:hover { border-color: var(--acento); color: var(--acento); }
+
+.simulador {
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  background: var(--fondo-panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.resultado-sim { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+
+.tarjeta-sim {
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--fondo);
+}
+.tarjeta-sim .cabeza { display: flex; align-items: center; gap: 8px; }
+.tarjeta-sim .cifra-sim { margin-left: auto; font-weight: 600; font-size: 13px; }
+
+/* La proporcion visible se lee antes que el numero: es lo que dice de un golpe
+   si la politica filtra o si no esta haciendo nada. */
+.barra-visible {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--fondo-hover);
+  overflow: hidden;
+}
+.barra-visible > div { height: 100%; background: var(--acento); border-radius: 4px; }
+
+.comparacion { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.comparacion h4 { margin: 0 0 5px; font-size: 12.5px; font-weight: 600; }
+@media (max-width: 900px) {
+  .comparacion { grid-template-columns: 1fr; }
+}
+
+.detalle-json {
+  margin: 0;
+  font-size: 11px;
+  white-space: pre-wrap;
+  color: var(--texto-suave);
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* ----------------------------------------------------------- conexiones */
+
+.modal.ancho { width: min(1080px, 94vw); }
+
+.conexiones-lista { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.tarjeta-con {
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  background: var(--fondo-panel);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.tarjeta-con .cabeza { display: flex; align-items: center; gap: 8px; }
+.tarjeta-con .acciones { margin-left: auto; display: flex; gap: 4px; }
+
+.ok-texto { color: var(--ok); }
+.error-texto { color: var(--critico); }
+.aviso-caja.ok-caja {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+  border-color: transparent;
+}
+
+/* El explorador: lista de tablas a la izquierda, columnas y muestra a la derecha.
+   Las dos cosas a la vista al mismo tiempo es el punto: la columna incremental y la
+   de particion se eligen mirando los datos, no de memoria. */
+/* La especificidad tiene que ganarle a `.modal > .cont`, que es columna. */
+.modal > .cont.explorador { flex-direction: row; gap: 14px; min-height: 0; }
+.explorador .lado { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.explorador .lado:first-child { flex: 0 0 260px; }
+.explorador .lado.principal { flex: 1; }
+.lista-tablas { overflow: auto; max-height: 46vh; }
+@media (max-width: 860px) {
+  .modal > .cont.explorador { flex-direction: column; }
+  .explorador .lado:first-child { flex: none; }
+}
+
+.resumen-ds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.resumen-ds > div {
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.resumen-ds .rotulo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-tenue);
+}
+.resumen-ds strong { font-size: 13px; overflow-wrap: anywhere; }
+
+.cont h4 { margin: 6px 0 0; font-size: 12.5px; }
+
+/* Varios campos en una fila. `.inspector .fila` no servia aqui: es descendiente,
+   y estos campos no viven dentro de un inspector. */
+.fila-campos { display: flex; gap: 8px; flex-wrap: wrap; }
+.fila-campos > .campo { flex: 1 1 180px; min-width: 0; }
+
+/* Cabecera de dos extremos: a la izquierda lo que pasa, a la derecha qué hacer. */
+.entre { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Una columna que NO se va a traer. Atenuada y tachada: quien no distinga los
+   grises tiene que poder verlo igual. */
+.datos tr.fuera > td:not(:first-child) { opacity: 0.4; text-decoration: line-through; }
+
+/* -------------------------------------------------- panel de varios filtros */
+
+.panel-filtros { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+/* Con listas abiertas, los campos se reparten el alto: dos campos, mitad y mitad.
+   Cada uno se desplaza dentro de lo suyo. */
+.panel-filtros > .filtro { flex: 1 1 0; min-height: 0; border-bottom: 1px solid var(--borde); }
+.panel-filtros > .filtro:last-child { border-bottom: 0; }
+
+/* Colapsado: los desplegables no se estiran, se apilan arriba. */
+.panel-filtros.colapsado { gap: 5px; padding: 7px 8px; overflow: auto; }
+
+.filtro-colapsado { display: flex; align-items: center; gap: 3px; }
+.caja-filtro {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  cursor: pointer;
+  text-align: left;
+}
+.caja-filtro:hover { border-color: var(--borde-fuerte); }
+.caja-filtro.abierto { border-color: var(--acento); }
+.caja-filtro .nom {
+  font-size: 11px;
+  color: var(--texto-tenue);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.caja-filtro .valor-resumen {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.caja-filtro .flecha { color: var(--texto-tenue); font-size: 10px; }
+/* Verde como en la lista: un campo con selección se reconoce sin abrirlo. */
+.caja-filtro.con-seleccion { border-color: var(--ok); }
+.caja-filtro.con-seleccion .valor-resumen { color: var(--ok); font-weight: 550; }
+
+.filtro-colapsado .limpiar {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  background: transparent;
+  border: 0;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  border-radius: var(--r);
+}
+.filtro-colapsado .limpiar:hover { color: var(--critico); background: var(--fondo-hover); }
+
+/* En un portal: el widget recorta lo que desborda, y son justo los widgets
+   pequeños los que usan esta lista. */
+.pop-filtro {
+  position: fixed;
+  z-index: 60;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--r);
+  box-shadow: var(--sombra);
+}
+.pop-filtro .valores { overflow: auto; }
+
+/* ------------------------------------------------------------------ avisos */
+
+/* Dos columnas que se vuelven una: la lista de reglas y el editor se leen en
+   paralelo, pero en una pantalla estrecha apiladas siguen sirviendo. */
+.rejilla-dos {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  align-items: start;
+}
+.rejilla-dos > .tarjeta { padding: 0; }
+/* Sin el resalte al pasar: aqui la tarjeta es un panel, no algo que se pulse. */
+.rejilla-dos > .tarjeta:hover, .pagina > .tarjeta:hover { border-color: var(--borde); }
+.rejilla-dos > .tarjeta > header,
+.pagina > .tarjeta > header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+.rejilla-dos > .tarjeta > .campo,
+.rejilla-dos > .tarjeta > .fila,
+.rejilla-dos > .tarjeta > .linea-check,
+.rejilla-dos > .tarjeta > .error-caja { margin: 10px 12px; }
+.pagina > .tarjeta { padding: 0; }
+
+.fila { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* La casilla y su texto en una linea, con el area de pulsado en los dos: una
+   casilla de 13 px es un blanco pequeño para acertar con el raton. */
+.linea-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.linea-check input { width: auto; margin: 0; }
+
+/* Un nombre que abre su ficha. Se ve como enlace porque hace lo de un enlace. */
+.enlace {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--acento);
+  cursor: pointer;
+  text-align: left;
+}
+.enlace:hover { text-decoration: underline; }

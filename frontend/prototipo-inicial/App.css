@@ -1,0 +1,244 @@
+.app-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 24px 60px;
+  text-align: left;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.app-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tab-active {
+  background: var(--accent-bg, #eaf1fd);
+  color: var(--accent, #3b6fd6);
+  border-color: var(--accent, #3b6fd6);
+}
+
+.panel h2 {
+  margin-bottom: 4px;
+}
+
+.hint {
+  color: var(--text-muted, #8a8a92);
+  font-size: 13px;
+  margin: 2px 0 12px;
+}
+
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.dropzone-active {
+  border-color: var(--accent, #3b6fd6);
+  background: rgba(59, 111, 214, 0.06);
+}
+
+.status-line {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(59, 111, 214, 0.08);
+  margin-bottom: 12px;
+}
+
+.status-error {
+  background: rgba(214, 59, 59, 0.1);
+  color: #d63b3b;
+}
+
+.table-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.table-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 220px;
+}
+
+.table-card-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.col-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 14px;
+}
+
+.chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--chip-bg, #f0f0f2);
+  border: 1px solid var(--border);
+}
+
+.chip-toggle {
+  cursor: pointer;
+}
+
+.chip-selected {
+  background: var(--accent-bg, #eaf1fd);
+  border-color: var(--accent, #3b6fd6);
+  color: var(--accent, #3b6fd6);
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+select, input {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input, #fff);
+  font-size: 13px;
+}
+
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent, #3b6fd6);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-icon {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted, #8a8a92);
+  font-size: 13px;
+}
+
+.preview {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+th {
+  background: var(--chip-bg, #f5f5f7);
+}
+
+.layout {
+  margin-top: 16px;
+}
+
+.widget-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input, #fff);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.widget-handle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--chip-bg, #f5f5f7);
+  cursor: move;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.widget-body {
+  flex: 1;
+  padding: 6px;
+  overflow: auto;
+}
+
+.widget-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted, #8a8a92);
+  font-size: 13px;
+}
+
+.widget-table-wrap {
+  overflow: auto;
+  height: 100%;
+}

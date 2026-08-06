@@ -1,0 +1,53 @@
+# --- secretos y configuración local ---
+# Nunca. Lleva las claves con las que se firman los tokens y se cifran las
+# credenciales de las conexiones.
+.env
+*.env
+!.env.ejemplo
+
+# --- datos ---
+# El directorio entero: metadatos, base analítica y Parquet. Nada de esto se
+# publica, y además se regenera con demo/generar_datos.py + demo/sembrar.py.
+backend/datos/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# --- Python ---
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- Node ---
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# --- herramientas y sistema operativo ---
+# Contexto de asistentes y editores: no es parte del producto.
+.cursor/
+.aider*
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- temporales ---
+*.tmp
+*.bak
+*.orig
+/tmp/
