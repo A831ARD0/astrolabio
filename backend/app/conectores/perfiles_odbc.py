@@ -74,9 +74,10 @@ PERFILES: list[dict[str, Any]] = [
             "Cada agencia es un DSN distinto, asi que va una conexion por agencia.",
         ],
         "driver": {
-            "de_donde": "Del cliente de Pervasive PSQL / Actian Zen que ya está "
-                        "instalado en el servidor del sistema de origen. No hay descarga "
-                        "pública: sale del instalador licenciado.",
+            "de_donde": "Del cliente licenciado de Pervasive PSQL / Actian Zen: no "
+                        "hay descarga publica. Si Astrolabio corre en Docker, se deja el "
+                        "paquete del cliente de Linux de 64 bits en backend/drivers/ y la "
+                        "imagen lo instala sola al reconstruirla.",
             "quien": "sistemas",
         },
     },

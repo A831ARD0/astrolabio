@@ -6,7 +6,7 @@ FROM python:3.12-slim
 #   MySQL/MariaDB     apt-get install -y odbc-mariadb        (ya incluido abajo)
 #   PostgreSQL        apt-get install -y odbc-postgresql
 #   SQL Server        msodbcsql18, del repositorio de Microsoft
-#   Pervasive/Actian  del cliente licenciado del fabricante
+#   Pervasive/Actian  licenciado: se deja en drivers/ y se instala solo (abajo)
 #   Informix          del Client SDK de IBM
 #
 # Los demas se dejan fuera a proposito: instalar drivers que nadie usa engorda la
@@ -16,6 +16,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# --- Cliente ODBC de Actian Zen / Pervasive PSQL, si lo hay ---------------- #
+#
+# Va ANTES de copiar el codigo a proposito: el driver cambia una vez al año y el
+# codigo cada dia. Al reves, cada edicion de un .py volveria a reinstalar el
+# cliente.
+#
+# `drivers/` esta vacia en el repositorio y su contenido en .gitignore: el
+# cliente de Actian es licenciado y no se puede redistribuir. Sistemas lo deja
+# ahi y esta linea lo instala. Sin paquete, la imagen se construye igual y sin
+# ese driver; con paquete y algo mal, la construccion FALLA en vez de dejar una
+# imagen que parece buena y no tiene el driver que se pidio.
+COPY drivers/ /tmp/drivers/
+COPY instalar-driver-actian.sh .
+RUN sh instalar-driver-actian.sh && rm instalar-driver-actian.sh
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

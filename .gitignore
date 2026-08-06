@@ -51,3 +51,8 @@ Thumbs.db
 *.bak
 *.orig
 /tmp/
+
+# Drivers ODBC licenciados (Actian Zen / Pervasive). No se pueden redistribuir:
+# ver backend/drivers/README.md. El README de esa carpeta si se versiona.
+backend/drivers/*
+!backend/drivers/README.md

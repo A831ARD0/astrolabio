@@ -24,10 +24,27 @@ versionado es [semántico](https://semver.org/lang/es/).
   encontrar `frontend/dist` ya compilado en el disco, así que el servidor
   necesitaba Node además de Docker. Ahora hay una etapa de construcción que se
   descarta y la imagen final solo lleva Caddy y los archivos estáticos.
+- **El cliente ODBC de Actian Zen / Pervasive se instala solo en la imagen.** Se
+  deja el paquete de Linux en `backend/drivers/` y `docker compose build` lo
+  instala, localiza `libodbcci.so` y lo registra en `/etc/odbcinst.ini` como
+  `Actian Zen ODBC Interface` — el nombre que la pantalla de conexiones
+  preselecciona sola.
+
+  Sin paquete la imagen se construye igual, sin ese driver. **Con paquete y algo
+  mal, la construcción falla**: una imagen que se construye «bien» y se queda sin
+  el driver que se pidió es la forma de descubrir el problema tres semanas
+  después, de madrugada, en una carga que no corre.
+
+  El binario no se puede redistribuir, así que `backend/drivers/` está en
+  `.gitignore` salvo su README.
 - **Instrucciones para un servidor Windows**, con Docker Desktop sobre WSL 2:
   cómo generar las claves sin `openssl`, arranque automático, respaldo desde el
-  volumen, finales de línea, y por qué **un driver ODBC de Windows no se puede
-  cargar dentro de un contenedor Linux**.
+  volumen, finales de línea, cómo salir del error `no matching manifest for
+  windows(...)` —Docker en modo contenedores de Windows—, y por qué **un driver
+  ODBC de Windows no se puede cargar dentro de un contenedor Linux**.
+- Las claves de producción se generan con **PowerShell puro**, sin `openssl` y sin
+  Docker. Las instrucciones anteriores usaban un contenedor, que es justo lo que
+  no arranca cuando Docker está en el modo equivocado.
 
 ### Cambiado
 

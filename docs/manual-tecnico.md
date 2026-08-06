@@ -148,9 +148,42 @@ Para HTTPS con certificado automático, pon tu dominio en el `Caddyfile` en luga
 
 ### En un servidor Windows
 
-Funciona igual, con Docker Desktop sobre WSL 2 (o Docker Engine en WSL 2). Los
-contenedores son Linux; Windows solo los hospeda. **Lee antes el aviso sobre ODBC
-más abajo: es lo único que cambia de verdad.**
+Funciona igual, con Docker Desktop sobre WSL 2 (o Docker Engine dentro de WSL 2).
+Los contenedores son Linux; Windows solo los hospeda. **Lee antes el aviso sobre
+ODBC más abajo: es lo único que cambia de verdad.**
+
+> ### Antes de nada: Docker tiene que estar en contenedores **Linux**
+>
+> Docker en Windows tiene dos modos, y en el equivocado no arranca nada de esto:
+>
+> ```
+> docker: no matching manifest for windows(10.0.17763)/amd64 in the manifest list entries
+> ```
+>
+> Ese mensaje —con cualquier imagen, no solo las de aquí— significa que el demonio
+> está en **contenedores de Windows**. Compruébalo:
+>
+> ```powershell
+> docker version --format '{{.Server.Os}}'
+> ```
+>
+> Tiene que decir `linux`. Si dice `windows`, click derecho en el icono de Docker
+> Desktop en la bandeja → **Switch to Linux containers**.
+>
+> **Si no aparece esa opción, el problema es la versión de Windows.** El número
+> entre paréntesis del error es la compilación: `17763` es Windows Server 2019 (o
+> Windows 10 1809), y **ahí no hay WSL 2** —hace falta 19041 o superior—, así que
+> Docker Desktop no puede correr contenedores Linux. Las salidas, en orden:
+>
+> | | |
+> |---|---|
+> | **Windows Server 2022** (compilación 20348) con Docker Desktop o Docker Engine en WSL 2 | Lo recomendable si el servidor se puede actualizar |
+> | **Una máquina virtual Linux** en Hyper-V —Ubuntu Server 24.04— y Docker dentro | No toca el Windows de al lado. Es lo que yo haría en un 2019 que no se puede mover |
+> | **Astrolabio nativo en Windows**, sin Docker | Python 3.12 y Node 20 instalados, la API como servicio. Es la única que además resuelve lo de Pervasive, porque ahí sí carga el driver de Windows |
+>
+> Que la máquina sea Windows Server 2019 tiene una consecuencia buena: como el
+> driver de Pervasive es de Windows, **la tercera opción mata dos pájaros**. Lee
+> el aviso de ODBC al final de esta sección antes de decidir.
 
 Instala **Docker Desktop for Windows** y **Git for Windows**, y en PowerShell:
 
@@ -160,12 +193,16 @@ cd astrolabio
 Copy-Item .env.ejemplo .env
 ```
 
-Genera las dos claves —`openssl` no viene con Windows, así que se sacan del propio
-contenedor, sin instalar nada:
+Las dos claves se generan con PowerShell, sin `openssl` y sin Docker. La secreta:
 
 ```powershell
-docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_hex(32))"
-docker run --rm python:3.12-slim sh -c "pip install -q cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); ($b | % { $_.ToString('x2') }) -join ''
+```
+
+Y la de cifrado, que Fernet exige en base64 *url-safe* de 32 bytes:
+
+```powershell
+$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
 ```
 
 Ponlas en `.env` (`ASTROLABIO_CLAVE_SECRETA` y `ASTROLABIO_CLAVE_CIFRADO`), pon
@@ -216,7 +253,7 @@ Cuatro cosas propias de Windows que conviene saber:
 >
 > | | Cuándo |
 > |---|---|
-> | **Instalar el cliente Linux del fabricante dentro de la imagen** | Actian publica cliente para Linux. Si sistemas consigue la licencia, se agrega al `backend/Dockerfile` y se registra en `/etc/odbcinst.ini`. Es la salida limpia y deja todo en Docker |
+> | **El cliente Linux de Actian dentro de la imagen. Ya está preparado**: se deja el paquete en `backend/drivers/` y la construcción lo instala y lo registra sola. Ver [su README](../backend/drivers/README.md) | Si sistemas consigue la licencia del cliente **Linux de 64 bits**. Es la salida limpia y deja todo en Docker |
 > | **Correr el backend nativo en Windows**, sin Docker, con el cliente Pervasive de **64 bits** | Si solo existe el cliente Windows. Python 3.12 + un servicio; Caddy puede seguir en Docker o instalarse aparte |
 > | **Un puente**: el backend en Docker y un pequeño servicio en Windows que exponga los datos de Pervasive | Solo si las otras dos se cierran. Es una pieza más que mantener |
 >
