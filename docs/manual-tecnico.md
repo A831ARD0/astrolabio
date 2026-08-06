@@ -431,6 +431,38 @@ nssm set AstrolabioWeb AppParameters "run --config C:\astrolabio\Caddyfile.windo
 nssm start AstrolabioWeb
 ```
 
+#### Entrar la primera vez, y qué hacer si no puedes
+
+En el primer arranque, si no hay ningún usuario, Astrolabio crea el
+administrador con el correo de `ASTROLABIO_CORREO_ADMIN` y una contraseña
+temporal **que solo escribe en el registro de ese arranque** — y como va por
+`log.warning`, sale por la salida de error:
+
+```powershell
+Select-String -Path C:\astrolabio\registros\error.log -Pattern 'contrasena' -Context 3
+```
+
+Si ese registro se perdió —se rotó, se sobrescribió, el servicio se instaló
+después de la primera prueba—, no hay que borrar nada. Desde el servidor:
+
+```powershell
+cd C:\astrolabio\backend
+.\venv\Scripts\python administrar.py listar-usuarios
+.\venv\Scripts\python administrar.py restablecer admin@example.com
+```
+
+Imprime una contraseña temporal nueva. **Cámbiala al entrar.** Si nunca llegó a
+crearse el usuario, `--crear` lo crea como administrador.
+
+> Esto corre en el servidor y con acceso al archivo de metadatos. No es una
+> puerta trasera: quien puede ejecutarlo ya podría leer la base entera. Es la
+> llave de casa, y por eso el archivo de metadatos tiene que estar en un
+> directorio con permisos.
+
+Ojo con una cosa: el freno de fuerza bruta vive en memoria del proceso. Si te
+frenó la cuenta a base de intentos, restablecer la contraseña no lo levanta —
+espera los 15 minutos o reinicia el servicio.
+
 #### El ODBC de Pervasive, aquí sí
 
 Instala en **este mismo servidor** el cliente de Pervasive/Actian de **64 bits** y

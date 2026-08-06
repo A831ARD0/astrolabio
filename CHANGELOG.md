@@ -67,6 +67,12 @@ versionado es [semántico](https://semver.org/lang/es/).
   solo para administradores, y el guion pide que se guarden y se borre el archivo.
   Hay `-RotarClaveCifrado` para el caso en que una se haya visto igual.
 
+- **`backend/administrar.py`**: `listar-usuarios` y `restablecer <correo>`.
+  La contraseña del primer administrador solo se escribe en el registro del
+  primer arranque; si ese registro se perdió, no había forma de entrar y la
+  única salida era borrar la base de metadatos, que se lleva por delante todo lo
+  demás.
+
 ### Cambiado
 
 - `api` ya solo escucha en `127.0.0.1:8000`. Quien entra de fuera pasa por Caddy,
