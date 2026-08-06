@@ -23,6 +23,10 @@
 .PARAMETER Comprobar
     Solo revisa los requisitos y sale. No escribe nada.
 
+.PARAMETER DescargarNSSM
+    Baja NSSM de nssm.cc a herramientas\ en vez de pedir que se instale a mano.
+    Solo tiene efecto junto con -Servicios.
+
 .PARAMETER RotarClaveCifrado
     Genera una CLAVE_CIFRADO nueva y sale. Para cuando la anterior se haya visto
     —una captura de pantalla, un correo—. Barato antes de que haya conexiones
@@ -39,7 +43,8 @@ param(
     [string] $Raiz = $PSScriptRoot,
     [switch] $Servicios,
     [switch] $Comprobar,
-    [switch] $RotarClaveCifrado
+    [switch] $RotarClaveCifrado,
+    [switch] $DescargarNSSM
 )
 
 $ErrorActionPreference = 'Stop'
@@ -345,17 +350,82 @@ if ($Servicios) {
              ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $admin) { throw 'Para -Servicios hace falta PowerShell como administrador.' }
 
-    if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
-        throw 'Falta NSSM. Bajalo de https://nssm.cc y ponlo en el PATH.'
+    # NSSM es lo que convierte un proceso normal en un servicio de Windows que
+    # arranca solo y se levanta si se cae. `sc.exe` no sirve: espera un programa
+    # escrito como servicio, y uvicorn no lo es.
+    # .Source: la ruta del .exe. Sin eso seria un objeto de PowerShell, y lo que
+    # hace falta para invocarlo es una ruta.
+    $enPath = Get-Command nssm -ErrorAction SilentlyContinue
+    $nssm = if ($enPath) { $enPath.Source } else { $null }
+
+    # Si ya se bajo antes con -DescargarNSSM, esta aqui aunque no este en el PATH.
+    if (-not $nssm) {
+        $local = Join-Path $Raiz 'herramientas\nssm.exe'
+        if (Test-Path $local) { $nssm = $local }
+    }
+
+    if (-not $nssm -and $DescargarNSSM) {
+        Paso 'Bajando NSSM'
+        $carpeta = Join-Path $Raiz 'herramientas'
+        New-Item -ItemType Directory -Force -Path $carpeta | Out-Null
+        $zip = Join-Path $env:TEMP 'nssm.zip'
+
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
+                          -OutFile $zip -UseBasicParsing
+
+        # Se enseña la huella para que se pueda comparar con la de nssm.cc. No se
+        # comprueba contra un valor escrito aqui: una huella copiada a mano en un
+        # guion da una seguridad que no es real.
+        Aviso "SHA256 de lo descargado: $((Get-FileHash $zip -Algorithm SHA256).Hash)"
+
+        $temporal = Join-Path $env:TEMP 'nssm-extraido'
+        Remove-Item $temporal -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $zip -DestinationPath $temporal -Force
+
+        $encontrado = Get-ChildItem $temporal -Recurse -Filter 'nssm.exe' |
+                      Where-Object { $_.FullName -match 'win64' } |
+                      Select-Object -First 1
+        if (-not $encontrado) { throw 'El zip de NSSM no traia win64\nssm.exe.' }
+
+        Copy-Item $encontrado.FullName (Join-Path $carpeta 'nssm.exe') -Force
+        Remove-Item $zip, $temporal -Recurse -Force -ErrorAction SilentlyContinue
+        $nssm = Join-Path $carpeta 'nssm.exe'
+        Bien "NSSM en $nssm"
+    }
+
+    if (-not $nssm) {
+        throw @"
+Falta NSSM, que es lo que convierte la API en un servicio de Windows.
+
+  Dejame bajarlo:
+
+      .\instalar-windows.ps1 -Servicios -DescargarNSSM
+
+  O hazlo a mano: baja https://nssm.cc/release/nssm-2.24.zip, descomprimelo, y
+  copia el nssm.exe de la carpeta win64 (no el de win32) a
+  $Raiz\herramientas\nssm.exe
+"@
     }
 
     $registros = Join-Path $Raiz 'registros'
     New-Item -ItemType Directory -Force -Path $registros | Out-Null
 
+    # Si el servicio ya existe, `nssm install` falla. Se para y se reconfigura
+    # en vez de reventar: este guion tiene que poder volver a correrse, que es
+    # justo lo que se hace despues de un `git pull`.
+    $yaExiste = Get-Service -Name 'Astrolabio' -ErrorAction SilentlyContinue
+    if ($yaExiste) {
+        Bien 'El servicio ya existia: se detiene y se vuelve a configurar'
+        if ($yaExiste.Status -ne 'Stopped') {
+            Stop-Service -Name 'Astrolabio' -Force
+            (Get-Service 'Astrolabio').WaitForStatus('Stopped', '00:00:30')
+        }
+    }
+
     # --host 127.0.0.1 a proposito: quien entra de fuera pasa por Caddy, que es
     # el que lleva HTTPS y las cabeceras de seguridad.
     $ordenes = @(
-        @('install', 'Astrolabio', $python),
         @('set', 'Astrolabio', 'AppParameters',
           '-m uvicorn app.main:app --host 127.0.0.1 --port 8000'),
         @('set', 'Astrolabio', 'AppDirectory', $backend),
@@ -364,13 +434,34 @@ if ($Servicios) {
         @('set', 'Astrolabio', 'Start', 'SERVICE_AUTO_START'),
         @('start', 'Astrolabio')
     )
+    if (-not $yaExiste) {
+        $r = Correr $nssm @('install', 'Astrolabio', $python)
+        if ($r.Codigo -ne 0) { throw "Fallo 'nssm install':`n$($r.Texto)" }
+    }
+
     foreach ($orden in $ordenes) {
-        $r = Correr nssm $orden
+        $r = Correr $nssm $orden
         if ($r.Codigo -ne 0) {
             throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)"
         }
     }
-    Bien 'Servicio Astrolabio instalado y arrancado'
+
+    # Que diga que arranco no basta: un servicio que se cae al segundo tambien
+    # "arranca". Se comprueba que responde de verdad.
+    $vivo = $false
+    foreach ($intento in 1..20) {
+        Start-Sleep -Seconds 1
+        try {
+            if ((Invoke-RestMethod 'http://127.0.0.1:8000/api/salud' -TimeoutSec 2).estado -eq 'ok') {
+                $vivo = $true; break
+            }
+        } catch { }
+    }
+    if (-not $vivo) {
+        throw ("El servicio se instalo pero no responde. Mira " +
+               (Join-Path $registros 'error.log'))
+    }
+    Bien 'Servicio Astrolabio arrancado y respondiendo'
 
     Aviso 'Falta Caddy delante. Ver el manual tecnico, seccion de Windows.'
     Aviso 'Y ponlo a correr con una cuenta de servicio sin privilegios:'
