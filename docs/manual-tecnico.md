@@ -332,8 +332,23 @@ Si `Get-ExecutionPolicy` lo impide:
 
 > **Las claves generadas no se vuelven a generar nunca.** Si `CLAVE_CIFRADO` ya
 > existe, el guion no la toca — cambiarla deja **ilegibles todas las contraseñas
-> de las conexiones ya guardadas**, sin recuperación posible. El guion la imprime
-> una vez: cópiala a tu gestor de secretos en ese momento.
+> de las conexiones ya guardadas**, sin recuperación posible.
+>
+> Las escribe en `CLAVES-GENERADAS.txt`, con permisos solo para administradores.
+> **Cópialas al gestor de secretos y borra ese archivo.** No se imprimen en
+> pantalla a propósito: la consola acaba en el historial, en capturas y en el
+> texto que uno pega para pedir ayuda.
+>
+> Si aun así una se ve, rotarla es barato **mientras no haya conexiones
+> guardadas**:
+>
+> ```powershell
+> .\instalar-windows.ps1 -RotarClaveCifrado
+> ```
+>
+> Después ya no: las contraseñas guardadas están cifradas con la vieja y hay que
+> reescribirlas una por una en **Conexiones → Editar**. Los datasets, modelos y
+> tableros no se ven afectados.
 
 Y para dejarlo como servicio, en una consola **de administrador** y con
 [NSSM](https://nssm.cc) en el `PATH`:

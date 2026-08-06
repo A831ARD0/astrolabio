@@ -56,3 +56,6 @@ Thumbs.db
 # ver backend/drivers/README.md. El README de esa carpeta si se versiona.
 backend/drivers/*
 !backend/drivers/README.md
+
+# Claves generadas por instalar-windows.ps1. Nunca al repositorio.
+CLAVES-GENERADAS.txt

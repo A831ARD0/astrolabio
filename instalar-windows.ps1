@@ -23,16 +23,23 @@
 .PARAMETER Comprobar
     Solo revisa los requisitos y sale. No escribe nada.
 
+.PARAMETER RotarClaveCifrado
+    Genera una CLAVE_CIFRADO nueva y sale. Para cuando la anterior se haya visto
+    —una captura de pantalla, un correo—. Barato antes de que haya conexiones
+    guardadas; despues obliga a reescribir sus contrasenas.
+
 .EXAMPLE
     .\instalar-windows.ps1
     .\instalar-windows.ps1 -Servicios
+    .\instalar-windows.ps1 -RotarClaveCifrado
 #>
 
 [CmdletBinding()]
 param(
     [string] $Raiz = $PSScriptRoot,
     [switch] $Servicios,
-    [switch] $Comprobar
+    [switch] $Comprobar,
+    [switch] $RotarClaveCifrado
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,6 +83,41 @@ function Correr {
 $backend  = Join-Path $Raiz 'backend'
 $frontend = Join-Path $Raiz 'frontend'
 $python   = Join-Path $backend 'venv\Scripts\python.exe'
+
+# --------------------------------------------------------------------------- #
+# Rotar la clave de cifrado
+# --------------------------------------------------------------------------- #
+#
+# Se hace y se sale: no tiene nada que ver con instalar. Sirve para el caso en
+# que la clave se haya visto —una captura, un correo, un chat—, y solo es barato
+# ANTES de que haya conexiones guardadas: las contrasenas ya guardadas estan
+# cifradas con la vieja y quedan ilegibles.
+
+if ($RotarClaveCifrado) {
+    Paso 'Rotar ASTROLABIO_CLAVE_CIFRADO'
+
+    $hayBase = Test-Path (Join-Path $backend 'datos\astrolabio.db')
+    if ($hayBase) {
+        Aviso 'Ya hay una base de metadatos. Si tiene conexiones guardadas, sus'
+        Aviso 'contrasenas quedaran ilegibles y habra que reescribirlas a mano'
+        Aviso 'desde Conexiones -> Editar. Los datasets y tableros no se tocan.'
+        $respuesta = Read-Host 'Escribe ROTAR para continuar'
+        if ($respuesta -ne 'ROTAR') { Write-Host 'Cancelado.'; exit 0 }
+    }
+
+    $b = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+    $nueva = [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
+
+    [Environment]::SetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO', $nueva, 'Machine')
+    Bien 'Clave rotada.'
+
+    $destino = Join-Path $Raiz 'CLAVES-GENERADAS.txt'
+    "ASTROLABIO_CLAVE_CIFRADO = $nueva" | Set-Content -Path $destino -Encoding UTF8
+    Aviso "La nueva quedo en $destino. Guardala y borra el archivo."
+    Aviso 'Reinicia el servicio: Restart-Service Astrolabio'
+    exit 0
+}
 
 # --------------------------------------------------------------------------- #
 # Requisitos
@@ -209,9 +251,38 @@ FijarSiFalta 'ASTROLABIO_CLAVE_SECRETA' (((Bytes32) | ForEach-Object { $_.ToStri
 FijarSiFalta 'ASTROLABIO_CLAVE_CIFRADO' ([Convert]::ToBase64String((Bytes32)).Replace('+','-').Replace('/','_')) 'Cifra las credenciales. GUARDALA con el respaldo.'
 FijarSiFalta 'ASTROLABIO_ENTORNO' 'produccion' 'Exige las claves de verdad al arrancar.'
 
-Aviso 'Copia las dos claves a tu gestor de secretos AHORA:'
-Write-Host "     ASTROLABIO_CLAVE_CIFRADO = $([Environment]::GetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO','Machine'))"
-Aviso 'Un respaldo sin esa clave restaura todo menos las contrasenas de las conexiones.'
+# La clave NO se imprime en pantalla. Parecia servicial y era un error: la
+# consola se queda en el historial, en las capturas y en el texto que uno pega
+# para pedir ayuda —que es exactamente donde acabo la primera vez—. Se escribe a
+# un archivo con permisos solo para administradores, y se borra al guardarla.
+$archivoClaves = Join-Path $Raiz 'CLAVES-GENERADAS.txt'
+
+if (-not (Test-Path $archivoClaves)) {
+    @(
+        'Claves de Astrolabio generadas por instalar-windows.ps1.',
+        '',
+        'Guardalas en el gestor de secretos y BORRA este archivo.',
+        'Sin CLAVE_CIFRADO, un respaldo restaura todo menos las contrasenas de',
+        'las conexiones, y no hay forma de recuperarlas.',
+        '',
+        "ASTROLABIO_CLAVE_SECRETA = $([Environment]::GetEnvironmentVariable('ASTROLABIO_CLAVE_SECRETA','Machine'))",
+        "ASTROLABIO_CLAVE_CIFRADO = $([Environment]::GetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO','Machine'))"
+    ) | Set-Content -Path $archivoClaves -Encoding UTF8
+
+    # Solo administradores y SYSTEM. Sin herencia: la carpeta del repositorio
+    # suele ser legible por todo el mundo.
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($quien in @('BUILTIN\Administrators', 'NT AUTHORITY\SYSTEM')) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $quien, 'FullControl', 'Allow')))
+    }
+    Set-Acl -Path $archivoClaves -AclObject $acl
+
+    Aviso "Las claves quedaron en: $archivoClaves"
+    Aviso 'Copialas al gestor de secretos y BORRA ese archivo. No se imprimen'
+    Aviso 'en pantalla a proposito: la consola acaba en capturas y en correos.'
+}
 
 # --------------------------------------------------------------------------- #
 # Que arranca de verdad

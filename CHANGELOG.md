@@ -61,6 +61,12 @@ versionado es [semántico](https://semver.org/lang/es/).
   trabajo de integración continua en Windows el mismo día que se añadió, que era
   exactamente para lo que estaba.
 
+- **El guion de Windows ya no imprime las claves en pantalla.** Parecía servicial
+  y era un error: la consola queda en el historial, en las capturas y en el texto
+  que uno pega para pedir ayuda. Ahora van a `CLAVES-GENERADAS.txt` con permisos
+  solo para administradores, y el guion pide que se guarden y se borre el archivo.
+  Hay `-RotarClaveCifrado` para el caso en que una se haya visto igual.
+
 ### Cambiado
 
 - `api` ya solo escucha en `127.0.0.1:8000`. Quien entra de fuera pasa por Caddy,
