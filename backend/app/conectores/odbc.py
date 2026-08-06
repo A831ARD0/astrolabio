@@ -132,16 +132,20 @@ class ConectorODBC(Conector):
         # dejaria la conexion imposible de editar despues sin volver a escribirla
         # entera, incluida la contrasena.
         if cfg.get("perfil"):
+            elegido = perfiles.perfil(str(cfg["perfil"]))
+            if elegido is None:
+                raise ErrorConector(f"Perfil ODBC desconocido: '{cfg['perfil']}'.")
             if sin_llenar := perfiles.faltan(str(cfg["perfil"]), cfg):
                 # Con el nombre del campo tal como se ve en la pantalla. El error
                 # del driver cuando falta uno no dice cual.
                 raise ErrorConector(
                     "Falta " + ", ".join(sin_llenar) + " para este origen.")
-            try:
+            # Los perfiles libres —'dsn' y 'manual'— no llevan plantilla porque no
+            # arman nada: el DSN o la cadena ya traen todo dentro. Esos siguen al
+            # camino de abajo. Antes se les pedia la plantilla igual y contestaban
+            # "Perfil ODBC desconocido", que es justo lo contrario de lo que pasaba.
+            if elegido.get("plantilla"):
                 return perfiles.armar(str(cfg["perfil"]), cfg)
-            except KeyError:
-                raise ErrorConector(
-                    f"Perfil ODBC desconocido: '{cfg['perfil']}'.") from None
         if cfg.get("dsn"):
             partes = [f"DSN={cfg['dsn']}"]
         elif cfg.get("driver"):
@@ -171,7 +175,9 @@ class ConectorODBC(Conector):
         try:
             con = pyodbc.connect(self._cadena(), timeout=10, readonly=True)
         except pyodbc.Error as e:
-            raise ErrorConector(f"No se pudo conectar por ODBC: {_limpio(e)}") from e
+            raise ErrorConector(
+                f"No se pudo conectar por ODBC: {_limpio(e)}"
+                + _pista_dsn(self.config, _limpio(e))) from e
         # Astrolabio nunca escribe en un origen. `readonly` es una peticion que
         # algunos drivers ignoran, asi que se repite en el atributo.
         try:
@@ -562,6 +568,42 @@ def _limpio(e: Exception) -> str:
     partes = [str(a) for a in getattr(e, "args", ()) if a]
     texto = partes[-1] if partes else str(e)
     return _sin_secretos(texto.strip())
+
+
+def _pista_dsn(cfg: dict, mensaje: str) -> str:
+    """
+    Lo que le falta al error del driver cuando el DSN no aparece.
+
+    "Data source name not found" es de los errores mas engañosos que hay: el DSN
+    normalmente SI existe, se ve en el Administrador de origenes de datos, y aun
+    asi el driver jura que no. Casi siempre es cuestion de bits —un DSN de 32 bits
+    es invisible para un proceso de 64, y son dos registros distintos— o de que se
+    configuro en la maquina del origen y no en esta. El driver no distingue esos
+    tres casos; aqui se dicen los tres, con la lista de los que si se ven.
+    """
+    if "data source name not found" not in mensaje.lower():
+        return ""
+    pedido = str(cfg.get("dsn") or "").strip()
+    if not pedido:
+        return ""
+    try:
+        visibles = sorted(pyodbc.dataSources())
+    except Exception:                                   # pragma: no cover
+        return ""
+    if any(v.lower() == pedido.lower() for v in visibles):
+        return ""                        # el DSN se ve: el fallo es otro
+    lista = ", ".join(visibles) if visibles else "(ninguno)"
+    return (
+        f"\n\nEl DSN '{pedido}' no esta registrado para este proceso. "
+        f"Los que si se ven desde aqui: {lista}.\n"
+        "Si lo ves en el Administrador de origenes de datos pero no en esa lista, "
+        "casi seguro esta creado de 32 bits y Astrolabio corre en 64: son dos "
+        "registros separados y no se ven entre si. Hace falta el cliente de 64 "
+        "bits del origen y volver a crear el DSN en el Administrador de origenes "
+        "de datos de 64 bits (C:\\Windows\\System32\\odbcad32.exe), o —si el "
+        "driver de 64 bits ya esta— usar el perfil del origen en vez del DSN, "
+        "que arma la cadena sin depender del registro."
+    )
 
 
 def _sin_secretos(texto: str) -> str:

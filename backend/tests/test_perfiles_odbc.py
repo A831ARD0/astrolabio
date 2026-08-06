@@ -14,7 +14,9 @@ import pytest
 
 from app.conectores import crear
 from app.conectores.base import ErrorConector
-from app.conectores.perfiles_odbc import PERFILES, armar, catalogo, faltan
+from app.conectores.perfiles_odbc import (
+    LIBRES, PERFILES, armar, catalogo, faltan,
+)
 
 
 def test_pervasive_usa_servername_y_serverdsn():
@@ -72,6 +74,39 @@ def test_perfil_inventado():
     with pytest.raises(ErrorConector) as e:
         c._cadena()
     assert "Perfil ODBC desconocido" in str(e.value)
+
+
+def test_el_perfil_dsn_arma_la_cadena_del_dsn():
+    """
+    'dsn' y 'manual' son perfiles sin plantilla: no arman nada, el DSN o la
+    cadena ya traen todo dentro. Pedirles plantilla los hacia contestar "Perfil
+    ODBC desconocido" para un perfil que si existe y sale en el desplegable.
+    """
+    c = crear("odbc", {"perfil": "dsn", "dsn": "VW_MATRIZ", "user": "admin"})
+    cadena = c._cadena()
+    assert "DSN=VW_MATRIZ" in cadena
+    assert "UID=admin" in cadena
+    assert "desconocido" not in cadena
+
+
+def test_el_perfil_dsn_sigue_exigiendo_el_nombre():
+    c = crear("odbc", {"perfil": "dsn", "user": "admin"})
+    with pytest.raises(ErrorConector) as e:
+        c._cadena()
+    assert "Nombre del DSN" in str(e.value)
+
+
+def test_el_perfil_manual_usa_la_cadena_tal_cual():
+    c = crear("odbc", {"perfil": "manual", "cadena": "DRIVER={X};SERVER=y"})
+    assert c._cadena() == "DRIVER={X};SERVER=y"
+
+
+def test_todos_los_perfiles_libres_se_pueden_armar():
+    """Ninguno de los libres debe acabar en 'Perfil ODBC desconocido'."""
+    ejemplos = {"dsn": {"dsn": "D"}, "manual": {"cadena": "DRIVER={X}"}}
+    for p in LIBRES:
+        c = crear("odbc", {"perfil": p["clave"], **ejemplos[p["clave"]]})
+        assert c._cadena()
 
 
 def test_todos_los_perfiles_declaran_sus_campos():
