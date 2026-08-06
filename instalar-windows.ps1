@@ -492,8 +492,20 @@ New-Item -ItemType Directory -Force -Path $datos | Out-Null
 $bitacora = Join-Path $env:TEMP 'astrolabio-arranque.log'
 $errores  = Join-Path $env:TEMP 'astrolabio-arranque-error.log'
 
+# En un puerto libre, NO en el 8000. La primera instalacion no tenia servicio y
+# el 8000 estaba suelto; a partir de la segunda lo tiene el servicio ya corriendo,
+# y esta prueba fallaria por no poder abrir el puerto. El sintoma seria "el
+# servicio no responde" justo cuando esta perfectamente vivo: el peor mensaje
+# posible, porque manda a buscar donde no es.
+$sonda = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+$sonda.Start()
+# El casteo explicito no sobra: LocalEndpoint se declara como EndPoint, que no
+# tiene .Port; funciona por el tipo real, y aqui no se deja al azar.
+$puertoPrueba = ([System.Net.IPEndPoint] $sonda.LocalEndpoint).Port
+$sonda.Stop()
+
 $proceso = Start-Process -FilePath $python `
-    -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000' `
+    -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$puertoPrueba" `
     -WorkingDirectory $backend -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput $bitacora -RedirectStandardError $errores
 
@@ -506,7 +518,10 @@ try {
         if ($proceso.HasExited) { break }
 
         try {
-            $salud = Invoke-RestMethod 'http://127.0.0.1:8000/api/salud' -TimeoutSec 2
+            # Al puerto de la sonda, no al 8000: si preguntara al 8000 le
+            # contestaria el servicio que ya estaba corriendo y esta prueba daria
+            # por bueno un codigo que ni siquiera arranco.
+            $salud = Invoke-RestMethod "http://127.0.0.1:$puertoPrueba/api/salud" -TimeoutSec 2
             if ($salud.estado -eq 'ok') { break }
         } catch { $salud = $null }
     }
