@@ -385,10 +385,37 @@ export function DialogoConexion({
           {tipo === 'odbc' && odbc.data?.aviso && (
             <div className="aviso-caja chico">{odbc.data.aviso}</div>
           )}
-          {tipo === 'odbc' && (odbc.data?.dsn.length ?? 0) > 0 && (
+
+          {/* El puente de 32 bits. Solo se ofrece si el servicio está arriba:
+              enseñar una casilla que no puede funcionar es peor que no tenerla,
+              porque el error aparece después de llenar el formulario entero. */}
+          {tipo === 'odbc' && perfil && odbc.data?.puente?.activo && (
+            <div className="campo">
+              <label className="casilla">
+                <input
+                  type="checkbox"
+                  checked={!!valores.puente}
+                  onChange={(e) =>
+                    setValores((p) => ({ ...p, puente: e.target.checked }))
+                  }
+                />
+                Cargar el driver en el puente de 32 bits
+              </label>
+              <span className="chico tenue">
+                Para los orígenes cuyo driver solo existe de 32 bits, como Pervasive
+                con TotalDealer. Un proceso de 64 bits no puede cargar una librería
+                de 32, así que la carga la hace otro proceso.
+              </span>
+            </div>
+          )}
+
+          {tipo === 'odbc' && (
             <span className="chico tenue">
-              DSN configurados en el servidor:{' '}
-              <span className="mono">{odbc.data!.dsn.join(', ')}</span>
+              DSN {valores.puente ? 'que ve el puente de 32 bits' : 'de 64 bits'}:{' '}
+              <span className="mono">
+                {((valores.puente ? odbc.data?.puente?.dsn : odbc.data?.dsn) ?? [])
+                  .join(', ') || '(ninguno)'}
+              </span>
             </span>
           )}
 

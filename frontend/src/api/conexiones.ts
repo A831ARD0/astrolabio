@@ -324,6 +324,16 @@ export function useOdbcInstalado(activo: boolean) {
         disponible: boolean
         drivers: string[]
         dsn: string[]
+        // El puente de 32 bits ve OTROS drivers y OTROS DSN: en Windows, 32 y 64
+        // bits son dos registros separados. Por eso vienen aparte y no mezclados.
+        puente: {
+          activo: boolean
+          url?: string
+          bits?: number
+          motivo?: string
+          drivers: string[]
+          dsn: string[]
+        }
         aviso: string | null
       }>('/conexiones/odbc/instalado'),
     enabled: activo,

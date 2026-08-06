@@ -27,6 +27,14 @@
     Baja NSSM de nssm.cc a herramientas\ en vez de pedir que se instale a mano.
     Solo tiene efecto junto con -Servicios.
 
+.PARAMETER Puente32
+    Instala ademas el puente ODBC de 32 bits: un segundo interprete, de 32 bits,
+    con pyodbc y nada mas. Hace falta cuando el driver del origen solo existe de
+    32 bits y no se puede cambiar —Pervasive/Actian con TotalDealer es el caso—,
+    porque un proceso de 64 bits no puede cargar una libreria de 32.
+
+    Con -Servicios, ademas lo registra como el servicio AstrolabioPuente32.
+
 .PARAMETER RotarClaveCifrado
     Genera una CLAVE_CIFRADO nueva y sale. Para cuando la anterior se haya visto
     —una captura de pantalla, un correo—. Barato antes de que haya conexiones
@@ -35,6 +43,7 @@
 .EXAMPLE
     .\instalar-windows.ps1
     .\instalar-windows.ps1 -Servicios
+    .\instalar-windows.ps1 -Puente32 -Servicios
     .\instalar-windows.ps1 -RotarClaveCifrado
 #>
 
@@ -44,7 +53,8 @@ param(
     [switch] $Servicios,
     [switch] $Comprobar,
     [switch] $RotarClaveCifrado,
-    [switch] $DescargarNSSM
+    [switch] $DescargarNSSM,
+    [switch] $Puente32
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,9 +117,57 @@ function Correr {
     } finally { $ErrorActionPreference = $antes }
 }
 
+<#
+Deja un proceso como servicio de Windows con NSSM, y lo vuelve a dejar igual si
+ya existia.
+
+Existe porque hay dos servicios —la API y el puente de 32 bits— y el segundo
+llego despues. Duplicar estas quince lineas es como uno de los dos se queda sin
+el `Start` automatico y nadie se entera hasta el siguiente reinicio del servidor.
+#>
+function InstalarServicio {
+    param(
+        [Parameter(Mandatory)] [string]   $Nssm,
+        [Parameter(Mandatory)] [string]   $Nombre,
+        [Parameter(Mandatory)] [string]   $Programa,
+        [Parameter(Mandatory)] [string]   $Parametros,
+        [Parameter(Mandatory)] [string]   $Directorio,
+        [Parameter(Mandatory)] [string]   $Registros
+    )
+    $yaExiste = Get-Service -Name $Nombre -ErrorAction SilentlyContinue
+    if ($yaExiste) {
+        Bien "El servicio $Nombre ya existia: se detiene y se vuelve a configurar"
+        if ($yaExiste.Status -ne 'Stopped') {
+            Stop-Service -Name $Nombre -Force
+            (Get-Service $Nombre).WaitForStatus('Stopped', '00:00:30')
+        }
+    } else {
+        $r = Correr $Nssm @('install', $Nombre, $Programa)
+        if ($r.Codigo -ne 0) { throw "Fallo 'nssm install $Nombre':`n$($r.Texto)" }
+    }
+
+    $ordenes = @(
+        @('set', $Nombre, 'Application', $Programa),
+        @('set', $Nombre, 'AppParameters', $Parametros),
+        @('set', $Nombre, 'AppDirectory', $Directorio),
+        @('set', $Nombre, 'AppStdout', (Join-Path $Registros "$Nombre-salida.log")),
+        @('set', $Nombre, 'AppStderr', (Join-Path $Registros "$Nombre-error.log")),
+        @('set', $Nombre, 'Start', 'SERVICE_AUTO_START'),
+        @('start', $Nombre)
+    )
+    foreach ($orden in $ordenes) {
+        $r = Correr $Nssm $orden
+        if ($r.Codigo -ne 0) { throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)" }
+    }
+}
+
 $backend  = Join-Path $Raiz 'backend'
 $frontend = Join-Path $Raiz 'frontend'
 $python   = Join-Path $backend 'venv\Scripts\python.exe'
+# El interprete de 32 bits del puente. Vive aparte a proposito: es OTRO Python,
+# con OTRO pyodbc, y mezclarlos en el mismo venv no es posible.
+$python32 = Join-Path $backend 'venv32\Scripts\python.exe'
+$tokenPuente = Join-Path $backend 'datos\puente.token'
 
 # --------------------------------------------------------------------------- #
 # Rotar la clave de cifrado
@@ -201,6 +259,36 @@ Bien "Node $($r.Texto.Trim())"
 $odbc = "$env:SystemRoot\System32\odbcad32.exe"
 if (Test-Path $odbc) { Bien 'Administrador ODBC de 64 bits presente' }
 
+$ayudaPython32 = @'
+Falta Python 3.12 de 32 bits, que es lo que necesita el puente.
+
+  Bajalo de https://www.python.org/downloads/windows/ — esta vez el instalador
+  "Windows installer (32-bit)". Se instala AL LADO del de 64 bits, no lo
+  reemplaza: Windows los mantiene aparte y `py` sabe cual es cual.
+
+  En el instalador marca "Install for all users". NO marques "Add python.exe to
+  PATH": el de 64 bits ya esta ahi y el que gane el PATH seria cuestion de azar.
+
+  Despues, `py -0` tiene que listar tanto 3.12 como 3.12-32.
+'@
+
+if ($Puente32) {
+    # El sufijo -32 es como el lanzador de Python distingue las dos instalaciones.
+    $r = Correr py @('-3.12-32', '-c', "import struct; print(struct.calcsize('P') * 8)")
+    if ($r.Codigo -ne 0) { throw $ayudaPython32 }
+    if ($r.Texto.Trim() -ne '32') {
+        throw ("'py -3.12-32' contesto $($r.Texto.Trim()) bits, no 32. " +
+               "Sin un interprete de 32 bits el puente no sirve de nada, " +
+               "porque lo unico que aporta es poder cargar ese driver.`n$ayudaPython32")
+    }
+    Bien 'Python 3.12 de 32 bits presente'
+
+    $odbc32 = "$env:SystemRoot\SysWOW64\odbcad32.exe"
+    # El nombre despista: el de System32 es el de 64 bits y el de SysWOW64 el de
+    # 32. Es asi desde Windows XP de 64 bits y no va a cambiar.
+    if (Test-Path $odbc32) { Bien 'Administrador ODBC de 32 bits presente' }
+}
+
 if ($Comprobar) { Write-Host "`nSolo comprobacion. No se escribio nada."; exit 0 }
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +313,60 @@ $r = Correr $python @('-m', 'pip', 'install', '-r',
                       (Join-Path $backend 'requirements.txt'), '--quiet')
 if ($r.Codigo -ne 0) { throw "Fallo la instalacion de dependencias:`n$($r.Texto)" }
 Bien 'Dependencias instaladas'
+
+# --------------------------------------------------------------------------- #
+# El puente ODBC de 32 bits
+# --------------------------------------------------------------------------- #
+
+if ($Puente32) {
+    Paso 'Puente ODBC de 32 bits'
+
+    if (-not (Test-Path $python32)) {
+        $r = Correr py @('-3.12-32', '-m', 'venv', (Join-Path $backend 'venv32'))
+        if ($r.Codigo -ne 0) { throw "No se pudo crear el venv de 32 bits:`n$($r.Texto)" }
+        Bien 'venv32 creado'
+    } else {
+        Bien 'venv32 ya estaba'
+    }
+
+    # Solo pyodbc. Ni pyarrow ni duckdb: no tienen ruedas de 32 bits, y el puente
+    # no las necesita porque no toca ni Arrow ni Parquet — de eso se encarga el
+    # proceso de 64 bits con las filas ya recibidas.
+    $r = Correr $python32 @('-m', 'pip', 'install', '--upgrade', 'pip', '--quiet')
+    if ($r.Codigo -ne 0) { throw "Fallo actualizar pip en venv32:`n$($r.Texto)" }
+    $r = Correr $python32 @('-m', 'pip', 'install', 'pyodbc==5.3.0', '--quiet')
+    if ($r.Codigo -ne 0) { throw "Fallo instalar pyodbc de 32 bits:`n$($r.Texto)" }
+    Bien 'pyodbc de 32 bits instalado'
+
+    # Lo que de verdad decide si esto valio la pena: que desde 32 bits se vea el
+    # driver que desde 64 no se veia. Se dice ahora y no cuando falle una carga.
+    $r = Correr $python32 @('-c', "import pyodbc; print('|'.join(sorted(pyodbc.drivers())))")
+    if ($r.Codigo -eq 0) {
+        $vistos = $r.Texto.Trim()
+        if ($vistos) {
+            Bien "Drivers de 32 bits que ve el puente: $($vistos -replace '\|', ', ')"
+        } else {
+            Aviso 'El puente no ve ningun driver de 32 bits. Revisa que el cliente'
+            Aviso 'del origen este instalado y que sus DSN esten en SysWOW64\odbcad32.exe.'
+        }
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path $tokenPuente) | Out-Null
+    if (Test-Path $tokenPuente) {
+        Bien 'El token del puente ya estaba (no se toca)'
+    } else {
+        # Es lo unico que separa a ese proceso de cualquiera que hable con su
+        # puerto. Se genera aqui y lo leen los dos servicios del mismo archivo:
+        # asi no pasa por la linea de comandos, que es visible en el Administrador
+        # de tareas, ni por una variable de entorno.
+        $b = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+        [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_').TrimEnd('=') |
+            Set-Content -Path $tokenPuente -Encoding ASCII -NoNewline
+        ProtegerArchivo $tokenPuente
+        Bien "Token del puente generado en $tokenPuente"
+    }
+}
 
 # --------------------------------------------------------------------------- #
 # La interfaz
@@ -435,40 +577,21 @@ Falta NSSM, que es lo que convierte la API en un servicio de Windows.
     $registros = Join-Path $Raiz 'registros'
     New-Item -ItemType Directory -Force -Path $registros | Out-Null
 
-    # Si el servicio ya existe, `nssm install` falla. Se para y se reconfigura
-    # en vez de reventar: este guion tiene que poder volver a correrse, que es
-    # justo lo que se hace despues de un `git pull`.
-    $yaExiste = Get-Service -Name 'Astrolabio' -ErrorAction SilentlyContinue
-    if ($yaExiste) {
-        Bien 'El servicio ya existia: se detiene y se vuelve a configurar'
-        if ($yaExiste.Status -ne 'Stopped') {
-            Stop-Service -Name 'Astrolabio' -Force
-            (Get-Service 'Astrolabio').WaitForStatus('Stopped', '00:00:30')
-        }
+    # El puente PRIMERO: si la API arranca antes, la primera carga que use una
+    # conexion de 32 bits se encuentra el puente caido.
+    if ($Puente32) {
+        InstalarServicio -Nssm $nssm -Nombre 'AstrolabioPuente32' `
+            -Programa $python32 `
+            -Parametros "-m puente32.servidor --puerto 8001 --token-archivo `"$tokenPuente`"" `
+            -Directorio $backend -Registros $registros
+        Bien 'Servicio AstrolabioPuente32 instalado'
     }
 
     # --host 127.0.0.1 a proposito: quien entra de fuera pasa por Caddy, que es
     # el que lleva HTTPS y las cabeceras de seguridad.
-    $ordenes = @(
-        @('set', 'Astrolabio', 'AppParameters',
-          '-m uvicorn app.main:app --host 127.0.0.1 --port 8000'),
-        @('set', 'Astrolabio', 'AppDirectory', $backend),
-        @('set', 'Astrolabio', 'AppStdout', (Join-Path $registros 'salida.log')),
-        @('set', 'Astrolabio', 'AppStderr', (Join-Path $registros 'error.log')),
-        @('set', 'Astrolabio', 'Start', 'SERVICE_AUTO_START'),
-        @('start', 'Astrolabio')
-    )
-    if (-not $yaExiste) {
-        $r = Correr $nssm @('install', 'Astrolabio', $python)
-        if ($r.Codigo -ne 0) { throw "Fallo 'nssm install':`n$($r.Texto)" }
-    }
-
-    foreach ($orden in $ordenes) {
-        $r = Correr $nssm $orden
-        if ($r.Codigo -ne 0) {
-            throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)"
-        }
-    }
+    InstalarServicio -Nssm $nssm -Nombre 'Astrolabio' -Programa $python `
+        -Parametros '-m uvicorn app.main:app --host 127.0.0.1 --port 8000' `
+        -Directorio $backend -Registros $registros
 
     # Que diga que arranco no basta: un servicio que se cae al segundo tambien
     # "arranca". Se comprueba que responde de verdad.
@@ -483,9 +606,35 @@ Falta NSSM, que es lo que convierte la API en un servicio de Windows.
     }
     if (-not $vivo) {
         throw ("El servicio se instalo pero no responde. Mira " +
-               (Join-Path $registros 'error.log'))
+               (Join-Path $registros 'Astrolabio-error.log'))
     }
     Bien 'Servicio Astrolabio arrancado y respondiendo'
+
+    if ($Puente32) {
+        # El puente no tiene salud sin token, asi que se comprueba desde el mismo
+        # Python que lo va a usar de verdad. Que el servicio este 'Running' no
+        # dice nada: puede estar arriba y rechazando el token.
+        # En una sola linea y con comillas simples por dentro: una cadena con
+        # saltos de linea pasada a un programa externo es la otra forma de la
+        # trampa de comillas de PowerShell 5.1. Y la ruta va explicita porque
+        # este guion no corre desde backend\, asi que un '.' no serviria.
+        $prueba = ("import sys; sys.path.insert(0, r'$backend'); " +
+                   "from app.conectores import puente; " +
+                   "from app.conectores.odbc import _ajustes_del_puente as a; " +
+                   "u, t = a(); s = puente.salud(u, t); " +
+                   "print('%d|%s' % (s['bits'], ','.join(s['drivers'])))")
+        $r = Correr $python @('-c', $prueba)
+        if ($r.Codigo -ne 0) {
+            throw ("El puente no contesta desde Astrolabio:`n$($r.Texto)`nMira " +
+                   (Join-Path $registros 'AstrolabioPuente32-error.log'))
+        }
+        $bits, $drivers = $r.Texto.Trim().Split('|')
+        if ($bits -ne '32') {
+            Aviso "El puente contesta pero es de $bits bits, no de 32. Revisa que"
+            Aviso 'el servicio apunte a backend\venv32, no a backend\venv.'
+        }
+        Bien "Puente de $bits bits respondiendo. Drivers: $(if ($drivers) { $drivers } else { '(ninguno)' })"
+    }
 
     Aviso 'Falta Caddy delante. Ver el manual tecnico, seccion de Windows.'
     Aviso 'Y ponlo a correr con una cuenta de servicio sin privilegios:'

@@ -89,6 +89,25 @@ jobs:
         shell: powershell
         run: .\instalar-windows.ps1 -Comprobar
 
+      # El puente necesita un Python de 32 bits, que este runner no tiene. Lo que
+      # se prueba es el camino de error: quien lo instale sin ese Python tiene que
+      # leer que le falta y de donde sacarlo, no un rastro de PowerShell.
+      - name: Sin Python de 32 bits, -Puente32 lo explica
+        working-directory: .
+        shell: powershell
+        run: |
+          $mensaje = $null
+          try { .\instalar-windows.ps1 -Puente32 -Comprobar } catch { $mensaje = "$_" }
+          if (-not $mensaje) {
+              Write-Host 'Este runner si tiene Python de 32 bits: no hay error que comprobar.'
+              exit 0
+          }
+          if ($mensaje -notmatch '32 bits' -or $mensaje -notmatch 'python.org') {
+              Write-Error "El mensaje no dice que falta Python de 32 bits ni de donde sale:`n$mensaje"
+              exit 1
+          }
+          Write-Host 'Falla con el mensaje correcto.'
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

@@ -62,6 +62,18 @@ class Config(BaseSettings):
     intentos_maximos: int = 8
     minutos_bloqueo: int = 15
 
+    # --- puente ODBC de 32 bits ---
+    # Para los origenes cuyo driver solo existe de 32 bits (Pervasive/Actian con
+    # TotalDealer es el caso tipico). Un proceso de 64 bits no puede cargar una
+    # libreria de 32, asi que el driver lo carga otro proceso y se le habla por
+    # aqui. Solo lo usan las conexiones que lo piden con `puente: true`.
+    puente_url: str = "http://127.0.0.1:8001"
+    # El token se lee del archivo, no del entorno: asi lo comparten los dos
+    # servicios sin que aparezca en la linea de comandos ni en el registro.
+    puente_token_archivo: str = str(RAIZ / "datos" / "puente.token")
+    # Salida de emergencia para pruebas y para quien prefiera el entorno.
+    puente_token: str = ""
+
     # --- programador de cargas ---
     # Se apaga en pruebas y en cualquier proceso que no deba ejecutar cargas
     # (por ejemplo un segundo worker: dos programadores compitiendo por el mismo

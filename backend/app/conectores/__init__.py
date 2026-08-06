@@ -38,8 +38,10 @@ OPCIONALES: dict[str, list[str]] = {
     "archivo": [],
     # `perfil` es la clave del catalogo de perfiles_odbc: con ella, la cadena la
     # arma el conector desde los campos que el perfil pide.
+    # `puente` manda la conexion por el proceso de 32 bits, para los drivers que
+    # solo existen de 32 y no se pueden cambiar. Ver `app.conectores.puente`.
     "odbc": ["perfil", "dsn", "driver", "host", "port", "user", "password",
-             "database", "servidor_informix", "cadena", "extra"],
+             "database", "servidor_informix", "cadena", "extra", "puente"],
 }
 
 

@@ -171,13 +171,20 @@ class ConectorODBC(Conector):
             partes.append(str(cfg["extra"]).strip(";"))
         return ";".join(partes)
 
+    @property
+    def por_puente(self) -> bool:
+        """Si esta conexion carga su driver en el proceso de 32 bits."""
+        return bool(self.config.get("puente"))
+
     def _abrir(self) -> pyodbc.Connection:
+        if self.por_puente:
+            return self._abrir_por_puente()
         try:
             con = pyodbc.connect(self._cadena(), timeout=10, readonly=True)
         except pyodbc.Error as e:
             raise ErrorConector(
                 f"No se pudo conectar por ODBC: {_limpio(e)}"
-                + _pista_dsn(self.config, _limpio(e))) from e
+                + _pista_dsn(self.config, _limpio(e), _dsn_locales)) from e
         # Astrolabio nunca escribe en un origen. `readonly` es una peticion que
         # algunos drivers ignoran, asi que se repite en el atributo.
         try:
@@ -185,6 +192,29 @@ class ConectorODBC(Conector):
         except pyodbc.Error:
             pass
         return con
+
+    def _abrir_por_puente(self):
+        """
+        La conexion la abre el proceso de 32 bits y esta solo la maneja.
+
+        Lo que vuelve responde a las mismas llamadas que un `pyodbc.Connection`,
+        asi que de aqui hacia abajo el conector es exactamente el mismo. Ver
+        `app.conectores.puente`.
+        """
+        from app.conectores import puente          # perezoso: no todos lo usan
+
+        url, token = _ajustes_del_puente()
+        cadena = self._cadena()
+        try:
+            return puente.abrir(cadena, url, token)
+        except pyodbc.Error as e:
+            # El driver de 32 bits contesto que no. Se presenta igual que si
+            # hubiera pasado en casa, con la pista mirando los DSN que ve el
+            # puente —no los de este proceso, que son otros registros distintos.
+            raise ErrorConector(
+                f"No se pudo conectar por ODBC: {_limpio(e)}"
+                + _pista_dsn(self.config, _limpio(e),
+                             lambda: _dsn_del_puente(url, token))) from e
 
     # -- dialecto, preguntado al driver ------------------------------------- #
 
@@ -570,7 +600,43 @@ def _limpio(e: Exception) -> str:
     return _sin_secretos(texto.strip())
 
 
-def _pista_dsn(cfg: dict, mensaje: str) -> str:
+def _ajustes_del_puente() -> tuple[str, str]:
+    """(url, token) del puente de 32 bits, con el token leido del archivo."""
+    from app.config import config
+
+    c = config()
+    token = c.puente_token
+    if not token:
+        ruta = Path(c.puente_token_archivo)
+        try:
+            token = ruta.read_text(encoding="utf-8").strip()
+        except OSError as e:
+            raise ErrorConector(
+                f"Esta conexion usa el puente ODBC de 32 bits y no se pudo leer "
+                f"su token en {ruta}: {e}. Lo crea el instalador con "
+                f"'.\\instalar-windows.ps1 -Puente32'."
+            ) from e
+    if not token:
+        raise ErrorConector(
+            f"El archivo del token del puente esta vacio "
+            f"({c.puente_token_archivo}).")
+    return c.puente_url, token
+
+
+def _dsn_locales() -> list[str]:
+    return sorted(pyodbc.dataSources())
+
+
+def _dsn_del_puente(url: str, token: str) -> list[str]:
+    from app.conectores import puente
+
+    try:
+        return list(puente.salud(url, token).get("dsn") or [])
+    except ErrorConector:
+        return []
+
+
+def _pista_dsn(cfg: dict, mensaje: str, visibles=_dsn_locales) -> str:
     """
     Lo que le falta al error del driver cuando el DSN no aparece.
 
@@ -604,12 +670,14 @@ def _pista_dsn(cfg: dict, mensaje: str) -> str:
     if not pedido:
         return ""
     try:
-        visibles = sorted(pyodbc.dataSources())
+        # Con el puente, los DSN que importan son los que ve el proceso de 32
+        # bits. Listar aqui los de 64 mandaria a buscar en el registro que no es.
+        lista_visible = sorted(visibles())
     except Exception:                                   # pragma: no cover
         return ""
-    if any(v.lower() == pedido.lower() for v in visibles):
+    if any(v.lower() == pedido.lower() for v in lista_visible):
         return ""                        # el DSN se ve: el fallo es otro
-    lista = ", ".join(visibles) if visibles else "(ninguno)"
+    lista = ", ".join(lista_visible) if lista_visible else "(ninguno)"
     return (
         f"\n\nEl DSN '{pedido}' no esta registrado para este proceso. "
         f"Los que si se ven desde aqui: {lista}.\n"

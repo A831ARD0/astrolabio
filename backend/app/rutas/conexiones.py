@@ -248,11 +248,36 @@ def odbc_instalado(_: UsuarioDep):
         "disponible": True,
         "drivers": sorted(pyodbc.drivers()),
         "dsn": sorted(pyodbc.dataSources()),
+        "puente": _estado_del_puente(),
         "aviso": None if pyodbc.drivers() else
                  "No hay ningun driver ODBC registrado en esta maquina. Se puede "
                  "usar la ruta del driver (.so/.dylib/.dll) en el campo Driver, o "
                  "pedir a sistemas que lo registre en odbcinst.ini.",
     }
+
+
+def _estado_del_puente() -> dict:
+    """
+    Si el puente de 32 bits esta arriba, y que ve el desde su lado.
+
+    Sus drivers y sus DSN son OTROS: 32 y 64 bits son dos registros separados en
+    Windows. Ensenarlos juntos sin distinguirlos seria peor que no ensenarlos.
+    """
+    from app.conectores.base import ErrorConector
+    from app.conectores.odbc import _ajustes_del_puente
+
+    try:
+        from app.conectores import puente
+        url, token = _ajustes_del_puente()
+    except ErrorConector as e:
+        return {"activo": False, "motivo": str(e), "drivers": [], "dsn": []}
+    try:
+        salud = puente.salud(url, token)
+    except ErrorConector as e:
+        return {"activo": False, "motivo": str(e), "url": url,
+                "drivers": [], "dsn": []}
+    return {"activo": True, "url": url, "bits": salud.get("bits"),
+            "drivers": salud.get("drivers") or [], "dsn": salud.get("dsn") or []}
 
 
 @router.get("/odbc/perfiles")

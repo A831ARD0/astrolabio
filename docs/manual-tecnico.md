@@ -483,6 +483,62 @@ C:\astrolabio\backend\venv\Scripts\python -c "import pyodbc; print(pyodbc.driver
 Eso mismo lo enseña la pantalla de conexiones al elegir el origen Pervasive, y
 preselecciona el driver detectado.
 
+#### Cuando el driver solo existe de 32 bits: el puente
+
+Lo de arriba supone que se puede instalar el cliente de 64 bits. A veces no: la
+aplicación que ya usa ese driver —TotalDealer con Pervasive es el caso típico—
+exige el de 32 bits, y en una máquina solo cabe una versión del cliente.
+
+Entonces aparece este error, y no hay configuración que lo arregle:
+
+```
+[IM014] [Microsoft][Administrador de controladores ODBC] La arquitectura del DSN
+especificado no coincide entre el controlador y la aplicación.
+```
+
+**Un proceso de 64 bits no puede cargar una librería de 32.** No es un permiso ni
+una ruta: son formatos de binario distintos. La única salida es que el driver lo
+cargue otro proceso, de 32 bits, y que Astrolabio le hable por el bucle local.
+
+Eso es el puente. Se instala así, como administrador:
+
+```powershell
+cd C:\astrolabio; .\instalar-windows.ps1 -Puente32 -Servicios
+```
+
+Deja un segundo servicio, `AstrolabioPuente32`, con su propio intérprete de 32
+bits en `backend\venv32` y **solo pyodbc** dentro. Escucha en `127.0.0.1:8001` y
+exige un token compartido que el guion genera en `backend\datos\puente.token`,
+legible solo por administradores y SYSTEM.
+
+Antes hace falta **Python 3.12 de 32 bits** instalado al lado del de 64 (el
+instalador "Windows installer (32-bit)" de python.org, marcando *Install for all
+users* y **sin** marcar *Add python.exe to PATH*). Después, `py -0` debe listar
+tanto `3.12` como `3.12-32`.
+
+Una vez arriba, en **Conexiones → Nueva → ODBC** aparece la casilla *Cargar el
+driver en el puente de 32 bits*, y la lista de DSN de debajo pasa a enseñar los
+que ve el puente, que son otros: en Windows, 32 y 64 bits son dos registros
+separados y no se ven entre sí.
+
+Qué esperar:
+
+| | |
+|---|---|
+| **Coste** | 12% más lento que ODBC directo, medido sobre 200,000 filas. Se pierde en el ruido de una carga nocturna. |
+| **Qué NO cambia** | Los tipos. Un DECIMAL sigue siendo DECIMAL y una fecha una fecha: los valores viajan por columnas y con su tipo, nunca convertidos a texto ni a float. Hay una prueba que trae la misma tabla por los dos caminos y los compara fila a fila. |
+| **Qué vigilar** | Si el puente se cae, las conexiones que lo usan fallan con un mensaje que lo dice por su nombre. Las demás siguen igual. |
+
+Comprobar qué ve el puente desde su lado:
+
+```powershell
+Get-Service AstrolabioPuente32; Get-Content C:\astrolabio\registros\AstrolabioPuente32-salida.log -Tail 20
+```
+
+El primer renglón de ese registro dice de cuántos bits es y qué drivers ve. Si
+dice 64 bits, el servicio está apuntando a `backend\venv` en vez de a
+`backend\venv32` y no sirve de nada.
+
 #### Respaldo en Windows
 
 Sin Docker, los metadatos son un archivo normal, pero **no lo copies con
@@ -646,7 +702,9 @@ una librería nativa del sistema, y varias vienen de clientes licenciados.
 
 ⚠️ **32 vs 64 bits.** Un proceso de 64 bits no puede cargar un driver de 32 bits. No
 es permisos ni cadena: no se cargan juntos. Es el problema típico con clientes
-viejos de Pervasive.
+viejos de Pervasive. Si el de 32 no se puede cambiar porque otra aplicación
+depende de él, la salida es el **puente de 32 bits** (§4, «Cuando el driver solo
+existe de 32 bits»).
 
 ---
 
