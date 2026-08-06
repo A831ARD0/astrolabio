@@ -14,9 +14,10 @@ from __future__ import annotations
 import re
 import shutil
 import time
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -100,6 +101,30 @@ def borrar_particiones(destino: Path, particiones: list[str]) -> None:
             shutil.rmtree(ruta)
 
 
+def marca_archivo() -> str:
+    """
+    Sufijo unico para el Parquet de un dataset sin particionar.
+
+    Aqui habia `time.strftime("%Y%m%d%H%M%S%f")`, y estaba mal de dos maneras a
+    la vez:
+
+    1. **`%f` no existe en `time.strftime`** —es de `datetime`—. En Linux y macOS
+       la biblioteca de C la deja pasar y el nombre acababa con una `f` literal;
+       el CRT de Windows la valida y lanza `ValueError: Invalid format string`.
+       Efecto: en Windows **ninguna carga podia terminar**, con un error que no
+       menciona ni fechas ni nombres de archivo.
+
+    2. Por eso mismo, la marca tenia resolucion de **un segundo**. Dos cargas del
+       mismo dataset dentro del mismo segundo generaban el mismo nombre y la
+       segunda pisaba a la primera, en silencio y en todas las plataformas.
+
+    El uuid quita el segundo problema de raiz: no hay resolucion que apurar. La
+    fecha delante se queda porque ordena los archivos por nombre, que es lo que
+    uno quiere al mirar la carpeta.
+    """
+    return f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+
 def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
                   tabla: str = "lote") -> ResultadoIngesta:
     """
@@ -164,7 +189,7 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
                 """).fetchall()
             ]
     else:
-        marca = time.strftime("%Y%m%d%H%M%S%f")
+        marca = marca_archivo()
         con.execute(
             f"COPY {tabla} TO '{destino / f'{p.destino}_{marca}.parquet'}' "
             f"(FORMAT parquet, COMPRESSION zstd)"
