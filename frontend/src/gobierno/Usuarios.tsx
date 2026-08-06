@@ -16,6 +16,7 @@ import {
   useRestablecerContrasena,
   useUsuarios,
 } from '../api/gobierno'
+import { Velo } from '../comunes/Velo'
 
 const ROLES: { valor: RolUsuario; que_puede: string }[] = [
   { valor: 'administrador', que_puede: 'todo, y las políticas no le aplican' },
@@ -121,8 +122,8 @@ function PanelUsuario({
   const restablecer = useRestablecerContrasena()
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal">
         <header>{usuario.email}</header>
         <div className="cont">
           <div className="campo">
@@ -217,7 +218,7 @@ function PanelUsuario({
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }
 
@@ -230,8 +231,8 @@ function DialogoNuevo({ alCerrar }: { alCerrar: () => void }) {
   const crear = useCrearUsuario()
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal">
         <header>Nueva persona</header>
         <div className="cont">
           <div className="campo">
@@ -308,7 +309,7 @@ function DialogoNuevo({ alCerrar }: { alCerrar: () => void }) {
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }
 

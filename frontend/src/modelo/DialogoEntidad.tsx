@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useTabla, useTablas } from '../api/hooks'
 import type { Entidad, RolCampo, TipoEntidad } from '../api/tipos'
 import { ETIQUETA_ROL } from './estado'
+import { Velo } from '../comunes/Velo'
 
 const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
@@ -67,8 +68,8 @@ export function DialogoEntidad({
   const nombreLibre = nombre.trim() && !yaUsadas.has(nombre.trim())
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal">
         <header>Agregar entidad desde una tabla</header>
 
         <div className="cont">
@@ -179,6 +180,6 @@ export function DialogoEntidad({
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }

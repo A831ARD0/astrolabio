@@ -29,6 +29,7 @@ import {
   useTransformaciones,
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
+import { Velo } from '../comunes/Velo'
 
 const TIPOS: TipoPaso[] = [
   'filtrar', 'columnas', 'derivar', 'agrupar', 'unir', 'apilar', 'renombrar',
@@ -504,8 +505,8 @@ export function Etl() {
 
       {/* ------------------------------------------------------- modal */}
       {pegarSql && (
-        <div className="velo" onClick={() => setPegarSql(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <Velo alCerrar={() => setPegarSql(false)}>
+          <div className="modal">
             <header>Pegar una consulta</header>
             <div className="cont">
               <p className="chico suave" style={{ margin: 0 }}>
@@ -577,7 +578,7 @@ export function Etl() {
               </button>
             </footer>
           </div>
-        </div>
+        </Velo>
       )}
     </div>
   )

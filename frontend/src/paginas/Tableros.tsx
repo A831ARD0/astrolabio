@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useCrearDashboard, useDashboards, useModelos, useYo } from '../api/hooks'
+import { Velo } from '../comunes/Velo'
 
 export function Tableros() {
   const tableros = useDashboards()
@@ -74,8 +75,8 @@ export function Tableros() {
       </div>
 
       {nuevo && (
-        <div className="velo" onClick={() => setNuevo(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <Velo alCerrar={() => setNuevo(false)}>
+          <div className="modal">
             <header>Nuevo tablero</header>
             <div className="cont">
               <div className="campo">
@@ -127,7 +128,7 @@ export function Tableros() {
               </button>
             </footer>
           </div>
-        </div>
+        </Velo>
       )}
     </div>
   )

@@ -19,6 +19,7 @@ import {
   useVentanas,
 } from '../api/conexiones'
 import { HORARIOS } from '../api/flujos'
+import { Velo } from '../comunes/Velo'
 
 function cuando(iso: string | null): string {
   if (!iso) return 'nunca'
@@ -206,8 +207,8 @@ export function PanelDataset({
     (acc.cargar.error as Error | null) ?? (acc.recargarRango.error as Error | null)
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal ancho" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal ancho">
         <header>
           {ds.nombre}
           <span className="tenue chico"> · {ds.tabla_origen}</span>
@@ -482,6 +483,6 @@ export function PanelDataset({
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }

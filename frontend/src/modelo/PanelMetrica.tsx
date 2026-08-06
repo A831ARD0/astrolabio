@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useProbarMetrica } from '../api/hooks'
 import type { Definicion, Metrica } from '../api/tipos'
 import type { Accion } from './estado'
+import { Velo } from '../comunes/Velo'
 
 const FORMATOS = ['numero', 'entero', 'moneda', 'porcentaje']
 
@@ -53,8 +54,8 @@ export function PanelMetrica({
   const valida = borrador.nombre.trim() && borrador.expresion.trim() && !nombreRepetido
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal">
         <header>{indice === null ? 'Nueva métrica' : `Métrica ${metrica.nombre}`}</header>
 
         <div className="cont">
@@ -246,7 +247,7 @@ export function PanelMetrica({
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }
 

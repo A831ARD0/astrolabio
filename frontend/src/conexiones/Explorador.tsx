@@ -25,6 +25,7 @@ import {
   useMuestra,
   useTablasOrigen,
 } from '../api/conexiones'
+import { Velo } from '../comunes/Velo'
 
 /** Tipos que sirven como marca incremental o como partición. */
 function esFecha(c: ColumnaOrigen): boolean {
@@ -115,8 +116,8 @@ export function Explorador({
   }
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal ancho" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal ancho">
         <header>Traer una tabla</header>
         <div className="cont explorador">
           <div className="lado">
@@ -377,6 +378,6 @@ export function Explorador({
           </button>
         </footer>
       </div>
-    </div>
+    </Velo>
   )
 }

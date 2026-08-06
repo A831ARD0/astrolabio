@@ -39,6 +39,7 @@ import {
   useProbarConfig,
   useTiposConexion,
 } from '../api/conexiones'
+import { Velo } from '../comunes/Velo'
 
 /** Etiquetas y ayudas de los campos que conocemos. Lo demás se muestra tal cual. */
 const CAMPOS: Record<
@@ -288,8 +289,8 @@ export function DialogoConexion({
   }
 
   return (
-    <div className="velo" onClick={alCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Velo alCerrar={alCerrar}>
+      <div className="modal">
         <header>{editando ? `Editar «${conexion!.nombre}»` : 'Nueva conexión'}</header>
         <div className="cont">
           <div className="campo">
@@ -388,8 +389,12 @@ export function DialogoConexion({
 
           {/* El puente de 32 bits. Solo se ofrece si el servicio está arriba:
               enseñar una casilla que no puede funcionar es peor que no tenerla,
-              porque el error aparece después de llenar el formulario entero. */}
-          {tipo === 'odbc' && perfil && odbc.data?.puente?.activo && (
+              porque el error aparece después de llenar el formulario entero.
+
+              Con el origen «ya tengo un DSN» no se enseña: ahí los bits los
+              decide el DSN elegido, y dos controles que dicen lo mismo se acaban
+              contradiciendo. */}
+          {tipo === 'odbc' && perfil && perfil.clave !== 'dsn' && odbc.data?.puente?.activo && (
             <div className="campo">
               <label className="casilla">
                 <input
@@ -409,19 +414,33 @@ export function DialogoConexion({
             </div>
           )}
 
-          {tipo === 'odbc' && (
-            <span className="chico tenue">
-              DSN {valores.puente ? 'que ve el puente de 32 bits' : 'de 64 bits'}:{' '}
-              <span className="mono">
-                {((valores.puente ? odbc.data?.puente?.dsn : odbc.data?.dsn) ?? [])
-                  .join(', ') || '(ninguno)'}
-              </span>
-            </span>
-          )}
-
           {campos.map((c) => {
             const numero = c.numero || c.clave === 'port'
             const opciones = c.clave === 'driver' ? (perfil?.drivers_detectados ?? []) : []
+
+            // El DSN se elige de lo que hay registrado en la máquina, no se
+            // escribe. Escribirlo obliga a acertar un nombre exacto que está en
+            // otra ventana, y sobre todo deja elegir uno de 32 bits sin marcar el
+            // puente: el formulario se llena entero para acabar en un IM014. Al
+            // salir de la lista, los bits los sabe Astrolabio y activa el puente
+            // solo. Ver `puente32` en el backend.
+            if (c.clave === 'dsn') {
+              return (
+                <SelectorDsn
+                  key={c.clave}
+                  campo={c}
+                  valor={String(valores.dsn ?? '')}
+                  porPuente={!!valores.puente}
+                  de64={odbc.data?.dsn ?? []}
+                  de32={odbc.data?.puente?.activo ? (odbc.data.puente.dsn ?? []) : []}
+                  puenteActivo={!!odbc.data?.puente?.activo}
+                  alElegir={(dsn, puente) =>
+                    setValores((p) => ({ ...p, dsn, puente }))
+                  }
+                />
+              )
+            }
+
             return (
               <div className="campo" key={c.clave}>
                 <label>
@@ -516,6 +535,127 @@ export function DialogoConexion({
           </button>
         </footer>
       </div>
+    </Velo>
+  )
+}
+
+const A_MANO = ' a-mano'
+
+/**
+ * Elegir el DSN de los que hay registrados, en vez de escribirlo.
+ *
+ * En Windows los DSN de 32 y los de 64 bits viven en **dos registros distintos**
+ * y no se ven entre sí. Un proceso de 64 bits no puede cargar un driver de 32,
+ * así que un DSN de 32 solo sirve a través del puente. Escrito a mano eso es
+ * imposible de acertar: el nombre está en otra ventana y nada dice de qué
+ * registro salió.
+ *
+ * Por eso los dos grupos van juntos y **la elección decide el puente**. No queda
+ * forma de pedir un DSN de 32 bits sin él, que era la única manera de acabar en
+ * «la arquitectura del DSN no coincide» con el formulario ya lleno.
+ */
+function SelectorDsn({ campo, valor, porPuente, de64, de32, puenteActivo, alElegir }: {
+  campo: Campo
+  valor: string
+  porPuente: boolean
+  de64: string[]
+  de32: string[]
+  puenteActivo: boolean
+  alElegir: (dsn: string, puente: boolean) => void
+}) {
+  const enLista =
+    (porPuente ? de32 : de64).some((n) => n === valor) && !!valor
+  // Un DSN escrito a mano sigue valiendo: puede haberse creado después de abrir
+  // la pantalla, o ser un DSN de archivo, que no sale en estas listas.
+  const [aMano, setAMano] = useState(!!valor && !enLista)
+
+  return (
+    <div className="campo">
+      <label>
+        {campo.etiqueta}
+        {campo.requerido && <span className="tenue"> *</span>}
+      </label>
+
+      {de64.length === 0 && de32.length === 0 && !aMano ? (
+        <span className="chico tenue">
+          Este servidor no tiene ningún DSN registrado.{' '}
+          <button className="btn chico" onClick={() => setAMano(true)}>
+            Escribir uno a mano
+          </button>
+        </span>
+      ) : (
+        <select
+          value={aMano ? A_MANO : enLista ? `${porPuente ? 32 : 64}:${valor}` : ''}
+          onChange={(e) => {
+            if (e.target.value === A_MANO) {
+              setAMano(true)
+              alElegir('', false)
+              return
+            }
+            setAMano(false)
+            if (!e.target.value) {
+              alElegir('', false)
+              return
+            }
+            // Se parte solo por el PRIMER ':': un DSN puede llevar dos puntos.
+            const corte = e.target.value.indexOf(':')
+            alElegir(e.target.value.slice(corte + 1),
+                     e.target.value.slice(0, corte) === '32')
+          }}
+        >
+          <option value="">(elige el origen registrado en el servidor)</option>
+          {de64.length > 0 && (
+            <optgroup label="64 bits — Astrolabio los carga directo">
+              {de64.map((n) => (
+                <option key={`64:${n}`} value={`64:${n}`}>{n}</option>
+              ))}
+            </optgroup>
+          )}
+          {de32.length > 0 && (
+            <optgroup label="32 bits — se cargan por el puente">
+              {de32.map((n) => (
+                <option key={`32:${n}`} value={`32:${n}`}>{n}</option>
+              ))}
+            </optgroup>
+          )}
+          <option value={A_MANO}>Otro: escribirlo a mano…</option>
+        </select>
+      )}
+
+      {aMano && (
+        <input
+          type="text"
+          value={valor}
+          placeholder="Nombre exacto del DSN"
+          onChange={(e) => alElegir(e.target.value, porPuente)}
+        />
+      )}
+
+      {aMano ? (
+        <label className="casilla chico">
+          <input
+            type="checkbox"
+            checked={porPuente}
+            disabled={!puenteActivo}
+            onChange={(e) => alElegir(valor, e.target.checked)}
+          />
+          Es de 32 bits: cargarlo por el puente
+        </label>
+      ) : (
+        <span className="chico tenue">
+          {porPuente
+            ? 'De 32 bits: la carga la hará el puente, en su propio proceso.'
+            : 'Tiene que estar registrado en la máquina donde corre Astrolabio.'}
+        </span>
+      )}
+
+      {!puenteActivo && (
+        <span className="chico tenue">
+          El puente de 32 bits no está corriendo, así que aquí solo salen los DSN de
+          64. Si el que buscas es de 32, se instala con{' '}
+          <span className="mono">instalar-windows.ps1 -Puente32 -Servicios</span>.
+        </span>
+      )}
     </div>
   )
 }
