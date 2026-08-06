@@ -931,15 +931,39 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 .tarjeta-con .plegar:hover { color: var(--texto); }
 .tarjeta-con .detalle-con { word-break: break-all; }
 
-/* La barra de busqueda y filtros de la pantalla de conexiones. */
+/* La barra de busqueda y filtros de la pantalla de conexiones.
+
+   Se queda pegada arriba al bajar. Con cuarenta conexiones abiertas la pagina
+   mide varias pantallas, y un buscador que hay que ir a buscar subiendo hasta
+   arriba no es un buscador. El que scrollea es `.pagina`, asi que `top: 0` la
+   fija contra el borde de esa caja, justo debajo de la barra de navegacion.
+
+   Los margenes negativos son para que la barra tape el ancho completo: sin
+   ellos, el contenido se ve pasar por los lados a traves de los 26px de relleno
+   de la pagina. */
 .barra-filtros {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 4px 0 2px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--fondo);
+  margin: 4px -26px 2px;
+  padding: 8px 26px;
+  border-bottom: 1px solid var(--borde);
 }
 .barra-filtros input[type='search'] { min-width: 0; }
+
+/* Las cabeceras de tabla tambien son sticky (top: 0). Dentro de esta pagina
+   tienen que quedar POR DEBAJO de la barra, o se le montan encima al pasar. */
+.pagina table.datos th { z-index: 1; }
+
+@media (max-width: 700px) {
+  /* Con la barra en dos o tres renglones, fijarla se come media pantalla. */
+  .barra-filtros { position: static; margin: 4px 0 2px; padding: 0; border: 0; }
+}
 .aviso-caja.ok-caja {
   background: color-mix(in srgb, var(--ok) 12%, transparent);
   color: var(--ok);

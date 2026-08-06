@@ -608,3 +608,57 @@ def test_la_auditoria_registra_el_cambio_sin_el_secreto(cliente, cab_admin,
     eventos = cliente.get("/api/gobierno/auditoria", headers=cab_admin).json()
     fila = next(e for e in eventos["eventos"] if e["accion"] == "conexion_editada")
     assert fila["detalle"]["nombre"] == "archivos_auditada"
+
+
+# --------------------------------------------------------------------------- #
+# El nombre del dataset se propone solo
+# --------------------------------------------------------------------------- #
+
+def test_el_nombre_se_arma_de_la_conexion_y_la_tabla():
+    from app.rutas.conexiones import nombre_sugerido
+
+    assert nombre_sugerido("VW_MATRIZ", None, "cat_conexiones") == \
+        "VW_MATRIZ__cat_conexiones"
+    # El esquema entra solo cuando distingue: en MySQL es la base y suele ser el
+    # mismo para toda la conexion, asi que meterlo siempre alargaria los cuarenta
+    # nombres sin separar nada.
+    assert nombre_sugerido("VW", "VW", "ventas") == "VW__ventas"
+    assert nombre_sugerido("VW", "contab", "ventas") == "VW__contab__ventas"
+
+
+def test_el_nombre_sirve_como_carpeta():
+    """Tambien es la ruta del Parquet: nada de espacios, acentos ni separadores."""
+    from app.rutas.conexiones import nombre_sugerido
+
+    sucio = nombre_sugerido("VW Matriz / Oaxaca", None, "cat.conexiones")
+    assert sucio == "VW_Matriz_Oaxaca__cat_conexiones"
+    assert not (set(sucio) & set(' <>:"/\\|?*.'))
+
+
+@necesita_mysql
+def test_crear_sin_nombre_lo_pone_el_servidor(cliente, cab_admin, conexion_mysql):
+    """
+    Con cuarenta sucursales trayendo las mismas tablas, exigir un nombre obligaba
+    a inventar cuarenta distintos a mano. Ahora se puede omitir.
+    """
+    r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets", headers=cab_admin,
+                     json={"tabla": "cat_marca"})
+    assert r.status_code == 201, r.text
+    assert r.json()["nombre"] == "demo_mysql__cat_marca"
+
+
+@necesita_mysql
+def test_la_misma_tabla_dos_veces_no_choca_de_nombre(cliente, cab_admin,
+                                                     conexion_mysql):
+    """
+    Traer la misma tabla dos veces con distinta configuracion es legitimo --una
+    version con todas las columnas y otra recortada--, asi que no se prohibe: se
+    le busca un nombre libre en vez de rechazarlo.
+    """
+    primero = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets",
+                           headers=cab_admin, json={"tabla": "ventas"})
+    segundo = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets",
+                           headers=cab_admin, json={"tabla": "ventas"})
+    assert (primero.status_code, segundo.status_code) == (201, 201), segundo.text
+    assert primero.json()["nombre"] != segundo.json()["nombre"]
+    assert segundo.json()["nombre"].endswith("_2")

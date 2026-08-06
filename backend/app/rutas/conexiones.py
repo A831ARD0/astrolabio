@@ -9,6 +9,7 @@ una contraseña.
 from __future__ import annotations
 
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -78,7 +79,16 @@ class Programacion(BaseModel):
 
 
 class CrearDataset(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120)
+    """
+    `nombre` es opcional: si no viene, lo arma el servidor como
+    `CONEXION__tabla`.
+
+    Con cuarenta sucursales trayendo las mismas tablas, exigirlo obligaba a
+    inventar cuarenta nombres distintos a mano —y a acertar, porque el nombre es
+    unico en todo el sistema y ademas es la carpeta del Parquet—. Lo que
+    identifica a un dataset es de donde sale: conexion, esquema y tabla.
+    """
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
     esquema: str | None = None
     tabla: str
     columna_incremental: str | None = None
@@ -195,6 +205,42 @@ def _fusionar(guardada: dict, entrante: dict | None,
     for clave in borrar:
         fusionada.pop(clave, None)
     return fusionada
+
+
+#: Lo que puede llevar el nombre de un dataset. Es tambien el nombre de la
+#: carpeta del Parquet, asi que nada de separadores ni de caracteres que Windows
+#: rechace en una ruta.
+_LIMPIO = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def nombre_sugerido(conexion: str, esquema: str | None, tabla: str) -> str:
+    """
+    `CONEXION__tabla`, que es como uno lo escribiria a mano.
+
+    El esquema entra solo cuando hace falta para distinguir: en MySQL el esquema
+    es la base y suele ser el mismo para toda la conexion, asi que meterlo
+    siempre alargaria los cuarenta nombres sin distinguir nada.
+    """
+    partes = [conexion, tabla] if not esquema or esquema == conexion else \
+             [conexion, esquema, tabla]
+    limpio = "__".join(_LIMPIO.sub("_", p).strip("_") for p in partes if p)
+    return limpio[:120].strip("_") or "dataset"
+
+
+def _nombre_libre(sesion, base: str) -> str:
+    """`base`, o `base_2`, `base_3`… hasta encontrar uno que no exista."""
+    if not sesion.scalar(select(func.count()).select_from(Dataset)
+                         .where(Dataset.nombre == base)):
+        return base
+    for n in range(2, 1000):
+        # El sufijo va DENTRO del limite de 120: recortar despues volveria a
+        # chocar justo con el nombre del que se venia huyendo.
+        candidato = f"{base[:120 - len(str(n)) - 1]}_{n}"
+        if not sesion.scalar(select(func.count()).select_from(Dataset)
+                             .where(Dataset.nombre == candidato)):
+            return candidato
+    raise HTTPException(status.HTTP_409_CONFLICT,
+                        f"Hay demasiados datasets llamados '{base}'.")
 
 
 def _conector_de(tipo: str, cfg: dict):
@@ -541,10 +587,17 @@ def muestra(conexion_id: int, tabla: str, sesion: SesionDep,
 def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
                   actor: Usuario = Depends(exigir_rol(Rol.editor))):
     fila = _obtener(sesion, conexion_id)
-    if sesion.scalar(select(func.count()).select_from(Dataset)
-                     .where(Dataset.nombre == cuerpo.nombre)):
-        raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Ya existe un dataset con ese nombre")
+
+    if cuerpo.nombre:
+        if sesion.scalar(select(func.count()).select_from(Dataset)
+                         .where(Dataset.nombre == cuerpo.nombre)):
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "Ya existe un dataset con ese nombre")
+        nombre = cuerpo.nombre
+    else:
+        nombre = _nombre_libre(
+            sesion, nombre_sugerido(fila.nombre, cuerpo.esquema, cuerpo.tabla))
+
     _revisar_columnas(_conector(fila), cuerpo.tabla, cuerpo.esquema,
                       cuerpo.columnas, cuerpo.columna_incremental,
                       cuerpo.particionar_por)
@@ -552,7 +605,7 @@ def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
     ventana_dicha = _revisar_ventana(cuerpo.ventana, cuerpo.particionar_por, zona)
 
     ds = Dataset(
-        nombre=cuerpo.nombre, conexion_id=conexion_id,
+        nombre=nombre, conexion_id=conexion_id,
         esquema_origen=cuerpo.esquema, tabla_origen=cuerpo.tabla,
         columna_incremental=cuerpo.columna_incremental,
         particionar_por=cuerpo.particionar_por, creado_por=actor.id,
