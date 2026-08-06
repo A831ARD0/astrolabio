@@ -1,0 +1,48 @@
+# Bloque de Astrolabio para un Caddy que YA existe en el servidor.
+#
+# El `Caddyfile` de al lado es el de la instalacion con Docker, donde Caddy es
+# solo de Astrolabio. Si ya tienes un Caddy sirviendo otras cosas, no lo
+# reemplaces: copia este bloque dentro de tu Caddyfile y recarga.
+#
+#   caddy reload --config C:\ruta\a\tu\Caddyfile
+#
+# Dos diferencias con la version de Docker, y las dos importan:
+#
+#   - `reverse_proxy 127.0.0.1:8000`, no `api:8000`. Ahi el nombre `api` era el
+#     del contenedor; aqui la API corre en la misma maquina.
+#   - `root` apunta a una ruta de Windows.
+
+# Para una red interna por HTTP basta con esto. Para HTTPS con certificado
+# automatico, cambia `:80` por el nombre del servidor —astrolabio.tuempresa.com—
+# y Caddy lo pide y lo renueva solo.
+:80 {
+	encode gzip zstd
+
+	# Todo lo que empiece por /api va al backend, tal cual.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# El resto es la interfaz. `try_files` con index.html al final es lo que hace
+	# que recargar en /tableros/3 no devuelva 404: las rutas las resuelve React.
+	handle {
+		root * C:\astrolabio\frontend\dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# La aplicacion no carga nada de fuera, asi que la politica puede ser
+		# estricta de verdad. `worker-src blob:` es por el editor de SQL (Monaco),
+		# que arranca sus trabajadores desde un blob; sin eso, la pantalla de ETL
+		# se queda sin resaltado y con un error en la consola.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		# Un ano de HTTPS obligatorio. Descomentalo SOLO cuando sirvas por HTTPS:
+		# con HTTP puro deja el navegador intentando https contra un puerto que no
+		# escucha.
+		# Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

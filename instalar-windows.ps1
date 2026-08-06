@@ -69,6 +69,28 @@ Server 2019:
 2. Lo que decide si algo fallo es $LASTEXITCODE, no que haya habido texto en la
    salida de error.
 #>
+<#
+Deja un archivo legible solo por administradores y SYSTEM.
+
+Por SID y no por nombre: en un Windows en espanol la cuenta se llama
+'BUILTIN\Administradores', y pedirla por su nombre en ingles falla con "No se
+pudieron convertir algunas o todas las referencias de identidad". Los SID
+conocidos son iguales en todos los idiomas.
+#>
+function ProtegerArchivo {
+    param([Parameter(Mandatory)] [string] $Ruta)
+
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)   # sin herencia de la carpeta
+    foreach ($tipo in @([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid,
+                        [System.Security.Principal.WellKnownSidType]::LocalSystemSid)) {
+        $sid = New-Object System.Security.Principal.SecurityIdentifier($tipo, $null)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $sid, 'FullControl', 'Allow')))
+    }
+    Set-Acl -Path $Ruta -AclObject $acl
+}
+
 function Correr {
     param(
         [Parameter(Mandatory)] [string]   $Programa,
@@ -119,6 +141,7 @@ if ($RotarClaveCifrado) {
 
     $destino = Join-Path $Raiz 'CLAVES-GENERADAS.txt'
     "ASTROLABIO_CLAVE_CIFRADO = $nueva" | Set-Content -Path $destino -Encoding UTF8
+    ProtegerArchivo $destino
     Aviso "La nueva quedo en $destino. Guardala y borra el archivo."
     Aviso 'Reinicia el servicio: Restart-Service Astrolabio'
     exit 0
@@ -242,47 +265,48 @@ function FijarSiFalta {
     $actual = [Environment]::GetEnvironmentVariable($nombre, 'Machine')
     if ($actual) {
         Bien "$nombre ya estaba (no se toca)"
-        return
+        return $false
     }
     [Environment]::SetEnvironmentVariable($nombre, $valor, 'Machine')
     Set-Item -Path "Env:$nombre" -Value $valor      # para el resto de esta sesion
     Bien "$nombre generada. $porque"
+    return $true
 }
 
 # NUNCA se pisa una clave que ya existe, y CLAVE_CIFRADO es la razon: cambiarla
 # deja ilegibles TODAS las contrasenas de las conexiones ya guardadas. No hay
 # recuperacion; hay que volver a escribirlas una por una.
-FijarSiFalta 'ASTROLABIO_CLAVE_SECRETA' (((Bytes32) | ForEach-Object { $_.ToString('x2') }) -join '') 'Firma los tokens de sesion.'
-FijarSiFalta 'ASTROLABIO_CLAVE_CIFRADO' ([Convert]::ToBase64String((Bytes32)).Replace('+','-').Replace('/','_')) 'Cifra las credenciales. GUARDALA con el respaldo.'
-FijarSiFalta 'ASTROLABIO_ENTORNO' 'produccion' 'Exige las claves de verdad al arrancar.'
+$generadas = @()
+if (FijarSiFalta 'ASTROLABIO_CLAVE_SECRETA' (((Bytes32) | ForEach-Object { $_.ToString('x2') }) -join '') 'Firma los tokens de sesion.') {
+    $generadas += 'ASTROLABIO_CLAVE_SECRETA'
+}
+if (FijarSiFalta 'ASTROLABIO_CLAVE_CIFRADO' ([Convert]::ToBase64String((Bytes32)).Replace('+','-').Replace('/','_')) 'Cifra las credenciales. GUARDALA con el respaldo.') {
+    $generadas += 'ASTROLABIO_CLAVE_CIFRADO'
+}
+FijarSiFalta 'ASTROLABIO_ENTORNO' 'produccion' 'Exige las claves de verdad al arrancar.' | Out-Null
 
-# La clave NO se imprime en pantalla. Parecia servicial y era un error: la
-# consola se queda en el historial, en las capturas y en el texto que uno pega
-# para pedir ayuda —que es exactamente donde acabo la primera vez—. Se escribe a
-# un archivo con permisos solo para administradores, y se borra al guardarla.
+# El archivo se escribe SOLO si se genero alguna clave en esta corrida. Antes se
+# escribia siempre que no existiera, con lo que volver a correr el guion
+# resucitaba un archivo de secretos que ya se habia guardado y borrado.
 $archivoClaves = Join-Path $Raiz 'CLAVES-GENERADAS.txt'
 
-if (-not (Test-Path $archivoClaves)) {
-    @(
+if ($generadas.Count -gt 0) {
+    # La clave NO se imprime en pantalla: la consola queda en el historial, en
+    # las capturas y en el texto que uno pega para pedir ayuda.
+    $lineas = @(
         'Claves de Astrolabio generadas por instalar-windows.ps1.',
         '',
         'Guardalas en el gestor de secretos y BORRA este archivo.',
         'Sin CLAVE_CIFRADO, un respaldo restaura todo menos las contrasenas de',
         'las conexiones, y no hay forma de recuperarlas.',
-        '',
-        "ASTROLABIO_CLAVE_SECRETA = $([Environment]::GetEnvironmentVariable('ASTROLABIO_CLAVE_SECRETA','Machine'))",
-        "ASTROLABIO_CLAVE_CIFRADO = $([Environment]::GetEnvironmentVariable('ASTROLABIO_CLAVE_CIFRADO','Machine'))"
-    ) | Set-Content -Path $archivoClaves -Encoding UTF8
-
-    # Solo administradores y SYSTEM. Sin herencia: la carpeta del repositorio
-    # suele ser legible por todo el mundo.
-    $acl = New-Object System.Security.AccessControl.FileSecurity
-    $acl.SetAccessRuleProtection($true, $false)
-    foreach ($quien in @('BUILTIN\Administrators', 'NT AUTHORITY\SYSTEM')) {
-        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $quien, 'FullControl', 'Allow')))
+        ''
+    )
+    foreach ($clave in $generadas) {
+        $lineas += "$clave = $([Environment]::GetEnvironmentVariable($clave,'Machine'))"
     }
-    Set-Acl -Path $archivoClaves -AclObject $acl
+    $lineas | Set-Content -Path $archivoClaves -Encoding UTF8
+
+    ProtegerArchivo $archivoClaves
 
     Aviso "Las claves quedaron en: $archivoClaves"
     Aviso 'Copialas al gestor de secretos y BORRA ese archivo. No se imprimen'

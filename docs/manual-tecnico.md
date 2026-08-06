@@ -411,12 +411,23 @@ nssm start Astrolabio
   (`nssm set Astrolabio ObjectName <dominio\cuenta> <clave>`), con permiso de
   escritura solo sobre `C:\astrolabio\backend\datos`.
 
-Delante, Caddy —que en Windows es un solo `caddy.exe`— con el `Caddyfile` del
-repositorio, cambiando `root * /srv` por `root * C:\astrolabio\frontend\dist`:
+Delante va Caddy, que en Windows es un solo `caddy.exe`. Hay un
+[`Caddyfile.windows`](../Caddyfile.windows) listo, con las dos diferencias que
+importan frente al de Docker: `reverse_proxy 127.0.0.1:8000` en vez del nombre
+del contenedor, y `root` con una ruta de Windows.
+
+**Si ya tienes un Caddy** sirviendo otras cosas, no lo reemplaces: copia el
+bloque de `Caddyfile.windows` dentro de tu Caddyfile y recarga.
+
+```powershell
+caddy reload --config C:\ruta\a\tu\Caddyfile
+```
+
+**Si no tenías Caddy**, baja `caddy.exe` y regístralo como servicio:
 
 ```powershell
 nssm install AstrolabioWeb C:\caddy\caddy.exe
-nssm set AstrolabioWeb AppParameters "run --config C:\astrolabio\Caddyfile"
+nssm set AstrolabioWeb AppParameters "run --config C:\astrolabio\Caddyfile.windows"
 nssm start AstrolabioWeb
 ```
 
