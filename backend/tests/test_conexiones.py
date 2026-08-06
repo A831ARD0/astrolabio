@@ -439,3 +439,134 @@ def test_un_archivo_con_columna_incremental_si_es_incremental(cliente, cab_admin
     assert segunda["modo"] == "incremental"
     assert segunda["filas"] == 0
     assert segunda["filas_totales"] == 2, "se duplicaron las filas"
+
+
+# --------------------------------------------------------------------------- #
+# Editar una conexion
+# --------------------------------------------------------------------------- #
+
+def test_fusionar_conserva_el_secreto_que_llega_vacio():
+    """
+    La regla que sostiene todo lo demas: la API nunca devuelve la contraseña, asi
+    que el formulario la enseña vacia. Si un campo vacio pisara al guardado, editar
+    el puerto dejaria la conexion sin credenciales.
+    """
+    from app.rutas.conexiones import _fusionar
+
+    guardada = {"host": "viejo", "user": "app", "password": "secreta"}
+    r = _fusionar(guardada, {"host": "nuevo", "password": ""}, [])
+    assert r == {"host": "nuevo", "user": "app", "password": "secreta"}
+
+
+def test_fusionar_solo_pisa_lo_que_llega():
+    from app.rutas.conexiones import _fusionar
+
+    r = _fusionar({"host": "a", "port": 3306}, {"port": 3307}, [])
+    assert r == {"host": "a", "port": 3307}
+
+
+def test_fusionar_escribe_el_secreto_nuevo_cuando_viene_lleno():
+    from app.rutas.conexiones import _fusionar
+
+    r = _fusionar({"password": "vieja"}, {"password": "nueva"}, [])
+    assert r["password"] == "nueva"
+
+
+def test_fusionar_borra_el_secreto_solo_si_se_pide_por_su_nombre():
+    """Quitar una credencial es explicito: no hay forma de hacerlo sin querer."""
+    from app.rutas.conexiones import _fusionar
+
+    r = _fusionar({"host": "a", "password": "vieja"}, {}, ["password"])
+    assert r == {"host": "a"}
+
+
+def test_editar_el_nombre_no_pierde_la_configuracion(cliente, cab_admin,
+                                                     conexion_archivos):
+    r = cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_admin,
+                      json={"nombre": "archivos_renombrada"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["nombre"] == "archivos_renombrada"
+    assert d["config"]["ruta_base"]
+
+
+def test_editar_no_puede_chocar_con_otro_nombre(cliente, cab_admin,
+                                                conexion_archivos,
+                                                carpeta_archivos):
+    cliente.post("/api/conexiones", headers=cab_admin, json={
+        "nombre": "ya_existe", "tipo": "archivo",
+        "config": {"ruta_base": str(carpeta_archivos)},
+    })
+    r = cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_admin,
+                      json={"nombre": "ya_existe"})
+    assert r.status_code == 409
+
+
+def test_un_cambio_que_rompe_la_conexion_no_se_guarda(cliente, cab_admin,
+                                                      conexion_archivos):
+    """
+    Igual que al crear: si no conecta, no se guarda. Una conexion rota guardada es
+    una carga que falla de madrugada.
+    """
+    r = cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_admin,
+                      json={"config": {"ruta_base": "/no/existe/en/ningun/lado"}})
+    assert r.status_code == 400
+    assert "no se guardo" in r.json()["detail"].lower()
+
+    # Y la de verdad sigue sirviendo.
+    assert cliente.post(f"/api/conexiones/{conexion_archivos}/probar",
+                        headers=cab_admin).json()["ok"] is True
+
+
+def test_editar_una_conexion_conserva_sus_datasets(cliente, cab_admin,
+                                                   conexion_archivos):
+    """
+    El motivo de que esto exista. Antes, cambiar una contraseña obligaba a borrar
+    la conexion y recrearla, y los datasets se iban con ella en cascada: su
+    historial, sus horarios y sus columnas elegidas.
+    """
+    cliente.post(f"/api/conexiones/{conexion_archivos}/datasets", headers=cab_admin,
+                 json={"nombre": "ventas_que_sobrevive", "tabla": "ventas.csv"})
+
+    assert cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_admin,
+                         json={"nombre": "archivos_tras_rotar"}).status_code == 200
+
+    nombres = {d["nombre"] for d in
+               cliente.get("/api/conexiones/datasets/lista",
+                           headers=cab_admin).json()["datasets"]}
+    assert "ventas_que_sobrevive" in nombres
+
+
+def test_editar_no_devuelve_la_contrasena(cliente, cab_admin, conexion_mysql):
+    r = cliente.patch(f"/api/conexiones/{conexion_mysql}", headers=cab_admin,
+                      json={"config": {"password": "otra-cosa-que-no-se-ve"}})
+    # Con o sin exito, la respuesta jamas trae el secreto.
+    assert "otra-cosa-que-no-se-ve" not in r.text
+
+
+def test_probar_un_cambio_no_lo_guarda(cliente, cab_admin, conexion_archivos):
+    r = cliente.post(f"/api/conexiones/{conexion_archivos}/probar-cambio",
+                     headers=cab_admin,
+                     json={"config": {"ruta_base": "/no/existe"}})
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+
+    # No se guardo: la conexion original sigue conectando.
+    assert cliente.post(f"/api/conexiones/{conexion_archivos}/probar",
+                        headers=cab_admin).json()["ok"] is True
+
+
+def test_un_editor_no_puede_editar_conexiones(cliente, cab_editor,
+                                              conexion_archivos):
+    """Crear conexiones es de administrador; cambiarlas, tambien."""
+    assert cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_editor,
+                         json={"nombre": "otro"}).status_code == 403
+
+
+def test_la_auditoria_registra_el_cambio_sin_el_secreto(cliente, cab_admin,
+                                                        conexion_archivos):
+    cliente.patch(f"/api/conexiones/{conexion_archivos}", headers=cab_admin,
+                  json={"nombre": "archivos_auditada"})
+    eventos = cliente.get("/api/gobierno/auditoria", headers=cab_admin).json()
+    fila = next(e for e in eventos["eventos"] if e["accion"] == "conexion_editada")
+    assert fila["detalle"]["nombre"] == "archivos_auditada"

@@ -25,10 +25,12 @@ function FilaConexion({
   con,
   esAdmin,
   alExplorar,
+  alEditar,
 }: {
   con: Conexion
   esAdmin: boolean
   alExplorar: () => void
+  alEditar: () => void
 }) {
   const probar = useProbarConexion(con.id)
   const borrar = useBorrarConexion()
@@ -55,6 +57,13 @@ function FilaConexion({
           >
             {probar.isPending ? 'Probando…' : 'Probar'}
           </button>
+          {/* Editar existe para que rotar una contraseña no obligue a borrar la
+              conexión y recrearla, llevándose sus datasets por delante. */}
+          {esAdmin && (
+            <button className="btn chico" onClick={alEditar}>
+              Editar
+            </button>
+          )}
           {esAdmin && (
             <button className="btn chico peligro" onClick={() => setConfirmar(true)}>
               Borrar
@@ -116,6 +125,7 @@ export function Conexiones() {
   const datasets = useDatasets()
 
   const [nueva, setNueva] = useState(false)
+  const [editando, setEditando] = useState<Conexion | null>(null)
   const [explorando, setExplorando] = useState<number | null>(null)
   const [abierto, setAbierto] = useState<Dataset | null>(null)
 
@@ -161,6 +171,7 @@ export function Conexiones() {
             con={c}
             esAdmin={esAdmin}
             alExplorar={() => setExplorando(c.id)}
+            alEditar={() => setEditando(c)}
           />
         ))}
       </div>
@@ -240,6 +251,15 @@ export function Conexiones() {
       )}
 
       {nueva && <DialogoConexion alCerrar={() => setNueva(false)} />}
+      {/* `key`: el diálogo toma su estado inicial de la conexión, así que abrir
+          otra tiene que montarlo de nuevo, no reutilizar el formulario anterior. */}
+      {editando && (
+        <DialogoConexion
+          key={editando.id}
+          conexion={editando}
+          alCerrar={() => setEditando(null)}
+        />
+      )}
       {explorando !== null && (
         <Explorador
           key={explorando}

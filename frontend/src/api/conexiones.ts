@@ -124,6 +124,40 @@ export function useCrearConexion() {
   })
 }
 
+/**
+ * Cambio parcial de una conexión.
+ *
+ * Un secreto vacío **no** se manda: significa "no lo toqué", y el backend conserva
+ * el guardado. Es la única lectura posible cuando la API nunca devuelve la
+ * contraseña y el formulario la enseña en blanco.
+ */
+export interface CambioConexion {
+  nombre?: string
+  config?: Record<string, unknown>
+  /** Para quitar una credencial de verdad hay que nombrarla. */
+  borrar_secretos?: string[]
+}
+
+/** Probar un cambio con los secretos que ya están guardados. No persiste nada. */
+export function useProbarCambio(id: number) {
+  return useMutation({
+    mutationFn: (v: CambioConexion) =>
+      api.post<Prueba>(`/conexiones/${id}/probar-cambio`, v),
+  })
+}
+
+export function useEditarConexion(id: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: CambioConexion) => api.patch<Conexion>(`/conexiones/${id}`, v),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: clavesCon.lista })
+      // El nombre de la conexión sale en el panel de datasets.
+      qc.invalidateQueries({ queryKey: clavesCon.datasets })
+    },
+  })
+}
+
 export function useProbarConexion(id: number) {
   return useMutation({
     mutationFn: () => api.post<Prueba>(`/conexiones/${id}/probar`),

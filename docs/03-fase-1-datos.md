@@ -532,13 +532,53 @@ Verificado por ODBC con `ultimos_dias:3000` sobre `tbl_movimientos`: 242,109 fil
 
 ---
 
+## 10.4 Editar una conexión, y el campo que no se puede rellenar
+
+Durante bastante tiempo una conexión solo se podía crear y borrar. Parecía
+aceptable hasta que se puso delante el caso real: **una contraseña que caduca cada
+noventa días**. Borrar la conexión y volver a crearla se lleva por delante, en
+cascada, todos sus datasets —su historial de cargas, sus horarios y sus columnas
+elegidas—, y eso no lo puede costar rotar una credencial.
+
+Lo que hace difícil el formulario de edición es una decisión anterior: **la API no
+devuelve nunca las contraseñas**, y la cadena de ODBC la devuelve enmascarada
+(`PWD=***`). O sea que hay campos que no se pueden rellenar con su valor real.
+
+La primera idea —enseñarlos vacíos y guardar lo que haya— es exactamente el fallo
+que hay que evitar: quien entra a cambiar el puerto se va con la conexión sin
+contraseña, y lo descubre a las seis de la mañana. La segunda —obligar a reescribir
+la contraseña siempre— convierte cualquier retoque en una búsqueda por el gestor de
+credenciales.
+
+La regla que resuelve las dos, en las dos capas:
+
+- **En el navegador se manda solo lo que se tocó.** Se guarda el estado inicial y
+  lo que viaja es la diferencia. Un campo que nadie tocó no viaja, así que la
+  máscara de la cadena de ODBC no se puede guardar ni por accidente.
+- **En el servidor, un secreto vacío conserva el guardado** (`_fusionar`). Es el
+  cinturón por debajo del tirante: un cliente que no sea esta interfaz tampoco
+  puede borrar una credencial sin querer. Para quitarla de verdad hay que nombrarla
+  en `borrar_secretos`, que es explícito a propósito.
+
+Lo demás sigue las reglas que ya tenía la pantalla. Se prueba antes de guardar
+—con los secretos guardados ya fusionados, por eso hay un `probar-cambio` aparte
+de `probar-config`— y un cambio que no conecta no se guarda. Cambiar **solo** el
+nombre no pide prueba: el nombre es una etiqueta nuestra, el servidor de datos no lo
+ve, y exigir una prueba por una errata enseña que el botón es un trámite.
+
+El tipo y, en ODBC, el origen quedan fijos. No es una limitación pendiente de
+levantar: cambiarlos cambia el juego de campos entero y deja sin sentido a los
+datasets que cuelgan de la conexión. Eso es crear otra, no editar esta, y así lo
+dice la pantalla en lugar de desactivar el desplegable en silencio.
+
+---
+
 ## 11. Lo que falta en esta fase
 
 | Pendiente | Qué se necesita |
 |---|---|
 | **Más conectores nativos** | PostgreSQL, SQL Server y SQLite. El molde está en `conectores/base.py`; hoy van por ODBC, que es unas veinte veces más lento |
 | **Una tabla repartida en N orígenes, a un solo dataset** | frecuente cuando cada sucursal tiene su propia base: hoy son N datasets y una transformación que los une. Sería una carga con lista de orígenes |
-| **Editar una conexión** | hoy se crea y se borra; cambiar una contraseña obliga a crearla de nuevo |
 | **Perfilado al explorar** | nulos y distintos por columna antes de elegir la partición; hoy se ve la muestra, que ayuda pero no basta |
 | **Subir un archivo desde el navegador** | el conector de archivos lee una carpeta del servidor; no hay cómo dejar caer un Excel |
 

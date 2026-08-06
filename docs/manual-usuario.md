@@ -65,8 +65,25 @@ Si un botón está apagado, la línea de al lado dice por qué. Siempre.
 ### Las contraseñas
 
 Se guardan cifradas y **no vuelven a salir nunca**, ni enmascaradas de forma
-reversible. Hoy no se puede editar una conexión: para cambiar una contraseña hay
-que crearla de nuevo. Está en la lista de pendientes.
+reversible.
+
+Para cambiar una —rotar una contraseña, mover el servidor de máquina— está el botón
+**Editar** de la conexión. Dos cosas que conviene saber:
+
+- **El campo de contraseña sale en blanco, y en blanco significa "no la toques".**
+  No se puede mostrar la guardada, así que se enseña vacía. Solo se cambia si
+  escribes una nueva. Cambiar el puerto no te obliga a volver a teclear la
+  contraseña.
+- **El tipo y, en ODBC, el origen no se cambian.** Serían otra conexión, y los
+  datasets que cuelgan de esta dejarían de tener sentido. Para eso, crea una nueva.
+
+Editar prueba antes de guardar, igual que crear: si el cambio no conecta, no se
+guarda y la conexión anterior sigue funcionando. Cambiar solo el nombre no necesita
+prueba —el nombre es una etiqueta tuya, el servidor de datos no lo ve.
+
+> Antes esto no existía y había que borrar la conexión y volver a crearla, **lo que
+> se llevaba por delante todos sus datasets**: su historial, sus horarios y sus
+> columnas elegidas.
 
 > **Pide siempre un usuario de solo lectura** para cada origen. Astrolabio nunca
 > escribe en tus sistemas, y un usuario con permisos de escritura solo puede

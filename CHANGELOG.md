@@ -5,9 +5,25 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
-Lo que falta y está decidido que se hará: más conectores (PostgreSQL, SQL Server,
-SQLite), editar una conexión existente, y que el fin de un flujo dispare otro flujo.
-La lista completa vive al final de cada documento de fase.
+### Agregado
+
+- **Editar una conexión** (`PATCH /api/conexiones/{id}`) y probar el cambio sin
+  guardarlo (`POST /api/conexiones/{id}/probar-cambio`). Antes, rotar una
+  contraseña obligaba a borrar la conexión y volver a crearla, y con ella se iban
+  en cascada todos sus datasets: su historial, sus horarios y sus columnas
+  elegidas.
+
+  Un secreto que llega vacío **conserva el guardado**; para quitarlo hay que
+  nombrarlo en `borrar_secretos`. La interfaz manda solo los campos que se
+  tocaron, porque la API no puede devolver las contraseñas y enmascara la cadena
+  de ODBC: reenviar el formulario entero guardaría la máscara.
+
+  El tipo y el perfil de ODBC quedan fijos: cambiarlos sería otra conexión.
+
+Lo que falta y está decidido que se hará: más conectores nativos (PostgreSQL,
+SQL Server, SQLite), una barra de selecciones con atrás y adelante, y que el fin de
+un flujo dispare otro flujo. La lista completa vive al final de cada documento de
+fase.
 
 ## [0.1.0] — 2026-08-05
 

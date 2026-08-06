@@ -39,6 +39,25 @@ class CrearConexion(BaseModel):
     config: dict
 
 
+class EditarConexion(BaseModel):
+    """
+    Cambio parcial. Las claves que vengan en `config` pisan a las guardadas; las
+    que no vengan se quedan como estaban.
+
+    **Un secreto vacío significa "no lo toques", nunca "déjalo en blanco".** La API
+    no devuelve las contraseñas, así que el formulario las enseña vacías: si un
+    campo vacío borrara el secreto, editar el puerto dejaría la conexión sin
+    contraseña. Para quitarlo de verdad se nombra en `borrar_secretos`.
+
+    El tipo no se puede cambiar. Convertir una conexión de MySQL en una de archivos
+    no es editar: es otra conexión, y los datasets que cuelgan de ella dejarían de
+    tener sentido.
+    """
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    config: dict | None = None
+    borrar_secretos: list[str] = Field(default_factory=list)
+
+
 class ConexionSalida(BaseModel):
     id: int
     nombre: str
@@ -150,6 +169,38 @@ def _revisar_ventana(ventana: str | None, particion: str | None,
     try:
         return ventanas.describir(ventana, zona)
     except VentanaInvalida as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+
+def _fusionar(guardada: dict, entrante: dict | None,
+              borrar: list[str]) -> dict:
+    """
+    La configuración guardada con los cambios encima.
+
+    Tres reglas, y la segunda es la que importa:
+
+    1. Una clave que viene, pisa.
+    2. Un **secreto** que viene vacío, no pisa: se conserva el guardado. El
+       formulario no puede mostrar la contraseña, así que llega vacía siempre que
+       no se reescriba, y tomarla al pie de la letra dejaría sin credenciales a
+       cualquier conexión que se editara por otro motivo.
+    3. Un secreto nombrado en `borrar_secretos` se va. Es la única forma de
+       quitarlo, y es explícita a propósito.
+    """
+    fusionada = dict(guardada)
+    for clave, valor in (entrante or {}).items():
+        if clave.lower() in SECRETOS and not str(valor or "").strip():
+            continue
+        fusionada[clave] = valor
+    for clave in borrar:
+        fusionada.pop(clave, None)
+    return fusionada
+
+
+def _conector_de(tipo: str, cfg: dict):
+    try:
+        return crear(tipo, cfg)
+    except ErrorConector as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
 
 
@@ -296,6 +347,86 @@ def probar(conexion_id: int, sesion: SesionDep,
            _: Usuario = Depends(exigir_rol(Rol.editor))):
     r = _conector(_obtener(sesion, conexion_id)).probar()
     return {"ok": r.ok, "mensaje": r.mensaje, "detalle": r.detalle}
+
+
+@router.post("/{conexion_id}/probar-cambio")
+def probar_cambio(conexion_id: int, cuerpo: EditarConexion, sesion: SesionDep,
+                  actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Prueba un cambio sin guardarlo, con los secretos que ya estaban.
+
+    `probar-config` no sirve para editar: no conoce la contraseña guardada, así que
+    probar un cambio de puerto obligaría a volver a escribirla solo para poder
+    pulsar el botón. Aquí se fusiona primero y se prueba lo que de verdad se
+    guardaría.
+    """
+    fila = _obtener(sesion, conexion_id)
+    guardada = json.loads(descifrar(fila.config_cifrada))
+    cfg = _fusionar(guardada, cuerpo.config, cuerpo.borrar_secretos)
+    conector = _conector_de(fila.tipo, cfg)
+
+    r = conector.probar()
+    registrar(sesion, accion="conexion_probada", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="conexion", objeto_id=fila.id,
+              detalle={"nombre": fila.nombre, "tipo": fila.tipo,
+                       "config": conector.config_publica(), "ok": r.ok})
+    return {"ok": r.ok, "mensaje": r.mensaje, "detalle": r.detalle}
+
+
+@router.patch("/{conexion_id}", response_model=ConexionSalida)
+def editar_conexion(conexion_id: int, cuerpo: EditarConexion, sesion: SesionDep,
+                    actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Cambia el nombre o la configuración de una conexión ya creada.
+
+    Existe porque sin esto rotar una contraseña obligaba a borrar la conexión y
+    volver a crearla, **y con ella se iban todos sus datasets en cascada**: el
+    historial de cargas, los horarios y las columnas elegidas. Una contraseña que
+    caduca cada noventa días no puede costar eso.
+
+    Se prueba antes de guardar, igual que al crear: una conexión guardada que no
+    conecta es una carga que falla de madrugada.
+    """
+    fila = _obtener(sesion, conexion_id)
+    guardada = json.loads(descifrar(fila.config_cifrada))
+    antes = _conector_de(fila.tipo, guardada).config_publica()
+
+    if cuerpo.nombre and cuerpo.nombre != fila.nombre:
+        if sesion.scalar(select(func.count()).select_from(Conexion)
+                         .where(Conexion.nombre == cuerpo.nombre,
+                                Conexion.id != conexion_id)):
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "Ya existe una conexion con ese nombre")
+
+    cfg = _fusionar(guardada, cuerpo.config, cuerpo.borrar_secretos)
+    conector = _conector_de(fila.tipo, cfg)
+
+    prueba = conector.probar()
+    if not prueba.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"No se guardo: la conexion falla. {prueba.mensaje}")
+
+    if cuerpo.nombre:
+        fila.nombre = cuerpo.nombre
+    fila.config_cifrada = cifrar(json.dumps(cfg))
+    sesion.flush()
+
+    despues = conector.config_publica()
+    # Solo lo publico: el diff jamas puede delatar un secreto, ni por su longitud.
+    cambios = {k: [antes.get(k), despues.get(k)]
+               for k in set(antes) | set(despues)
+               if antes.get(k) != despues.get(k)}
+    secretos_tocados = sorted(
+        {k for k in (cuerpo.config or {})
+         if k.lower() in SECRETOS and str((cuerpo.config or {})[k] or "").strip()}
+        | set(cuerpo.borrar_secretos))
+
+    registrar(sesion, accion="conexion_editada", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="conexion", objeto_id=fila.id,
+              detalle={"nombre": fila.nombre, "tipo": fila.tipo,
+                       "cambios": cambios,
+                       "secretos_cambiados": secretos_tocados})
+    return _salida(fila)
 
 
 @router.delete("/{conexion_id}", status_code=204)

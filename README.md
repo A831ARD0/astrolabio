@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="Licencia AGPL-3.0" src="https://img.shields.io/badge/licencia-AGPL--3.0-4c8dff"></a>
-  <img alt="296 pruebas" src="https://img.shields.io/badge/pruebas-296%20pasando-3fb950">
+  <img alt="308 pruebas" src="https://img.shields.io/badge/pruebas-308%20pasando-3fb950">
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-4c8dff">
   <img alt="En español" src="https://img.shields.io/badge/c%C3%B3digo-en%20espa%C3%B1ol-98a2b3">
 </p>
@@ -128,13 +128,13 @@ backend/demo/  Datos ficticios y semilla para ver el producto funcionando
 
 ## Estado
 
-Funciona de punta a punta y está probado: **296 pruebas** automatizadas, incluidas
+Funciona de punta a punta y está probado: **308 pruebas** automatizadas, incluidas
 las que hablan con un MySQL real y las que comprueban que la seguridad por fila
 filtra de verdad.
 
 Lo que falta está escrito, sin adornos, en cada documento de fase. Lo más notable:
-más conectores (PostgreSQL, SQL Server, SQLite), editar una conexión existente, y
-que el fin de un flujo dispare otro flujo.
+más conectores nativos (PostgreSQL, SQL Server, SQLite), una barra de selecciones
+con atrás y adelante, y que el fin de un flujo dispare otro flujo.
 
 ## Licencia
 

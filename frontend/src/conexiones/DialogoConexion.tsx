@@ -1,5 +1,6 @@
 /**
- * Nueva conexión: **probar y luego guardar**, en ese orden y sin atajo.
+ * Nueva conexión —y editar una existente—: **probar y luego guardar**, en ese
+ * orden y sin atajo.
  *
  * No se puede guardar una conexión que no se ha probado, y cualquier cambio en la
  * configuración invalida la prueba anterior. La comprobación no es "¿se pulsó el
@@ -16,16 +17,25 @@
  *
  * Los campos obligatorios los dice el servidor (`/conexiones/tipos`), no una lista
  * escrita aquí: cuando se agregue el conector ODBC, este formulario ya lo sabrá.
+ *
+ * **Al editar se manda solo lo que se tocó.** No es una optimización: la API nunca
+ * devuelve las contraseñas y enmascara la cadena de ODBC (`PWD=***`), así que los
+ * campos que guardan un secreto se enseñan en blanco. Mandar el formulario entero
+ * guardaría la máscara y borraría la contraseña de quien entró a cambiar un puerto.
  */
 
 import { useState } from 'react'
 
 import {
+  type CambioConexion,
   type CampoPerfil,
+  type Conexion,
   type CuerpoConexion,
   useCrearConexion,
+  useEditarConexion,
   useOdbcInstalado,
   useOdbcPerfiles,
+  useProbarCambio,
   useProbarConfig,
   useTiposConexion,
 } from '../api/conexiones'
@@ -88,14 +98,48 @@ const NOTAS: Record<string, string> = {
  */
 type Campo = CampoPerfil & { ayuda?: string; numero?: boolean }
 
-export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
-  const tipos = useTiposConexion()
-  const probar = useProbarConfig()
-  const crear = useCrearConexion()
+/**
+ * Los campos que la API no puede devolver con su valor real: los secretos (nunca
+ * viajan) y la cadena de ODBC (viaja enmascarada). Al editar se enseñan en blanco
+ * y en blanco significa "no lo toqué".
+ */
+function noSeMuestra(c: Campo): boolean {
+  return !!c.secreto || c.clave === 'cadena'
+}
 
-  const [nombre, setNombre] = useState('')
-  const [tipo, setTipo] = useState('')
-  const [valores, setValores] = useState<Record<string, unknown>>({})
+export function DialogoConexion({
+  alCerrar,
+  conexion,
+}: {
+  alCerrar: () => void
+  /** Presente = editar esa conexión. Ausente = crear una nueva. */
+  conexion?: Conexion
+}) {
+  const editando = !!conexion
+  const tipos = useTiposConexion()
+  const probarNueva = useProbarConfig()
+  const probarCambio = useProbarCambio(conexion?.id ?? 0)
+  const probar = editando ? probarCambio : probarNueva
+  const crear = useCrearConexion()
+  const editar = useEditarConexion(conexion?.id ?? 0)
+  const guardar = editando ? editar : crear
+
+  /**
+   * De dónde parte el formulario al editar. Se guarda para poder comparar: lo que
+   * se manda es la diferencia contra esto, no el formulario entero.
+   */
+  const [iniciales] = useState<Record<string, unknown>>(() => {
+    if (!conexion) return {}
+    const c = { ...conexion.config }
+    delete c.cadena           // llega como PWD=***; guardarla así sería guardar la máscara
+    return c
+  })
+
+  const [nombre, setNombre] = useState(conexion?.nombre ?? '')
+  // El tipo no se puede cambiar: convertir un MySQL en archivos no es editar, es
+  // otra conexión, y los datasets que cuelgan de ella dejarían de tener sentido.
+  const [tipo, setTipo] = useState(conexion?.tipo ?? '')
+  const [valores, setValores] = useState<Record<string, unknown>>(iniciales)
   /** Huella de la configuración de la última prueba, saliera bien o mal. */
   const [intento, setIntento] = useState<string | null>(null)
   const odbc = useOdbcInstalado(tipo === 'odbc')
@@ -138,11 +182,32 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
         ]
       : []
 
+  // Al editar, un secreto en blanco no es un campo sin llenar: es el que ya está
+  // guardado. Exigirlo obligaría a reescribir la contraseña para cambiar un puerto.
   const faltan = campos.filter(
-    (c) => c.requerido && !String(valores[c.clave] ?? '').trim(),
+    (c) =>
+      c.requerido &&
+      !String(valores[c.clave] ?? '').trim() &&
+      !(editando && noSeMuestra(c)),
   )
   // Sin origen elegido no hay nada que probar: los campos ni se sabe cuáles son.
   const faltaPerfil = tipo === 'odbc' && !perfil
+
+  /** Solo lo que se tocó. Ver la nota de arriba: mandar el resto guarda máscaras. */
+  const cambios: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(valores)) {
+    if (String(v ?? '') !== String(iniciales[k] ?? '')) cambios[k] = v
+  }
+  const cambioNombre = editando && nombre.trim() !== conexion!.nombre
+  const cambioConfig = Object.keys(cambios).length > 0
+  const sinCambios = editando && !cambioConfig && !cambioNombre
+  /**
+   * Cambiar solo el nombre no necesita prueba: el nombre es una etiqueta nuestra,
+   * el servidor de datos no lo ve. Obligar a probar por una errata enseña que el
+   * botón es un trámite.
+   */
+  const soloNombre = editando && cambioNombre && !cambioConfig
+
   const listo = !!nombre.trim() && !!tipo && !faltaPerfil && faltan.length === 0
 
   // El nombre no entra en la huella: es una etiqueta nuestra, no algo que el
@@ -160,6 +225,11 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
     config: valores,
   })
 
+  const cuerpoCambio = (): CambioConexion => ({
+    ...(cambioNombre ? { nombre: nombre.trim() } : {}),
+    ...(cambioConfig ? { config: cambios } : {}),
+  })
+
   /** Qué impide seguir, en palabras. Nunca un botón gris sin explicación. */
   // Lista, no frase: "Falta el nombre y Carpeta" obliga a concordar artículos con
   // etiquetas que vienen del servidor, y sale mal en cuanto hay dos campos.
@@ -173,11 +243,15 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
       ? 'Elige el origen: de eso dependen los campos.'
       : sinLlenar.length > 0
         ? `Falta: ${sinLlenar.join(', ')}.`
-        : probadoOk
-          ? null
-          : intento && !vigente
-            ? 'La configuración cambió. Vuelve a probar.'
-            : 'Prueba la conexión antes de guardar.'
+        : sinCambios
+          ? 'No has cambiado nada.'
+          : soloNombre
+            ? 'Solo cambia el nombre: no hace falta probar.'
+            : probadoOk
+              ? null
+              : intento && !vigente
+                ? 'La configuración cambió. Vuelve a probar.'
+                : 'Prueba la conexión antes de guardar.'
 
   const elegirTipo = (t: string) => {
     setTipo(t)
@@ -204,13 +278,19 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
 
   const probarAhora = () => {
     setIntento(huella)          // se apunta ANTES: si falla, el fallo también es de esta
-    probar.mutate(cuerpo())
+    if (editando) probarCambio.mutate(cuerpoCambio())
+    else probarNueva.mutate(cuerpo())
+  }
+
+  const guardarAhora = () => {
+    if (editando) editar.mutate(cuerpoCambio(), { onSuccess: alCerrar })
+    else crear.mutate(cuerpo(), { onSuccess: alCerrar })
   }
 
   return (
     <div className="velo" onClick={alCerrar}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <header>Nueva conexión</header>
+        <header>{editando ? `Editar «${conexion!.nombre}»` : 'Nueva conexión'}</header>
         <div className="cont">
           <div className="campo">
             <label>Nombre</label>
@@ -227,15 +307,29 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
 
           <div className="campo">
             <label>Tipo</label>
-            <select value={tipo} onChange={(e) => elegirTipo(e.target.value)}>
-              <option value="">(elige uno)</option>
-              {tipos.data?.tipos.map((t) => (
-                <option key={t.tipo} value={t.tipo}>
-                  {TIPOS_NOMBRE[t.tipo] ?? t.tipo}
-                </option>
-              ))}
-            </select>
-            {tipos.isLoading && <span className="chico tenue">Cargando tipos…</span>}
+            {editando ? (
+              <>
+                <input type="text" value={TIPOS_NOMBRE[tipo] ?? tipo} disabled />
+                <span className="chico tenue">
+                  El tipo no se cambia. Sería otra conexión, y los datasets que
+                  cuelgan de esta dejarían de tener sentido.
+                </span>
+              </>
+            ) : (
+              <>
+                <select value={tipo} onChange={(e) => elegirTipo(e.target.value)}>
+                  <option value="">(elige uno)</option>
+                  {tipos.data?.tipos.map((t) => (
+                    <option key={t.tipo} value={t.tipo}>
+                      {TIPOS_NOMBRE[t.tipo] ?? t.tipo}
+                    </option>
+                  ))}
+                </select>
+                {tipos.isLoading && (
+                  <span className="chico tenue">Cargando tipos…</span>
+                )}
+              </>
+            )}
           </div>
 
           {NOTAS[tipo] && <div className="aviso-caja chico">{NOTAS[tipo]}</div>}
@@ -243,7 +337,13 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
           {tipo === 'odbc' && (
             <div className="campo">
               <label>Origen</label>
-              <select value={String(valores.perfil ?? '')} onChange={(e) => elegirPerfil(e.target.value)}>
+              <select
+                value={String(valores.perfil ?? '')}
+                // Al editar queda fijo, por lo mismo que el tipo: cambiarlo cambia
+                // el juego de campos entero, y eso no es editar esta conexión.
+                disabled={editando}
+                onChange={(e) => elegirPerfil(e.target.value)}
+              >
                 <option value="">(elige el sistema del que vas a traer datos)</option>
                 {perfiles.data?.perfiles.map((p) => (
                   <option key={p.clave} value={p.clave}>
@@ -253,7 +353,9 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
                 ))}
               </select>
               <span className="chico tenue">
-                De esto dependen los campos: cada driver llama distinto a lo mismo.
+                {editando
+                  ? 'El origen no se cambia: de él dependen los campos.'
+                  : 'De esto dependen los campos: cada driver llama distinto a lo mismo.'}
               </span>
             </div>
           )}
@@ -317,6 +419,11 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
                   <input
                     type={c.secreto ? 'password' : numero ? 'number' : 'text'}
                     value={String(valores[c.clave] ?? '')}
+                    // Al editar, en blanco es "no lo toqué": lo que hay guardado se
+                    // queda. Decirlo aquí evita la duda de si se va a borrar.
+                    placeholder={
+                      editando && noSeMuestra(c) ? 'Guardado — déjalo en blanco para no cambiarlo' : ''
+                    }
                     onChange={(e) => {
                       const v = numero
                         ? e.target.value === ''
@@ -353,8 +460,8 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
           {probar.isError && vigente && (
             <div className="error-caja">{(probar.error as Error).message}</div>
           )}
-          {crear.isError && (
-            <div className="error-caja">{(crear.error as Error).message}</div>
+          {guardar.isError && (
+            <div className="error-caja">{(guardar.error as Error).message}</div>
           )}
         </div>
         <footer>
@@ -375,10 +482,10 @@ export function DialogoConexion({ alCerrar }: { alCerrar: () => void }) {
             className="btn primario"
             // Sin `title`: el motivo va en la pista, que se lee siempre. Un título
             // que suplanta el nombre del botón se lo quita a quien usa lector.
-            disabled={!probadoOk || crear.isPending}
-            onClick={() => crear.mutate(cuerpo(), { onSuccess: alCerrar })}
+            disabled={(!probadoOk && !soloNombre) || guardar.isPending}
+            onClick={guardarAhora}
           >
-            {crear.isPending ? 'Guardando…' : 'Guardar'}
+            {guardar.isPending ? 'Guardando…' : 'Guardar'}
           </button>
         </footer>
       </div>

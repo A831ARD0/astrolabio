@@ -62,7 +62,7 @@ npm run dev
 ### Las pruebas
 
 ```bash
-cd backend && ./venv/bin/python -m pytest -q          # 296
+cd backend && ./venv/bin/python -m pytest -q          # 308
 ```
 
 Si la base de demostración no existe, `pytest` la genera solo. Con
@@ -182,7 +182,18 @@ un respaldo que parece bueno y no lo es.
 
 > **Guarda `CLAVE_CIFRADO` junto al respaldo, en un gestor de secretos.** Un
 > respaldo de metadatos sin esa clave restaura todo menos las contraseñas de las
-> conexiones, y hay que volver a crearlas una por una.
+> conexiones, y hay que escribirlas una por una en **Conexiones → Editar**.
+
+### Rotar la contraseña de un origen
+
+En **Conexiones → Editar**, se escribe la nueva y se guarda. El resto de los campos
+se quedan como estaban y **los datasets de esa conexión no se tocan**: conservan su
+historial, su horario y sus columnas elegidas.
+
+Un campo de contraseña en blanco significa «no la cambies», nunca «déjala vacía»:
+la API no puede devolver la guardada, así que el formulario la enseña vacía. Editar
+prueba la conexión antes de guardar, así que una contraseña mal copiada se detecta
+ahí y no en la carga de las 6 de la mañana.
 
 Restaurar: parar el servicio, copiar el archivo a su sitio, arrancar. Las
 migraciones se aplican solas.
