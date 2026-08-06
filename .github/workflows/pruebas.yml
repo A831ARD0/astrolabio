@@ -64,9 +64,8 @@ jobs:
         run: pytest -q
 
       # El guion de instalacion se escribe en una maquina que no es Windows, asi
-      # que aqui es donde se comprueba que al menos es PowerShell valido y que
-      # sus requisitos previos se detectan bien. Una errata de sintaxis
-      # descubierta en el servidor de produccion es una tarde perdida.
+      # que aqui es donde se comprueba que funciona. Una errata descubierta en el
+      # servidor de produccion es una tarde perdida.
       - name: El guion de instalacion es PowerShell valido
         working-directory: .
         run: |
@@ -75,8 +74,19 @@ jobs:
               (Resolve-Path .\instalar-windows.ps1), [ref]$null, [ref]$errores) | Out-Null
           if ($errores) { $errores | ForEach-Object { Write-Error $_ }; exit 1 }
           Write-Host "Sintaxis correcta."
-      - name: El guion detecta sus requisitos
+
+      # DOS veces, y la segunda es la que importa: Windows Server 2019 trae
+      # **Windows PowerShell 5.1**, no pwsh 7. Se comportan distinto justo donde
+      # duele —el entrecomillado que se pasa a un programa externo, y que la
+      # salida de error de un programa aborte el guion— y el destino real de esto
+      # es un Server 2019. Probarlo solo en pwsh es probar otra cosa.
+      - name: El guion detecta sus requisitos (pwsh 7)
         working-directory: .
+        run: .\instalar-windows.ps1 -Comprobar
+
+      - name: El guion detecta sus requisitos (Windows PowerShell 5.1)
+        working-directory: .
+        shell: powershell
         run: .\instalar-windows.ps1 -Comprobar
 
   frontend:

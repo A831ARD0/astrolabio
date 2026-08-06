@@ -41,6 +41,38 @@ function Paso  { param($t) Write-Host "`n== $t" -ForegroundColor Cyan }
 function Bien  { param($t) Write-Host "   OK  $t" -ForegroundColor Green }
 function Aviso { param($t) Write-Host "   !   $t" -ForegroundColor Yellow }
 
+<#
+Llama a un programa externo y devuelve su salida y su codigo.
+
+Existe por dos trampas de Windows PowerShell 5.1, que es el que trae Windows
+Server 2019:
+
+1. Con $ErrorActionPreference = 'Stop', CUALQUIER cosa que un programa externo
+   escriba en la salida de error se convierte en un error que aborta el guion
+   —el famoso NativeCommandError—. Y pip, npm y py escriben ahi de continuo
+   cosas que no son errores. Aqui se baja la preferencia solo mientras dura la
+   llamada y se decide por el codigo de salida, que es lo que de verdad dice si
+   fue bien.
+
+2. Lo que decide si algo fallo es $LASTEXITCODE, no que haya habido texto en la
+   salida de error.
+#>
+function Correr {
+    param(
+        [Parameter(Mandatory)] [string]   $Programa,
+        [Parameter(Mandatory)] [string[]] $Argumentos
+    )
+    $antes = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $salida = & $Programa @Argumentos 2>&1
+        return [pscustomobject]@{
+            Codigo = $LASTEXITCODE
+            Texto  = ($salida | ForEach-Object { "$_" }) -join "`n"
+        }
+    } finally { $ErrorActionPreference = $antes }
+}
+
 $backend  = Join-Path $Raiz 'backend'
 $frontend = Join-Path $Raiz 'frontend'
 $python   = Join-Path $backend 'venv\Scripts\python.exe'
@@ -74,19 +106,25 @@ Falta Python 3.12.
 $py = Get-Command py -ErrorAction SilentlyContinue
 if (-not $py) { throw $ayudaPython }
 
-$version = (& py -3.12 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null)
-if ($LASTEXITCODE -ne 0) { throw $ayudaPython }
+# Comillas: el codigo de Python va entre comillas DOBLES y por dentro solo lleva
+# comillas simples. Al reves —simples fuera, dobles dentro— PowerShell se come
+# las dobles al pasarselas al programa y Python recibe algo que no compila.
+$r = Correr py @('-3.12', '-c', "import sys; print('%d.%d' % sys.version_info[:2])")
+if ($r.Codigo -ne 0) { throw $ayudaPython }
+$version = $r.Texto.Trim()
 
-$bits = (& py -3.12 -c 'import struct; print(struct.calcsize("P") * 8)')
-if ($bits.Trim() -ne '64') {
-    throw "Python $version esta instalado, pero es de $bits bits.`n$ayudaPython"
+$r = Correr py @('-3.12', '-c', "import struct; print(struct.calcsize('P') * 8)")
+if ($r.Codigo -ne 0 -or $r.Texto.Trim() -ne '64') {
+    throw "Python $version no es de 64 bits (dice: $($r.Texto.Trim())).`n$ayudaPython"
 }
 Bien "Python $version de 64 bits"
 
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     throw 'Falta Node. Instala Node 20 o superior desde nodejs.org.'
 }
-Bien "Node $(& node --version)"
+$r = Correr node @('--version')
+if ($r.Codigo -ne 0) { throw 'Node esta en el PATH pero no responde.' }
+Bien "Node $($r.Texto.Trim())"
 
 # Windows trae su propio administrador de ODBC, asi que pyodbc funciona sin
 # instalar nada. Lo que no trae son los drivers de cada origen.
@@ -102,15 +140,20 @@ if ($Comprobar) { Write-Host "`nSolo comprobacion. No se escribio nada."; exit 0
 Paso 'Entorno de Python'
 
 if (-not (Test-Path $python)) {
-    & py -3.12 -m venv (Join-Path $backend 'venv')
+    $r = Correr py @('-3.12', '-m', 'venv', (Join-Path $backend 'venv'))
+    if ($r.Codigo -ne 0) { throw "No se pudo crear el venv:`n$($r.Texto)" }
     Bien 'venv creado'
 } else {
     Bien 'venv ya estaba'
 }
 
-& $python -m pip install --upgrade pip --quiet
-& $python -m pip install -r (Join-Path $backend 'requirements.txt') --quiet
-if ($LASTEXITCODE -ne 0) { throw 'Fallo la instalacion de dependencias.' }
+$r = Correr $python @('-m', 'pip', 'install', '--upgrade', 'pip', '--quiet')
+if ($r.Codigo -ne 0) { throw "Fallo actualizar pip:`n$($r.Texto)" }
+
+Write-Host '   ... instalando dependencias (tarda un par de minutos)'
+$r = Correr $python @('-m', 'pip', 'install', '-r',
+                      (Join-Path $backend 'requirements.txt'), '--quiet')
+if ($r.Codigo -ne 0) { throw "Fallo la instalacion de dependencias:`n$($r.Texto)" }
 Bien 'Dependencias instaladas'
 
 # --------------------------------------------------------------------------- #
@@ -121,11 +164,17 @@ Paso 'Interfaz'
 
 Push-Location $frontend
 try {
-    & npm ci
-    if ($LASTEXITCODE -ne 0) { throw 'Fallo `npm ci`.' }
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw 'Fallo la compilacion de la interfaz.' }
+    Write-Host '   ... npm ci (tarda un par de minutos)'
+    $r = Correr npm @('ci')
+    if ($r.Codigo -ne 0) { throw "Fallo 'npm ci':`n$($r.Texto)" }
+
+    $r = Correr npm @('run', 'build')
+    if ($r.Codigo -ne 0) { throw "Fallo la compilacion de la interfaz:`n$($r.Texto)" }
 } finally { Pop-Location }
+
+if (-not (Test-Path (Join-Path $frontend 'dist\index.html'))) {
+    throw "La compilacion dijo que fue bien pero no hay $frontend\dist\index.html."
+}
 Bien "Compilada en $frontend\dist"
 
 # --------------------------------------------------------------------------- #
@@ -173,21 +222,42 @@ Paso 'Prueba de arranque'
 $datos = Join-Path $backend 'datos'
 New-Item -ItemType Directory -Force -Path $datos | Out-Null
 
+# La salida se guarda en archivos: la ventana va oculta, asi que sin esto un
+# arranque fallido no deja ni rastro y el guion solo sabria decir "no respondio".
+$bitacora = Join-Path $env:TEMP 'astrolabio-arranque.log'
+$errores  = Join-Path $env:TEMP 'astrolabio-arranque-error.log'
+
 $proceso = Start-Process -FilePath $python `
     -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000' `
-    -WorkingDirectory $backend -PassThru -WindowStyle Hidden
+    -WorkingDirectory $backend -PassThru -WindowStyle Hidden `
+    -RedirectStandardOutput $bitacora -RedirectStandardError $errores
 
 try {
-    $ok = $false
+    $salud = $null
     foreach ($intento in 1..30) {
         Start-Sleep -Seconds 1
+
+        # Si el proceso ya murio, esperar los 30 segundos no aporta nada.
+        if ($proceso.HasExited) { break }
+
         try {
-            $r = Invoke-RestMethod 'http://127.0.0.1:8000/api/salud' -TimeoutSec 2
-            if ($r.estado -eq 'ok') { $ok = $true; break }
-        } catch { }
+            $salud = Invoke-RestMethod 'http://127.0.0.1:8000/api/salud' -TimeoutSec 2
+            if ($salud.estado -eq 'ok') { break }
+        } catch { $salud = $null }
     }
-    if (-not $ok) { throw 'La API no respondio en 30 s. Mira el error de arriba.' }
-    Bien "Responde: version $($r.version), entorno $($r.entorno)"
+
+    if (-not $salud) {
+        $detalle = @()
+        foreach ($archivo in @($errores, $bitacora)) {
+            if ((Test-Path $archivo) -and (Get-Item $archivo).Length -gt 0) {
+                $detalle += "--- $archivo"
+                $detalle += (Get-Content $archivo -Tail 25)
+            }
+        }
+        if (-not $detalle) { $detalle = @('(la API no dejo ningun mensaje)') }
+        throw ("La API no arranco.`n" + ($detalle -join "`n"))
+    }
+    Bien "Responde: version $($salud.version), entorno $($salud.entorno)"
 } finally {
     if (-not $proceso.HasExited) { Stop-Process -Id $proceso.Id -Force }
 }
@@ -213,13 +283,22 @@ if ($Servicios) {
 
     # --host 127.0.0.1 a proposito: quien entra de fuera pasa por Caddy, que es
     # el que lleva HTTPS y las cabeceras de seguridad.
-    & nssm install Astrolabio $python
-    & nssm set Astrolabio AppParameters '-m uvicorn app.main:app --host 127.0.0.1 --port 8000'
-    & nssm set Astrolabio AppDirectory $backend
-    & nssm set Astrolabio AppStdout (Join-Path $registros 'salida.log')
-    & nssm set Astrolabio AppStderr (Join-Path $registros 'error.log')
-    & nssm set Astrolabio Start SERVICE_AUTO_START
-    & nssm start Astrolabio
+    $ordenes = @(
+        @('install', 'Astrolabio', $python),
+        @('set', 'Astrolabio', 'AppParameters',
+          '-m uvicorn app.main:app --host 127.0.0.1 --port 8000'),
+        @('set', 'Astrolabio', 'AppDirectory', $backend),
+        @('set', 'Astrolabio', 'AppStdout', (Join-Path $registros 'salida.log')),
+        @('set', 'Astrolabio', 'AppStderr', (Join-Path $registros 'error.log')),
+        @('set', 'Astrolabio', 'Start', 'SERVICE_AUTO_START'),
+        @('start', 'Astrolabio')
+    )
+    foreach ($orden in $ordenes) {
+        $r = Correr nssm $orden
+        if ($r.Codigo -ne 0) {
+            throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)"
+        }
+    }
     Bien 'Servicio Astrolabio instalado y arrancado'
 
     Aviso 'Falta Caddy delante. Ver el manual tecnico, seccion de Windows.'
