@@ -79,6 +79,15 @@ class Conexion(Base):
     tipo: Mapped[str] = mapped_column(String(40))          # odbc | mariadb | archivo
     # Credenciales cifradas con Fernet; nunca en claro, ni en la BD ni en logs.
     config_cifrada: Mapped[str] = mapped_column(Text)
+    # Constantes de esta conexion: {"id_sucursal": 3, "marca": "VW"}. Salen como
+    # columnas al leer cualquiera de sus datasets.
+    #
+    # Cuarenta sucursales con el mismo sistema dan cuarenta veces la misma tabla,
+    # y una vez juntas no hay forma de saber de cual venia cada fila. La etiqueta
+    # es ese dato, y vive en la conexion porque es de la sucursal entera, no de
+    # una tabla suya. NO se cifra: no es un secreto, es un identificador de
+    # negocio que se ve en los tableros.
+    etiquetas: Mapped[dict] = mapped_column(JSON, default=dict)
     creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora)
 
