@@ -260,12 +260,57 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 
 .editor { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
 
+/* El panel de la izquierda NO se desplaza entero: cada seccion se desplaza por
+   dentro.
+
+   Antes era un solo bloque con scroll, y con mil cargas en la lista el boton de
+   «+ Nuevo flujo» quedaba a varias pantallas de distancia: para crear un flujo
+   habia que subir hasta arriba cada vez. Ahora los botones y el buscador de cada
+   seccion se quedan donde estan y lo unico que se mueve es la lista.
+
+   Las secciones NO se encogen: una lista de dos renglones se queda de dos
+   renglones. Se acotan por arriba, y la marcada como `principal` —la larga de
+   verdad— se lleva todo el espacio que sobre. Repartir a prorrata en vez de esto
+   le quitaba altura tambien a la lista corta, que es justo lo que no hace falta. */
 .izq {
   width: 232px;
   flex: 0 0 232px;
   border-right: 1px solid var(--borde);
   background: var(--fondo-panel);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  /* Red de seguridad: si una pantalla tiene muchas secciones y ninguna
+     principal, mejor que se desplace el panel a que algo quede inalcanzable. */
+  overflow-y: auto;
+}
+.izq > .seccion {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.izq > .seccion.principal { flex: 1 1 auto; }
+/* La seccion principal se desplaza entera por dentro: puede tener varias listas
+   con sus subtitulos —el ETL las tiene— y tres barras de desplazamiento en
+   veinte centimetros no se manejan. */
+.izq > .seccion.principal > .contenido {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Las cortas se acotan y se desplazan solas: cuarenta sucursales son cuarenta
+   flujos, y esa lista tampoco puede comerse la pantalla. */
+.izq > .seccion:not(.principal) .lista {
+  max-height: 26vh;
+  overflow-y: auto;
+}
+/* Lo que se queda quieto arriba de la lista larga: el buscador y sus casillas.
+   Van fuera de `.contenido` justo por eso. */
+.izq > .seccion > .fijo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 6px;
 }
 .der {
   width: 380px;

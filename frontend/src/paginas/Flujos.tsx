@@ -158,24 +158,29 @@ export function Flujos() {
           </div>
         </section>
 
-        <section className="seccion">
+        {/* `principal`: es la lista larga, la que se lleva el espacio que sobra.
+            Las otras dos se quedan arriba y abajo, con sus botones a la vista. */}
+        <section className="seccion principal">
           <header>
             Cargas{' '}
             <span className="cuenta" title="Cuántas de la lista ya están en el flujo">
               {cargasPuestas} / {todasCargas.length}
             </span>
           </header>
-          <div className="contenido">
-            {/* Con cuarenta sucursales por veintiocho tablas, la lista es de mil
-                renglones: sin buscador y sin saber cuáles ya están, armar un
-                flujo es ir contando a ojo. */}
+          {/* Con cuarenta sucursales por veintiocho tablas, la lista es de mil
+              renglones: sin buscador y sin saber cuáles ya están, armar un flujo
+              es ir contando a ojo. El buscador va fuera de la parte que se
+              desplaza, para no tener que subir a por él. */}
+          <div className="fijo">
             <input type="search" placeholder="Filtrar…" value={buscaPieza}
                    onChange={(e) => setBuscaPieza(e.target.value)} />
-            <label className="casilla chico" style={{ margin: '4px 0' }}>
+            <label className="casilla chico">
               <input type="checkbox" checked={soloFaltan}
                      onChange={(e) => setSoloFaltan(e.target.checked)} />
               Solo las que faltan
             </label>
+          </div>
+          <div className="contenido">
             <div className="lista">
               {cargas.map((c) => {
                 const puesta = puestas.has(`carga-${c.id}`)

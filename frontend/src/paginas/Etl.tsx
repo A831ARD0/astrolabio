@@ -160,7 +160,9 @@ export function Etl() {
           </div>
         </section>
 
-        <section className="seccion">
+        {/* `principal`: la lista larga se lleva el espacio que sobre, y el boton
+            de «+ Nueva transformación» de arriba se queda a la vista. */}
+        <section className="seccion principal">
           <header>Orígenes disponibles</header>
           <div className="contenido">
             <div className="chico tenue" style={{ padding: '0 8px 4px' }}>
