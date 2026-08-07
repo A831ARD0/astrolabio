@@ -251,9 +251,37 @@ La corrida queda como **detenido**, no como *falló*: en gris, no en rojo, y **s
 mandar el aviso de fallo**. Un correo de alarma por algo que acabas de hacer tú es la
 forma de que esos correos se dejen de leer. En Tareas hay un filtro *Detenidos*.
 
-Lo ya traído se queda: para continuar, se vuelve a ejecutar el flujo. Las tablas que
-ya se habían actualizado se vuelven a traer —incrementalmente, si tienen columna
-incremental, así que cuesta poco—.
+#### Continuar donde se quedó
+
+En el historial del flujo, una corrida **detenida o fallida** trae un botón
+**Continuar**, con lo que va a hacer escrito al lado: *salta 19 · corre 19 · lo hecho
+tiene 12 minutos*.
+
+Continuar **se salta los pasos que ya salieron bien** y corre los demás. Los pasos
+saltados aparecen como *ya estaba*, que no es lo mismo que *éxito* — el historial
+tiene que poder decir cuál de las dos cosas fue.
+
+Sirve igual para lo que **falló**, y ese es el caso frecuente: la sucursal 20 estaba
+apagada a las 6, los pasos 1–19 salieron bien y del 21 al 38 quedaron omitidos.
+Continuar arranca en el 20 en vez de volver a traer las 38.
+
+Tres cosas que conviene entender:
+
+- **Las transformaciones se rehacen siempre**, aunque hubieran salido bien. Continuar
+  mezcla dos momentos —lo traído a la 1 y lo traído a las 6—; para cuarenta sucursales
+  independientes eso da igual, pero una transformación que ya corrió con los datos de
+  la 1 se quedaría vieja mientras sus orígenes se actualizan. Eso es justo el número
+  que parece fresco y no lo es. Rehacerla cuesta poco: lee Parquet local.
+- **La antigüedad se dice, no se prohíbe.** Si lo completado tiene tres días, la
+  pantalla lo dice y tú decides. No hay un límite en horas porque cualquier número
+  ahí sería inventado.
+- **Los pasos se reconocen por lo que son, no por su número.** Si editas el flujo
+  mientras está pausado, continuar sigue saltándose las tablas correctas, corre las
+  nuevas, y te avisa de las que estaban en esa corrida y ya no están en el flujo.
+
+Una corrida solo se puede continuar **una vez**: la que la continuó queda anotada
+(*continúa #41*), y un segundo intento se rechaza diciendo cuál ya la retomó. Si de
+verdad hay que repetirlo todo, se ejecuta el flujo completo.
 
 ⚠️ **Una carga suelta no se puede detener.** No tiene pasos donde pararse: o termina,
 o se corta a la mitad. La pantalla lo dice en vez de ofrecer un botón que no

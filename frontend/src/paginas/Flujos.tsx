@@ -24,12 +24,22 @@ import {
   useHistorialFlujo,
   useDetener,
   useProgramarFlujo,
+  useReanudar,
   useSugerirOrden,
 } from '../api/flujos'
 import { Horario } from '../comunes/Horario'
 import { zonaDelNavegador } from '../comunes/cron'
 import { PanelLateral, Seccion } from '../comunes/Panel'
 import { useLanzador } from '../flujos/Lanzar'
+
+/** «3 días», «5 horas», «12 minutos». Para decidir si reanudar tiene sentido. */
+function antiguedad(iso: string): string {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (min < 60) return `${min} minuto${min === 1 ? '' : 's'}`
+  const h = Math.round(min / 60)
+  if (h < 48) return `${h} hora${h === 1 ? '' : 's'}`
+  return `${Math.round(h / 24)} días`
+}
 
 const VACIO: CuerpoFlujo = {
   nombre: '', descripcion: null, pasos: [], al_fallar: 'detener',
@@ -58,6 +68,7 @@ export function Flujos() {
 
   const programacion = useProgramarFlujo(id)
   const historial = useHistorialFlujo(id)
+  const reanudar = useReanudar(id)
   const actual: Flujo | undefined = lista.data?.find((x) => x.id === id)
 
   useEffect(() => {
@@ -382,6 +393,21 @@ export function Flujos() {
             {actual?.progreso && <strong> Va por el paso {actual.progreso}.</strong>}
           </div>
         )}
+        {reanudar.isSuccess && (
+          <div className="aviso-caja" style={{ margin: '10px 12px 0' }}>
+            Continuando la corrida #{reanudar.data.continua_de}:{' '}
+            {reanudar.data.saltados} paso(s) saltados, {reanudar.data.pasos} por
+            correr.{' '}
+            {reanudar.data.esperando_a
+              ? `En cola detrás de «${reanudar.data.esperando_a}».`
+              : 'Corriendo en segundo plano.'}
+          </div>
+        )}
+        {reanudar.isError && (
+          <div className="error-caja" style={{ margin: '10px 12px 0' }}>
+            {(reanudar.error as Error).message}
+          </div>
+        )}
         {ejecutar.isError && (
           <div className="error-caja" style={{ margin: '10px 12px 0' }}>
             {(ejecutar.error as Error).message}
@@ -434,7 +460,9 @@ export function Flujos() {
                                 ? 'trayendo…'
                                 : r.estado === 'cancelado'
                                   ? 'detenido'
-                                  : 'omitido'}
+                                  : r.estado === 'saltado'
+                                    ? 'ya estaba'
+                                    : 'omitido'}
                         </span>
                       )}
 
@@ -620,6 +648,12 @@ export function Flujos() {
                         >
                           {e.estado === 'cancelado' ? 'detenido' : e.estado}
                         </span>{' '}
+                        {e.reanuda_a && (
+                          <span className="etiqueta dim"
+                                title={`Continúa la corrida #${e.reanuda_a}`}>
+                            continúa #{e.reanuda_a}
+                          </span>
+                        )}{' '}
                         <span className="chico">
                           {new Date(e.cuando).toLocaleString('es-MX')} ·{' '}
                           {e.llamado_por ? `desde «${e.llamado_por}»` : e.disparo} ·{' '}
@@ -642,8 +676,55 @@ export function Flujos() {
                         </tbody>
                       </table>
                       {e.mensaje && (
-                        <div className="error-caja chico" style={{ marginTop: 6 }}>
+                        <div
+                          className={`chico ${
+                            e.estado === 'cancelado' ? 'aviso-caja' : 'error-caja'
+                          }`}
+                          style={{ marginTop: 6 }}
+                        >
                           {e.mensaje}
+                        </div>
+                      )}
+
+                      {/* Continuar: se salta lo que ya salió bien. La antigüedad
+                          va a la vista y no hay límite que rechace — reanudar
+                          mezcla dos momentos y quien decide si eso importa es
+                          quien conoce los datos, no nosotros. */}
+                      {e.reanudable && (
+                        <div className="reanudar">
+                          <button
+                            className="btn chico primario"
+                            disabled={reanudar.isPending || !!enMarcha}
+                            onClick={() => {
+                              if (confirm(
+                                `¿Continuar la corrida #${e.id}?\n\n` +
+                                `Se saltan ${e.saltaria} paso(s) que ya salieron ` +
+                                `bien y se corren ${e.correria}.\n\n` +
+                                `Las transformaciones se rehacen siempre. Lo que ` +
+                                `se completó tiene ${antiguedad(e.cuando)}: las ` +
+                                `tablas saltadas quedan con los datos de entonces.`)) {
+                                reanudar.mutate(e.id)
+                              }
+                            }}
+                          >
+                            Continuar
+                          </button>
+                          <span className="chico suave">
+                            salta {e.saltaria} · corre {e.correria} · lo hecho tiene{' '}
+                            {antiguedad(e.cuando)}
+                          </span>
+                          {!!e.ausentes?.length && (
+                            <div className="chico aviso-texto">
+                              {e.ausentes.length} paso(s) de esa corrida ya no están
+                              en el flujo:{' '}
+                              {e.ausentes.map((a) => a.nombre).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {e.reanudada_por && (
+                        <div className="chico tenue" style={{ marginTop: 4 }}>
+                          La continuó la corrida #{e.reanudada_por}.
                         </div>
                       )}
                     </details>

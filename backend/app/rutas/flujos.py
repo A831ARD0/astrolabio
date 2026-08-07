@@ -16,8 +16,13 @@ from app import programador, trabajos
 from app.auditoria import registrar
 from app.cargas import Actor
 from app.dependencias import SesionDep, exigir_rol
-from app.flujos import quien_llama, revisar_orden, revisar_pasos, sugerir_orden
-from app.modelos_db import EstadoCarga, Flujo, Rol, Usuario, iso
+from app.flujos import (
+    plan_de_reanudacion, quien_llama, reanudable, revisar_orden, revisar_pasos,
+    sugerir_orden,
+)
+from app.modelos_db import (
+    EstadoCarga, Flujo, FlujoEjecucion, Rol, Usuario, iso,
+)
 
 router = APIRouter(prefix="/api/flujos", tags=["flujos"])
 
@@ -322,18 +327,97 @@ def detener(trabajo_id: int, sesion: SesionDep,
     }
 
 
+@router.post("/{id_}/reanudar/{ejecucion_id}",
+             status_code=status.HTTP_202_ACCEPTED)
+def reanudar(id_: int, ejecucion_id: int, sesion: SesionDep,
+             a_la_par: bool = False,
+             actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Continúa una corrida que se detuvo o falló, saltándose lo que ya salió bien.
+
+    Se salta **solo cargas y flujos**; las transformaciones se rehacen siempre.
+    Reanudar mezcla dos momentos —lo traído a la una y lo traído a las seis— y
+    para cuarenta extractores independientes eso da igual, pero una transformación
+    que ya corrió con los datos de la una se quedaría vieja mientras sus orígenes
+    se actualizan. Eso es un número que parece fresco y no lo es.
+
+    Los pasos se reconocen por su identidad y no por su número: entre pausar y
+    continuar el flujo puede haberse editado, y «continuar en el paso 20» apuntaría
+    a otra tabla.
+    """
+    f = _obtener(sesion, id_)
+    ejec = sesion.get(FlujoEjecucion, ejecucion_id)
+    if ejec is None or ejec.flujo_id != f.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "Esa corrida no es de este flujo.")
+    if ejec.estado == EstadoCarga.corriendo:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Esa corrida todavia esta corriendo.")
+    if ejec.estado == EstadoCarga.exito:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Esa corrida termino entera; no hay nada que continuar.")
+    if ejec.reanudada_por_id is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Esa corrida ya la continuo la #{ejec.reanudada_por_id}. "
+            f"Si hace falta, ejecuta el flujo completo.")
+
+    plan = plan_de_reanudacion(f, ejec)
+    if not plan["correria"]:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No queda ningun paso por correr: todo lo que el flujo tiene hoy ya "
+            "salio bien en esa corrida.")
+
+    ocupado = trabajos.hay_algo_corriendo()
+    try:
+        t = trabajos.encolar("flujo", f.id, f.nombre,
+                             Actor(id=actor.id, email=actor.email),
+                             a_la_par=a_la_par,
+                             opciones={"reanuda_de": ejec.id})
+    except trabajos.YaEnMarcha as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+
+    registrar(sesion, accion="flujo_reanudado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"nombre": f.nombre, "desde_ejecucion": ejec.id,
+                       "salta": len(plan["saltaria"]),
+                       "corre": len(plan["correria"])})
+    return {
+        "trabajo_id": t.id,
+        "estado": t.estado,
+        "continua_de": ejec.id,
+        "pasos": len(plan["correria"]),
+        "saltados": len(plan["saltaria"]),
+        "esperando_a": ocupado.nombre if ocupado and not a_la_par else None,
+    }
+
+
 @router.get("/{id_}/historial")
 def historial(id_: int, sesion: SesionDep,
               _: Usuario = Depends(exigir_rol(Rol.editor))):
     f = _obtener(sesion, id_)
-    return {"ejecuciones": [
-        {"id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
-         "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
-         "total": (e.detalle or {}).get("total"),
-         "llamado_por": (e.detalle or {}).get("llamado_por"),
-         "cuando": iso(e.creado_en)}
-        for e in f.ejecuciones[:30]
-    ]}
+    fuera = []
+    for e in f.ejecuciones[:30]:
+        fila = {
+            "id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
+            "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
+            "total": (e.detalle or {}).get("total"),
+            "llamado_por": (e.detalle or {}).get("llamado_por"),
+            "cuando": iso(e.creado_en),
+            "reanuda_a": e.reanuda_a_id,
+            "reanudada_por": e.reanudada_por_id,
+            "reanudable": reanudable(e),
+        }
+        if fila["reanudable"]:
+            # Que se saltaria y que se correria, para poder decirlo ANTES de
+            # pulsar. Continuar a ciegas es como no poder continuar.
+            plan = plan_de_reanudacion(f, e)
+            fila["saltaria"] = len(plan["saltaria"])
+            fila["correria"] = len(plan["correria"])
+            fila["ausentes"] = plan["ausentes"]
+        fuera.append(fila)
+    return {"ejecuciones": fuera}
 
 
 @router.put("/{id_}/programacion", response_model=Salida)

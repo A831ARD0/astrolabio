@@ -160,15 +160,30 @@ def _ejecutar_flujo(sesion, t: Trabajo) -> None:
     from app.flujos import ejecutar as ejecutar_flujo
     from app.modelos_db import Flujo
 
+    from app.flujos import hechos_en
+    from app.modelos_db import FlujoEjecucion
+
     f = sesion.get(Flujo, t.objeto_id)
     if f is None:
         log.warning("El flujo %s ya no existe", t.objeto_id)
         return
     actor = Actor(id=t.actor_id, email=t.actor_email)
+
+    # Continuar una corrida que se paro o fallo: lo que ya salio bien se salta.
+    # El plan se calcula AQUI y no en la peticion: entre encolar y correr puede
+    # pasar un rato, y lo que vale es lo que hay cuando le toca el turno.
+    reanuda_a = t.opciones.get("reanuda_de")
+    saltar = None
+    if reanuda_a is not None:
+        previa = sesion.get(FlujoEjecucion, int(reanuda_a))
+        saltar = hechos_en(previa)
+
     try:
         # `parar` se consulta entre pasos. Se pasa como funcion y no como valor
         # porque el valor cambia mientras el flujo corre: es justo el punto.
-        r = ejecutar_flujo(sesion, f, actor, parar=lambda: t.parar)
+        r = ejecutar_flujo(sesion, f, actor, parar=lambda: t.parar,
+                           saltar=saltar,
+                           reanuda_a=int(reanuda_a) if reanuda_a else None)
         sesion.commit()
         log.info("Flujo '%s' completo: %d pasos en %s ms",
                  f.nombre, len(r["pasos"]), r["ms"])

@@ -314,11 +314,139 @@ def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
+# Reanudar: continuar una corrida que se detuvo o fallo
+# --------------------------------------------------------------------------- #
+
+#: Los tipos de paso que una reanudacion puede saltarse.
+#:
+#: Las transformaciones NUNCA. Reanudar mezcla dos momentos —lo que se trajo a la
+#: una y lo que se trae a las seis— y para cuarenta extractores independientes eso
+#: da igual, pero una transformacion que ya corrio con los datos de la una se
+#: quedaria vieja mientras sus origenes se actualizan. Ese es exactamente «un
+#: numero que parece fresco y no lo es». Volver a correrla cuesta poco: lee Parquet
+#: local, no cruza el puente.
+SALTABLES = ("carga", "flujo")
+
+
+def _sena(paso: dict) -> dict:
+    """
+    El tipo y el id del paso, para el historial.
+
+    El id hace falta para reanudar: un paso se reconoce por lo que ES, no por su
+    numero. Si alguien mete una tabla en la posicion 3 mientras el flujo esta
+    pausado, «continuar en el paso 20» apuntaria a otra cosa.
+    """
+    fuera = {"tipo": paso.get("tipo")}
+    try:
+        fuera["id"] = int(paso.get("id"))
+    except (TypeError, ValueError):
+        pass                        # sin id no se puede saltar, y se vuelve a correr
+    return fuera
+
+
+def _clave(paso: dict) -> tuple[str, int] | None:
+    tipo, id_ = paso.get("tipo"), paso.get("id")
+    if tipo is None or id_ is None:
+        return None
+    try:
+        return (str(tipo), int(id_))
+    except (TypeError, ValueError):
+        return None
+
+
+def hechos_en(ejec: FlujoEjecucion | None) -> set[tuple[str, int]]:
+    """
+    Lo que esa corrida completo bien y por tanto se puede saltar.
+
+    Un paso sin `id` —corridas de antes de que se guardara— no entra: se vuelve a
+    correr. Equivocarse hacia el lado de repetir trabajo es gratis; hacia el lado
+    de saltarse una tabla, no.
+    """
+    if ejec is None:
+        return set()
+    hechos: set[tuple[str, int]] = set()
+    for p in (ejec.detalle or {}).get("pasos") or []:
+        if p.get("estado") != "exito" or p.get("tipo") not in SALTABLES:
+            continue
+        clave = _clave(p)
+        if clave is not None:
+            hechos.add(clave)
+    return hechos
+
+
+def plan_de_reanudacion(flujo: Flujo, ejec: FlujoEjecucion) -> dict[str, Any]:
+    """
+    Que se saltaria y que se correria si se continuara esa corrida.
+
+    Se calcula contra los pasos que el flujo tiene HOY, no contra los que tenia
+    cuando se pauso: entre pausar y continuar pueden haber pasado dos ediciones.
+    Lo que cambio se dice, no se adivina.
+    """
+    hechos = hechos_en(ejec)
+    saltaria: list[dict] = []
+    correria: list[dict] = []
+    for i, paso in enumerate(flujo.pasos or [], start=1):
+        clave = _clave(paso)
+        ficha = {"paso": i, "tipo": paso.get("tipo"), "nombre": paso.get("nombre")}
+        if clave is not None and clave in hechos and clave[0] in SALTABLES:
+            saltaria.append(ficha)
+        else:
+            correria.append(ficha)
+
+    # Lo que estaba en la corrida pausada y ya no esta en el flujo. Ni se corre ni
+    # se salta: desaparecio, y quien continua tiene que saberlo.
+    ahora_hay = {c for c in (_clave(p) for p in flujo.pasos or []) if c}
+    ausentes = [
+        {"tipo": p.get("tipo"), "nombre": p.get("nombre")}
+        for p in (ejec.detalle or {}).get("pasos") or []
+        if (c := _clave(p)) is not None and c not in ahora_hay
+    ]
+    return {"saltaria": saltaria, "correria": correria, "ausentes": ausentes}
+
+
+def _hechos_del_hijo(sesion: Session, sub: Flujo,
+                     desde: datetime | None) -> set[tuple[str, int]]:
+    """
+    Lo que el hijo ya trajo dentro de ESTA cadena de reanudaciones.
+
+    Solo cuenta su última corrida, y solo si se detuvo o falló y empezó a partir
+    de `desde`. Sin ese corte, reanudar un maestro se fiaría de una corrida suelta
+    del hijo de la semana pasada y se saltaría tablas que hoy están viejas.
+    """
+    ultima = sesion.scalar(
+        select(FlujoEjecucion)
+        .where(FlujoEjecucion.flujo_id == sub.id,
+               FlujoEjecucion.estado != EstadoCarga.corriendo)
+        .order_by(FlujoEjecucion.id.desc()).limit(1))
+    if ultima is None or ultima.estado == EstadoCarga.exito:
+        return set()
+    if desde is not None and ultima.creado_en < desde:
+        return set()
+    return hechos_en(ultima)
+
+
+def reanudable(ejec: FlujoEjecucion | None) -> bool:
+    """
+    Una corrida se puede continuar si se paro o fallo, y nadie la continuo ya.
+
+    Fallida tambien, y no solo detenida: la sucursal veinte estaba apagada a las
+    seis, los pasos 1 a 19 salieron bien y del 21 al 38 quedaron omitidos. Volver a
+    correr los treinta y ocho por uno es el caso frecuente, no el raro.
+    """
+    return (ejec is not None
+            and ejec.estado in (EstadoCarga.cancelado, EstadoCarga.error)
+            and ejec.reanudada_por_id is None)
+
+
+# --------------------------------------------------------------------------- #
 # Ejecución
 # --------------------------------------------------------------------------- #
 
 def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
              parar: Callable[[], bool] | None = None,
+             saltar: set[tuple[str, int]] | None = None,
+             reanuda_a: int | None = None,
+             _desde: datetime | None = None,
              _cadena: frozenset[int] = frozenset(),
              _llamado_por: str | None = None) -> dict[str, Any]:
     """
@@ -344,9 +472,17 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     contexto = {"llamado_por": _llamado_por} if _llamado_por else {}
     ejec = FlujoEjecucion(flujo_id=flujo.id, estado=EstadoCarga.corriendo,
                           origen=actor.origen, iniciado_por=actor.id,
+                          reanuda_a_id=reanuda_a,
                           detalle={"pasos": [], "total": total, **contexto})
     sesion.add(ejec)
     sesion.flush()
+
+    # Los dos lados de la cadena se escriben juntos: asi la corrida pausada queda
+    # marcada como ya continuada y un segundo «Continuar» no puede colarse.
+    if reanuda_a is not None:
+        anterior = sesion.get(FlujoEjecucion, reanuda_a)
+        if anterior is not None:
+            anterior.reanudada_por_id = ejec.id
 
     # Como acabo la vez anterior: es lo que distingue "sigue roto" de "ya se
     # arreglo", y solo se puede leer antes de escribir el resultado de esta.
@@ -356,6 +492,14 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                FlujoEjecucion.estado != EstadoCarga.corriendo)
         .order_by(FlujoEjecucion.id.desc()).limit(1)
     ) == EstadoCarga.error
+
+    # De cuando es esta cadena de reanudaciones. Se usa para no fiarse de una
+    # corrida de un hijo que sea de antes: si alguien paro ese hijo ayer por su
+    # cuenta, sus tablas no son parte de lo que se esta continuando ahora.
+    desde = _desde
+    if desde is None and reanuda_a is not None:
+        previa = sesion.get(FlujoEjecucion, reanuda_a)
+        desde = previa.creado_en if previa is not None else None
 
     # Confirmar YA, antes del primer paso. Sin esto, la corrida no existe para
     # nadie mas hasta que termina: veintiocho tablas escribiendose en el disco y
@@ -390,12 +534,24 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     detenido = False
     for i, paso in enumerate(flujo.pasos or [], start=1):
         nombre = paso.get("nombre") or _nombre_de(sesion, paso) or "?"
+
+        clave = _clave(paso)
+        if (saltar and clave is not None and clave in saltar
+                and clave[0] in SALTABLES):
+            # Ya se hizo en la corrida que esta continúa. Queda anotado como
+            # saltado y no como éxito: son cosas distintas y el historial tiene
+            # que poder decir cuál de las dos fue.
+            resultados.append({"paso": i, **_sena(paso), "nombre": nombre,
+                               "estado": "saltado"})
+            _apuntar()
+            continue
+
         if parar is not None and parar():
             # Los que faltan se anotan como cancelados. Un hueco en el historial
             # se lee como «corrió y no hizo nada», que es distinto.
             for j, restante in enumerate((flujo.pasos or [])[i - 1:], start=i):
                 resultados.append({
-                    "paso": j, "tipo": restante.get("tipo"),
+                    "paso": j, **_sena(restante),
                     "nombre": restante.get("nombre"), "estado": "cancelado",
                 })
             detenido = True
@@ -406,7 +562,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         salio: dict[str, Any] | None = None
 
         for intento in range(1, reintentos + 2):
-            _apuntar({"paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
+            _apuntar({"paso": i, **_sena(paso), "nombre": nombre,
                       "estado": "corriendo",
                       **({"intento": intento} if intento > 1 else {})})
             try:
@@ -415,7 +571,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                     if ds is None:
                         raise ErrorFlujo(f"el dataset {paso['id']} ya no existe")
                     r = ejecutar_carga(sesion, ds, actor)
-                    salio = {"paso": i, "tipo": "carga", "nombre": nombre,
+                    salio = {"paso": i, **_sena(paso), "nombre": nombre,
                              "estado": "exito", "filas": r["filas"],
                              "modo": r["modo"], "ms": r["ms"]}
                 elif paso.get("tipo") == "flujo":
@@ -435,16 +591,24 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                     # persona: lo llamo este flujo. Sin eso, su historial dice
                     # «manual» y no hay forma de reconstruir quien disparo que.
                     de_aqui = Actor(id=actor.id, email=actor.email, origen="flujo")
+                    # Si esto es una reanudación, el hijo se reanuda a su vez: se
+                    # re-entra y él se salta las tablas que ya trajo. Reanudar un
+                    # maestro de treinta y ocho por veintiocho no vuelve a traer
+                    # mil sesenta y cuatro tablas — vuelve a entrar en el hijo que
+                    # se quedó a medias y sigue en su tabla veinte.
+                    sub_saltar = (_hechos_del_hijo(sesion, sub, _desde or desde)
+                                  if saltar is not None else None)
                     r = ejecutar(sesion, sub, de_aqui, parar=parar,
+                                 saltar=sub_saltar, _desde=_desde or desde,
                                  _cadena=cadena, _llamado_por=flujo.nombre)
                     if r.get("estado") == "cancelado":
                         # El hijo se detuvo porque se lo pidieron; el maestro no
                         # sigue con el siguiente como si nada.
-                        salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
+                        salio = {"paso": i, **_sena(paso), "nombre": nombre,
                                  "estado": "cancelado",
                                  "sub_pasos": len(r["pasos"]), "ms": r["ms"]}
                         break
-                    salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
+                    salio = {"paso": i, **_sena(paso), "nombre": nombre,
                              "estado": "exito",
                              "filas": sum(int(p.get("filas") or 0)
                                           for p in r["pasos"]),
@@ -455,7 +619,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                         raise ErrorFlujo(
                             f"la transformación {paso['id']} ya no existe")
                     r = ejecutar_transformacion(sesion, t, actor)
-                    salio = {"paso": i, "tipo": "transformacion",
+                    salio = {"paso": i, **_sena(paso),
                              "nombre": nombre, "estado": "exito",
                              "filas": r["filas"], "ms": r["ms"]}
                 # Un exito al tercer intento NO es lo mismo que un exito: queda
@@ -480,7 +644,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         else:
             e = ultimo_error
             resultados.append({
-                "paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
+                "paso": i, **_sena(paso), "nombre": nombre,
                 "estado": "error", "mensaje": str(e),
                 "ms": round((time.perf_counter() - inicio) * 1000, 1),
                 **({"intentos": reintentos + 1} if reintentos else {}),
@@ -493,7 +657,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                 for j, restante in enumerate(
                         (flujo.pasos or [])[i:], start=i + 1):
                     resultados.append({
-                        "paso": j, "tipo": restante.get("tipo"),
+                        "paso": j, **_sena(restante),
                         "nombre": restante.get("nombre"), "estado": "omitido",
                     })
                 _apuntar()
@@ -501,10 +665,16 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         _apuntar()
 
     ms = round((time.perf_counter() - t0) * 1000, 1)
-    hechos = sum(1 for r in resultados if r.get("estado") == "exito")
+    # Un paso saltado cuenta como listo: en una reanudacion detenida otra vez,
+    # decir «se completaron 3 de 35» cuando 19 venian hechos seria enganoso.
+    hechos = sum(1 for r in resultados
+                 if r.get("estado") in ("exito", "saltado"))
+    saltados = sum(1 for r in resultados if r.get("estado") == "saltado")
     if detenido and not fallo:
-        cancelado = (f"Detenido a peticion: se completaron {hechos} de {total} "
-                     f"paso(s). Los demas no se intentaron.")
+        cancelado = (f"Detenido a peticion: {hechos} de {total} paso(s) listos"
+                     + (f" ({saltados} venian de la corrida anterior)"
+                        if saltados else "")
+                     + ". Los demas no se intentaron.")
     else:
         cancelado = None
 

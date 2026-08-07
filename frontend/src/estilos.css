@@ -1301,3 +1301,15 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   cursor: pointer;
 }
 .fila-lista:hover { background: var(--fondo-hover); }
+
+/* Continuar una corrida a medias. Va dentro de su renglon del historial, con lo
+   que haria al lado del boton: continuar a ciegas es como no poder continuar. */
+.reanudar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--borde);
+}

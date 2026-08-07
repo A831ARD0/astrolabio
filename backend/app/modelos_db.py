@@ -314,6 +314,17 @@ class FlujoEjecucion(Base):
                                                      nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, index=True)
 
+    # La cadena de continuaciones. Sin esto, mananan hay tres corridas «a medias»
+    # del mismo flujo y nadie sabe cual cuenta.
+    #
+    # `reanuda_a_id` es la corrida que esta continua; `reanudada_por_id` es la que
+    # la continuo. Los dos lados y no uno: el primero para leer el historial hacia
+    # atras, el segundo para poder rechazar que dos personas continuen la misma.
+    reanuda_a_id: Mapped[int | None] = mapped_column(
+        ForeignKey("flujo_ejecucion.id", ondelete="SET NULL"), nullable=True)
+    reanudada_por_id: Mapped[int | None] = mapped_column(
+        ForeignKey("flujo_ejecucion.id", ondelete="SET NULL"), nullable=True)
+
     flujo: Mapped[Flujo] = relationship(back_populates="ejecuciones")
 
 

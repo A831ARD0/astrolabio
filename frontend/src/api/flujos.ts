@@ -44,7 +44,7 @@ export interface ResultadoPaso {
   tipo: string
   nombre: string
   /** `cancelado`: alguien detuvo el flujo antes de llegar a este paso. */
-  estado: 'exito' | 'error' | 'omitido' | 'corriendo' | 'cancelado'
+  estado: 'exito' | 'error' | 'omitido' | 'corriendo' | 'cancelado' | 'saltado'
   /** Cuántos intentos hicieron falta. Solo viene si hubo más de uno. */
   intentos?: number
   filas?: number
@@ -66,6 +66,16 @@ export interface EjecucionFlujo {
   total: number | null
   /** Si esta corrida la disparó otro flujo, cuál. */
   llamado_por?: string | null
+  /** La corrida que esta continúa, y la que continuó a esta. */
+  reanuda_a: number | null
+  reanudada_por: number | null
+  /** Si se puede continuar: se detuvo o falló y nadie la ha continuado. */
+  reanudable: boolean
+  /** Cuántos pasos se saltarían y cuántos se correrían. Solo si es reanudable. */
+  saltaria?: number
+  correria?: number
+  /** Pasos que estaban en esa corrida y ya no están en el flujo. */
+  ausentes?: { tipo: string; nombre: string | null }[]
   cuando: string
 }
 
@@ -176,6 +186,25 @@ export function useEjecutarFlujo() {
       qc.invalidateQueries({ queryKey: clave.cola })
       qc.invalidateQueries({ queryKey: ['flujos'] })
       qc.invalidateQueries({ queryKey: ['transformaciones'] })
+    },
+  })
+}
+
+/**
+ * Continúa una corrida que se detuvo o falló, saltándose lo que ya salió bien.
+ *
+ * Las transformaciones se rehacen siempre: reanudar mezcla dos momentos, y una
+ * transformación que ya corrió con los datos viejos se quedaría rancia mientras
+ * sus orígenes se actualizan.
+ */
+export function useReanudar(flujoId: number | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ejecucionId: number) =>
+      api.post<Lanzado & { continua_de: number; saltados: number }>(
+        `/flujos/${flujoId}/reanudar/${ejecucionId}`),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['flujos'] })
     },
   })
 }

@@ -45,6 +45,30 @@ versionado es [semántico](https://semver.org/lang/es/).
   pararse. `DELETE /api/flujos/cola/{id}` ahora contesta 200 con `estado`
   (`sacado` | `parando`) y un mensaje, o 409 explicando por qué no.
 
+- **Continuar una corrida detenida o fallida**, desde su renglón del historial.
+  Salta los pasos que ya salieron bien —quedan como `saltado`, que no es `exito`— y
+  corre los demás. Nueva ruta `POST /api/flujos/{id}/reanudar/{ejecucion_id}` y
+  migración `0010` con la cadena `reanuda_a_id` / `reanudada_por_id`.
+
+  **Las transformaciones se rehacen siempre.** Continuar mezcla dos momentos, y una
+  transformación que ya corrió con los datos viejos se quedaría rancia mientras sus
+  orígenes se actualizan. Rehacerla cuesta poco: lee Parquet local.
+
+  Los pasos se reconocen por `(tipo, id)` y no por su posición —el flujo puede
+  haberse editado entre pausar y continuar—, así que el detalle del historial ahora
+  guarda el `id` de cada paso. Un paso sin `id` (corridas anteriores) **no se salta**:
+  ante la duda se repite trabajo, que es gratis, en vez de saltarse una tabla.
+
+  Sirve también para las **fallidas**, que es el caso frecuente. En un maestro,
+  continuar re-entra en el hijo que se quedó a medias y él se salta lo suyo: reanudar
+  38 × 28 no vuelve a traer 1.064 tablas. Solo cuentan las corridas de los hijos
+  posteriores a la que se está continuando, para no fiarse de una que alguien paró
+  aparte la semana pasada.
+
+  Una corrida se continúa **una sola vez**; el segundo intento dice cuál la retomó.
+  La antigüedad de lo completado se muestra y no se prohíbe: un límite en horas sería
+  un número inventado.
+
 - **Se rastrea quién dispara a quién.** La lista de flujos trae `llamado_por`, y con
   eso la pantalla de tareas dejó de decir «a mano» de los treinta y ocho extractores
   que en realidad llama el maestro cada noche: dice *dentro de «X»*, y si además
