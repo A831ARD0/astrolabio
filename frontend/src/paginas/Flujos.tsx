@@ -37,6 +37,8 @@ export function Flujos() {
   const { lanzar, dialogo, ejecutar, cola } = useLanzador()
 
   const [id, setId] = useState<number | null>(null)
+  const [buscaPieza, setBuscaPieza] = useState('')
+  const [soloFaltan, setSoloFaltan] = useState(false)
   const [f, setF] = useState<CuerpoFlujo>(VACIO)
   const [avisos, setAvisos] = useState<string[]>([])
   const [cron, setCron] = useState('0 6 * * *')
@@ -84,6 +86,30 @@ export function Flujos() {
     ;[pasos[i], pasos[j]] = [pasos[j]!, pasos[i]!]
     setF({ ...f, pasos })
   }
+
+  /**
+   * Lo que ya está en el flujo que se está editando.
+   *
+   * Se marca en la lista de la izquierda: con mil datasets, «cuáles ya agregué»
+   * no se puede llevar en la cabeza, y agregar la misma dos veces no hace nada
+   * —el flujo las ignora— así que sin señal no hay forma de notarlo.
+   */
+  const puestas = new Set(f.pasos.map((p) => `${p.tipo}-${p.id}`))
+
+  const todasCargas = disponibles.data?.cargas ?? []
+  const todasTrans = disponibles.data?.transformaciones ?? []
+  const cargasPuestas = todasCargas.filter((c) => puestas.has(`carga-${c.id}`)).length
+  const transPuestas = todasTrans
+    .filter((t) => puestas.has(`transformacion-${t.id}`)).length
+
+  const filtra = <T extends { id: number; nombre: string }>(xs: T[], tipo: string) => {
+    const q = buscaPieza.trim().toLowerCase()
+    return xs.filter((x) =>
+      (!q || x.nombre.toLowerCase().includes(q)) &&
+      (!soloFaltan || !puestas.has(`${tipo}-${x.id}`)))
+  }
+  const cargas = filtra(todasCargas, 'carga')
+  const trans = filtra(todasTrans, 'transformacion')
 
   /** Qué aviso corresponde a qué paso, para pintarlo donde ocurre. */
   const avisoDe = (paso: PasoFlujo, i: number) =>
@@ -133,21 +159,49 @@ export function Flujos() {
         </section>
 
         <section className="seccion">
-          <header>Cargas</header>
+          <header>
+            Cargas{' '}
+            <span className="cuenta" title="Cuántas de la lista ya están en el flujo">
+              {cargasPuestas} / {todasCargas.length}
+            </span>
+          </header>
           <div className="contenido">
+            {/* Con cuarenta sucursales por veintiocho tablas, la lista es de mil
+                renglones: sin buscador y sin saber cuáles ya están, armar un
+                flujo es ir contando a ojo. */}
+            <input type="search" placeholder="Filtrar…" value={buscaPieza}
+                   onChange={(e) => setBuscaPieza(e.target.value)} />
+            <label className="casilla chico" style={{ margin: '4px 0' }}>
+              <input type="checkbox" checked={soloFaltan}
+                     onChange={(e) => setSoloFaltan(e.target.checked)} />
+              Solo las que faltan
+            </label>
             <div className="lista">
-              {disponibles.data?.cargas.map((c) => (
-                <button key={c.id}
-                        onClick={() => agregar({ tipo: 'carga', id: c.id, nombre: c.nombre })}>
-                  <span className="nom mono">{c.nombre}</span>
-                  {c.cron_propio && (
-                    <span className="dcha" title="Ya tiene su propio horario">⏱</span>
-                  )}
-                </button>
-              ))}
-              {disponibles.data?.cargas.length === 0 && (
+              {cargas.map((c) => {
+                const puesta = puestas.has(`carga-${c.id}`)
+                return (
+                  <button key={c.id} className={puesta ? 'puesta' : ''}
+                          title={puesta ? 'Ya está en este flujo' : undefined}
+                          onClick={() =>
+                            agregar({ tipo: 'carga', id: c.id, nombre: c.nombre })}>
+                    <span className="marca">{puesta ? '✓' : ''}</span>
+                    <span className="nom mono">{c.nombre}</span>
+                    {c.cron_propio && (
+                      <span className="dcha" title="Ya tiene su propio horario">⏱</span>
+                    )}
+                  </button>
+                )
+              })}
+              {todasCargas.length === 0 && (
                 <div className="chico tenue" style={{ padding: '2px 8px' }}>
                   No hay datasets todavía.
+                </div>
+              )}
+              {todasCargas.length > 0 && cargas.length === 0 && (
+                <div className="chico tenue" style={{ padding: '2px 8px' }}>
+                  {soloFaltan && !buscaPieza.trim()
+                    ? 'Ya están todas en el flujo.'
+                    : 'Nada con ese nombre.'}
                 </div>
               )}
             </div>
@@ -155,19 +209,26 @@ export function Flujos() {
         </section>
 
         <section className="seccion">
-          <header>Transformaciones</header>
+          <header>
+            Transformaciones{' '}
+            <span className="cuenta">
+              {transPuestas} / {todasTrans.length}
+            </span>
+          </header>
           <div className="contenido">
             <div className="lista">
-              {disponibles.data?.transformaciones.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() =>
-                    agregar({ tipo: 'transformacion', id: t.id, nombre: t.nombre })
-                  }
-                >
-                  <span className="nom mono">{t.nombre}</span>
-                </button>
-              ))}
+              {trans.map((t) => {
+                const puesta = puestas.has(`transformacion-${t.id}`)
+                return (
+                  <button key={t.id} className={puesta ? 'puesta' : ''}
+                          title={puesta ? 'Ya está en este flujo' : undefined}
+                          onClick={() =>
+                            agregar({ tipo: 'transformacion', id: t.id, nombre: t.nombre })}>
+                    <span className="marca">{puesta ? '✓' : ''}</span>
+                    <span className="nom mono">{t.nombre}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </section>

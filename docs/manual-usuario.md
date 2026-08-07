@@ -165,6 +165,11 @@ transformaciones». Los pasos van en orden y **si uno falla, los siguientes no
 corren**: seguir recalculando sobre datos que no se cargaron produce un número que
 parece fresco y no lo es.
 
+En la lista de la izquierda, **lo que ya está en el flujo lleva una palomita** y
+el título dice cuántas van («12 / 35»). Con cuarenta sucursales por veintiocho
+tablas esa lista es de mil renglones: hay un filtro por nombre y una casilla
+*Solo las que faltan* para no ir contando a ojo.
+
 El botón **Ordenar solo** propone el orden correcto leyendo de qué lee cada
 transformación. Es una propuesta, no un cambio automático.
 

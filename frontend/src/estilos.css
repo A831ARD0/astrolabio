@@ -311,6 +311,17 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 .lista button .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lista button .dcha { margin-left: auto; font-size: 11px; color: var(--texto-tenue); }
 
+/* Una pieza que ya esta en el flujo que se edita. La palomita ocupa sitio
+   siempre —aunque este vacia— para que los nombres queden alineados: una lista
+   de mil renglones donde el texto baila es ilegible. */
+.lista button .marca {
+  flex: 0 0 10px;
+  font-size: 11px;
+  color: var(--ok);
+  line-height: 1;
+}
+.lista button.puesta .nom { color: var(--texto-suave); }
+
 .punto { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 7px; }
 .punto.hecho { background: var(--hecho); }
 .punto.dimension { background: var(--acento); }
