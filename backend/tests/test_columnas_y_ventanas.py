@@ -14,7 +14,7 @@ import duckdb
 import pytest
 
 from app.ventanas import VentanaInvalida, describir, resolver
-from tests.conftest import necesita_mysql
+from tests.conftest import cargar, necesita_mysql
 
 HOY = date(2026, 8, 5)      # miercoles, para que "mes actual" tenga dias antes
 
@@ -71,8 +71,7 @@ def test_solo_trae_las_columnas_elegidas(cliente, cab_admin, conexion_mysql):
     assert r.status_code == 201, r.text
     ds = r.json()["id"]
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
-    assert r.status_code == 200, r.text
+    cargar(cliente, cab_admin, ds)
 
     from app.cargas import ruta_dataset
     con = duckdb.connect()
@@ -119,7 +118,7 @@ def test_cambiar_columnas_obliga_a_carga_completa(cliente, cab_admin,
                            "columna_incremental": "sucursal_id",
                            "columnas": ["sucursal_id", "sucursal_nombre"]})
     ds = r.json()["id"]
-    cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
+    cargar(cliente, cab_admin, ds)
 
     lista = cliente.get("/api/conexiones/datasets/lista", headers=cab_admin).json()
     antes = next(d for d in lista["datasets"] if d["id"] == ds)
@@ -193,10 +192,7 @@ def test_la_ventana_convierte_la_carga_en_recarga_de_particiones(
     ds = r.json()["id"]
     assert "del 20" in r.json()["ventana"]        # dice las fechas al guardar
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar?limite=2000",
-                     headers=cab_admin)
-    assert r.status_code == 200, r.text
-    d = r.json()
+    d = cargar(cliente, cab_admin, ds, limite=2000)
     assert d["modo"] == "particion"
     assert d["ventana"] == "ultimos_2_anios"
     assert d["rango"][0] < d["rango"][1]
@@ -214,8 +210,6 @@ def test_la_carga_completa_se_salta_la_ventana(cliente, cab_admin, conexion_mysq
                      json={"nombre": "ventana_saltada", "tabla": "ventas",
                            "particionar_por": "fecha_emision", "ventana": "mes_actual"})
     ds = r.json()["id"]
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar"
-                     f"?incremental=false&limite=500", headers=cab_admin)
-    assert r.status_code == 200, r.text
-    assert r.json()["modo"] == "completo"
-    assert r.json()["ventana"] is None
+    d = cargar(cliente, cab_admin, ds, incremental="false", limite=500)
+    assert d["modo"] == "completo"
+    assert d["ventana"] is None

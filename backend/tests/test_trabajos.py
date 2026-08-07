@@ -13,6 +13,7 @@ import pytest
 
 from app import trabajos
 from tests.test_flujos import (           # noqa: F401
+    correr,
     crear_flujo, transformacion_flujo,
 )
 
@@ -157,3 +158,130 @@ def test_el_progreso_dice_por_que_paso_va(cliente, cab_admin, transformacion_flu
     # Terminada no hay nada que decir: para eso esta el resultado.
     _Falsa.estado = EstadoCarga.exito
     assert _progreso(_Falsa()) is None
+
+
+# --------------------------------------------------------------------------- #
+# Reintentos
+# --------------------------------------------------------------------------- #
+
+def test_un_paso_que_falla_se_reintenta(cliente, cab_admin,
+                                        conexion_archivos_etl, monkeypatch):
+    """
+    El caso real: la sucursal esta apagada a las seis de la manana y a los dos
+    minutos ya no lo esta. Antes el flujo se detenia y no lo volvia a intentar.
+    """
+    from app.conectores import archivos
+
+    id_ = crear_flujo(cliente, cab_admin, {
+        "nombre": "con_reintentos",
+        "reintentos": 2,
+        "espera_reintento_seg": 0,
+        "pasos": [{"tipo": "carga", "id": conexion_archivos_etl}]})["id"]
+
+    intentos = {"n": 0}
+    original = archivos.ConectorArchivos.ingestar
+
+    def falla_las_dos_primeras(self, p, ruta_destino):
+        intentos["n"] += 1
+        if intentos["n"] <= 2:
+            raise RuntimeError("la sucursal no contesta")
+        return original(self, p, ruta_destino)
+
+    monkeypatch.setattr(archivos.ConectorArchivos, "ingestar",
+                        falla_las_dos_primeras)
+
+    d = correr(cliente, cab_admin, id_)
+    assert intentos["n"] == 3
+    assert d["estado"] == "exito"
+    # Un exito al tercer intento NO es lo mismo que un exito: queda anotado, o
+    # el origen que va mal se esconde detras del reintento.
+    assert d["pasos"][0]["intentos"] == 3
+
+
+def test_agotados_los_reintentos_falla_y_lo_dice(cliente, cab_admin,
+                                                 conexion_archivos_etl,
+                                                 monkeypatch):
+    from app.conectores import archivos
+
+    id_ = crear_flujo(cliente, cab_admin, {
+        "nombre": "reintentos_agotados",
+        "reintentos": 1,
+        "espera_reintento_seg": 0,
+        "pasos": [{"tipo": "carga", "id": conexion_archivos_etl}]})["id"]
+
+    def siempre_falla(self, p, ruta_destino):
+        raise RuntimeError("la sucursal no contesta")
+
+    monkeypatch.setattr(archivos.ConectorArchivos, "ingestar", siempre_falla)
+
+    d = correr(cliente, cab_admin, id_)
+    assert d["estado"] == "error"
+    assert d["pasos"][0]["intentos"] == 2
+    assert "2 intentos" in d["mensaje"]
+
+
+def test_sin_reintentos_se_intenta_una_sola_vez(cliente, cab_admin,
+                                                conexion_archivos_etl,
+                                                monkeypatch):
+    """
+    Cero por omision: reintentar sin que nadie lo pida esconde un origen que va
+    mal, y la primera vez que algo falla hay que verlo.
+    """
+    from app.conectores import archivos
+
+    id_ = crear_flujo(cliente, cab_admin, {
+        "nombre": "sin_reintentos",
+        "pasos": [{"tipo": "carga", "id": conexion_archivos_etl}]})["id"]
+
+    intentos = {"n": 0}
+
+    def siempre_falla(self, p, ruta_destino):
+        intentos["n"] += 1
+        raise RuntimeError("la sucursal no contesta")
+
+    monkeypatch.setattr(archivos.ConectorArchivos, "ingestar", siempre_falla)
+
+    d = correr(cliente, cab_admin, id_)
+    assert intentos["n"] == 1
+    assert d["estado"] == "error"
+    assert "intentos" not in d["pasos"][0]
+
+
+# --------------------------------------------------------------------------- #
+# La carga suelta tambien va por la cola
+# --------------------------------------------------------------------------- #
+
+def test_cargar_un_dataset_contesta_enseguida(cliente, cab_admin,
+                                              conexion_archivos_etl):
+    r = cliente.post(f"/api/conexiones/datasets/{conexion_archivos_etl}/cargar",
+                     headers=cab_admin)
+    assert r.status_code == 202, r.text
+    assert r.json()["trabajo_id"] > 0
+    assert trabajos.esperar(60)
+
+
+def test_el_mismo_dataset_dos_veces_se_rechaza(cliente, cab_admin,
+                                               conexion_archivos_etl):
+    # Dos cargas del mismo dataset a la vez escriben los mismos Parquet.
+    from app.conectores import archivos
+
+    original = archivos.ConectorArchivos.ingestar
+    segunda = {}
+
+    def espiado(self, p, ruta_destino):
+        r = cliente.post(
+            f"/api/conexiones/datasets/{conexion_archivos_etl}/cargar",
+            headers=cab_admin)
+        segunda["codigo"] = r.status_code
+        return original(self, p, ruta_destino)
+
+    import pytest as _pytest
+    monkeypatch = _pytest.MonkeyPatch()
+    monkeypatch.setattr(archivos.ConectorArchivos, "ingestar", espiado)
+    try:
+        cliente.post(f"/api/conexiones/datasets/{conexion_archivos_etl}/cargar",
+                     headers=cab_admin)
+        assert trabajos.esperar(60)
+    finally:
+        monkeypatch.undo()
+    assert segunda.get("codigo") == 409

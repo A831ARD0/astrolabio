@@ -262,6 +262,16 @@ class Flujo(Base):
     # cargaron produce un número que parece fresco y no lo es.
     al_fallar: Mapped[str] = mapped_column(String(20), default="detener")
 
+    # Cuantas veces se vuelve a intentar UN PASO antes de darlo por fallido, y
+    # cuanto se espera entre intentos. Con cuarenta sucursales, que una este
+    # apagada a las seis de la manana pasa seguido, y eso no es un fallo del
+    # dato: es un fallo de la red que a los dos minutos ya no esta.
+    #
+    # Por defecto CERO. Reintentar sin que nadie lo pida esconde un origen que
+    # va mal: la primera vez que algo falla hay que verlo.
+    reintentos: Mapped[int] = mapped_column(Integer, default=0)
+    espera_reintento_seg: Mapped[int] = mapped_column(Integer, default=60)
+
     cron: Mapped[str | None] = mapped_column(String(120), nullable=True)
     zona_horaria: Mapped[str] = mapped_column(String(64), default="America/Mexico_City")
     programacion_activa: Mapped[bool] = mapped_column(Boolean, default=False)

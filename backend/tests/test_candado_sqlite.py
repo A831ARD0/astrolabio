@@ -16,6 +16,7 @@ mira desde dentro de la ingesta, que es el unico momento en que importa.
 from __future__ import annotations
 
 from app.conectores import archivos
+from tests.conftest import cargar
 
 
 def test_durante_la_ingesta_otro_puede_escribir(cliente, cab_admin,
@@ -41,9 +42,7 @@ def test_durante_la_ingesta_otro_puede_escribir(cliente, cab_admin,
 
     monkeypatch.setattr(archivos.ConectorArchivos, "ingestar", espiado)
 
-    r = cliente.post(f"/api/conexiones/datasets/{conexion_archivos_etl}/cargar",
-                     headers=cab_admin)
-    assert r.status_code == 200, r.text
+    cargar(cliente, cab_admin, conexion_archivos_etl)
 
     # Que la ejecucion ya estuviera confirmada como 'corriendo' es justo lo que
     # suelta el candado: antes ni siquiera existia para nadie mas.
@@ -67,7 +66,6 @@ def test_se_puede_crear_un_flujo_mientras_carga(cliente, cab_admin,
         return original(self, p, ruta_destino)
 
     monkeypatch.setattr(archivos.ConectorArchivos, "ingestar", espiado)
-    cliente.post(f"/api/conexiones/datasets/{conexion_archivos_etl}/cargar",
-                 headers=cab_admin)
+    cargar(cliente, cab_admin, conexion_archivos_etl)
 
     assert respuesta.get("codigo") in (201, 409), respuesta.get("texto")

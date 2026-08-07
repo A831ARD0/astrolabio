@@ -201,10 +201,15 @@ export function PanelDataset({
   const [cron, setCron] = useState(ds.cron ?? '0 6 * * *')
   const [confirmarBaja, setConfirmarBaja] = useState(false)
 
-  const resultado =
-    acc.cargar.data ?? acc.recargarRango.data ?? null
+  // La carga corre en segundo plano: el resultado sale del historial, no de la
+  // respuesta de lanzarla. El error tambien — lo unico que puede fallar en la
+  // peticion es que ya haya una carga de este dataset en marcha.
+  const ultima = historial.data?.ejecuciones[0] ?? null
+  const corriendo = ultima?.estado === 'corriendo'
+  const resultado = ultima?.estado === 'exito' ? ultima : null
   const errorCarga =
     (acc.cargar.error as Error | null) ?? (acc.recargarRango.error as Error | null)
+  const fallo = ultima?.estado === 'error' ? ultima.mensaje : null
 
   return (
     <Velo alCerrar={alCerrar}>
@@ -250,7 +255,7 @@ export function PanelDataset({
           <div className="fila-condicion">
             <button
               className="btn primario"
-              disabled={acc.cargar.isPending}
+              disabled={acc.cargar.isPending || corriendo}
               onClick={() =>
                 acc.cargar.mutate({
                   incremental: true,
@@ -258,11 +263,11 @@ export function PanelDataset({
                 })
               }
             >
-              {acc.cargar.isPending ? 'Cargando…' : 'Cargar'}
+              {corriendo ? 'Corriendo…' : acc.cargar.isPending ? 'Lanzando…' : 'Cargar'}
             </button>
             <button
               className="btn"
-              disabled={acc.cargar.isPending}
+              disabled={acc.cargar.isPending || corriendo}
               title="Reescribe el dataset entero desde el origen"
               onClick={() =>
                 acc.cargar.mutate({
@@ -307,10 +312,10 @@ export function PanelDataset({
                 />
                 <button
                   className="btn"
-                  disabled={acc.recargarRango.isPending}
+                  disabled={acc.recargarRango.isPending || corriendo}
                   onClick={() => acc.recargarRango.mutate({ desde, hasta })}
                 >
-                  {acc.recargarRango.isPending ? 'Recargando…' : 'Recargar rango'}
+                  {corriendo ? 'Corriendo…' : 'Recargar rango'}
                 </button>
               </div>
               <span className="chico tenue">
@@ -320,24 +325,36 @@ export function PanelDataset({
             </>
           )}
 
+          {corriendo && (
+            <div className="aviso-caja">
+              Corriendo en segundo plano. Puedes cerrar esta ventana: el
+              resultado queda en el historial de abajo.
+            </div>
+          )}
+          {acc.cargar.data?.esperando_a && !corriendo && (
+            <div className="aviso-caja">
+              En cola detrás de «{acc.cargar.data.esperando_a}».
+            </div>
+          )}
           {resultado && (
             <div className="aviso-caja ok-caja">
               ✓ {resultado.modo} · {resultado.filas.toLocaleString('es-MX')} fila(s) ·{' '}
               {resultado.mb} MB · {Math.round(resultado.ms)} ms · total{' '}
-              {resultado.filas_totales.toLocaleString('es-MX')}
+              {(resultado.filas_totales ?? 0).toLocaleString('es-MX')}
               {resultado.particiones.length > 0 && (
                 <div className="chico mono">
                   particiones: {resultado.particiones.join(', ')}
                 </div>
               )}
-              {resultado.filas_sin_particion > 0 && (
+              {(resultado.filas_sin_particion ?? 0) > 0 && (
                 <div className="chico">
-                  {resultado.filas_sin_particion.toLocaleString('es-MX')} fila(s) sin
-                  fecha válida quedaron en la partición «sin_fecha».
+                  {(resultado.filas_sin_particion ?? 0).toLocaleString('es-MX')} fila(s)
+                  sin fecha válida quedaron en la partición «sin_fecha».
                 </div>
               )}
             </div>
           )}
+          {fallo && <div className="error-caja">{fallo}</div>}
           {errorCarga && <div className="error-caja">{errorCarga.message}</div>}
 
           {/* --------------------------------------------------------- columnas */}

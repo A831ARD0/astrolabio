@@ -174,8 +174,6 @@ def ejecutar_carga(
     ejec.filas = r.filas
     ejec.bytes_escritos = r.bytes_escritos
     ejec.ms = int(r.ms)
-    ejec.detalle = {**ejec.detalle, "particiones": r.particiones_escritas}
-
     # El total del dataset solo se suma cuando la carga agrega. En una recarga de
     # particion no se sabe cuantas filas reemplazo, asi que se vuelve a contar
     # sobre el Parquet en vez de inventar una suma.
@@ -185,6 +183,17 @@ def ejecutar_carga(
         ds.filas = _contar_parquet(ds.nombre)
     else:
         ds.filas = r.filas
+
+    # Todo lo que antes solo viajaba en la respuesta HTTP queda tambien aqui:
+    # desde que la carga corre en segundo plano, el historial es el unico sitio
+    # donde se puede mirar como salio. Va DESPUES de actualizar `ds.filas`, que
+    # es de donde sale el total.
+    ejec.detalle = {**ejec.detalle,
+                    "particiones": r.particiones_escritas,
+                    "archivos": len(r.archivos),
+                    "filas_sin_particion": r.filas_sin_particion,
+                    "marca_maxima": r.marca_maxima,
+                    "filas_totales": ds.filas}
 
     ds.bytes_parquet = r.bytes_escritos or ds.bytes_parquet
     ds.ultima_carga = datetime.now(timezone.utc)

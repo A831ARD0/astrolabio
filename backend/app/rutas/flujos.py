@@ -37,6 +37,10 @@ class Guardar(BaseModel):
     descripcion: str | None = None
     pasos: list[PasoFlujo] = []
     al_fallar: str = "detener"
+    # Cuantas veces se reintenta UN PASO antes de darlo por fallido. Cero por
+    # omision: reintentar sin que nadie lo pida esconde un origen que va mal.
+    reintentos: int = Field(default=0, ge=0, le=10)
+    espera_reintento_seg: int = Field(default=60, ge=0, le=3600)
 
 
 class Programacion(BaseModel):
@@ -51,6 +55,8 @@ class Salida(BaseModel):
     descripcion: str | None
     pasos: list[dict]
     al_fallar: str
+    reintentos: int
+    espera_reintento_seg: int
     cron: str | None
     zona_horaria: str
     programacion_activa: bool
@@ -77,7 +83,9 @@ def _salida(sesion: SesionDep, f: Flujo) -> Salida:
     proxima = programador.proxima_corrida_flujo(f.id)
     return Salida(
         id=f.id, nombre=f.nombre, descripcion=f.descripcion,
-        pasos=f.pasos or [], al_fallar=f.al_fallar, cron=f.cron,
+        pasos=f.pasos or [], al_fallar=f.al_fallar,
+        reintentos=f.reintentos or 0,
+        espera_reintento_seg=f.espera_reintento_seg or 0, cron=f.cron,
         zona_horaria=f.zona_horaria, programacion_activa=f.programacion_activa,
         proxima_corrida=proxima.isoformat() if proxima else None,
         ultima_ejecucion=iso(f.ultima_ejecucion),
@@ -180,7 +188,9 @@ def crear(cuerpo: Guardar, sesion: SesionDep,
     pasos = _validar(sesion, cuerpo)
 
     f = Flujo(nombre=cuerpo.nombre, descripcion=cuerpo.descripcion, pasos=pasos,
-              al_fallar=cuerpo.al_fallar, creado_por=actor.id)
+              al_fallar=cuerpo.al_fallar, reintentos=cuerpo.reintentos,
+              espera_reintento_seg=cuerpo.espera_reintento_seg,
+              creado_por=actor.id)
     sesion.add(f)
     sesion.flush()
     registrar(sesion, accion="flujo_creado", usuario_id=actor.id,
@@ -198,6 +208,8 @@ def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
     f.descripcion = cuerpo.descripcion
     f.pasos = pasos
     f.al_fallar = cuerpo.al_fallar
+    f.reintentos = cuerpo.reintentos
+    f.espera_reintento_seg = cuerpo.espera_reintento_seg
     registrar(sesion, accion="flujo_actualizado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
               detalle={"nombre": f.nombre, "pasos": len(pasos)})

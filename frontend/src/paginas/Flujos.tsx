@@ -25,9 +25,13 @@ import {
   useProgramarFlujo,
   useSugerirOrden,
 } from '../api/flujos'
+import { PanelLateral, Seccion } from '../comunes/Panel'
 import { useLanzador } from '../flujos/Lanzar'
 
-const VACIO: CuerpoFlujo = { nombre: '', descripcion: null, pasos: [], al_fallar: 'detener' }
+const VACIO: CuerpoFlujo = {
+  nombre: '', descripcion: null, pasos: [], al_fallar: 'detener',
+  reintentos: 0, espera_reintento_seg: 60,
+}
 
 export function Flujos() {
   const lista = useFlujos()
@@ -61,6 +65,8 @@ export function Flujos() {
       descripcion: x.descripcion,
       pasos: x.pasos,
       al_fallar: x.al_fallar,
+      reintentos: x.reintentos,
+      espera_reintento_seg: x.espera_reintento_seg,
     })
     setAvisos(x.avisos)
     setCron(x.cron ?? '0 6 * * *')
@@ -127,12 +133,10 @@ export function Flujos() {
     <div className="editor">
       {dialogo}
       {/* --------------------------------------------------- izquierda */}
-      <aside className="izq">
-        <section className="seccion">
-          <header>
-            Flujos <span className="cuenta">{lista.data?.length ?? 0}</span>
-          </header>
-          <div className="contenido">
+      <PanelLateral clave="flujos">
+        <Seccion titulo="Flujos" clave="flujos-lista"
+                 extra={lista.data?.length ?? 0}>
+          <>
             <div className="lista">
               {lista.data?.map((x) => (
                 <button key={x.id} className={id === x.id ? 'sel' : ''}
@@ -155,32 +159,33 @@ export function Flujos() {
                     onClick={nuevo}>
               + Nuevo flujo
             </button>
-          </div>
-        </section>
+          </>
+        </Seccion>
 
         {/* `principal`: es la lista larga, la que se lleva el espacio que sobra.
             Las otras dos se quedan arriba y abajo, con sus botones a la vista. */}
-        <section className="seccion principal">
-          <header>
-            Cargas{' '}
-            <span className="cuenta" title="Cuántas de la lista ya están en el flujo">
-              {cargasPuestas} / {todasCargas.length}
-            </span>
-          </header>
-          {/* Con cuarenta sucursales por veintiocho tablas, la lista es de mil
-              renglones: sin buscador y sin saber cuáles ya están, armar un flujo
-              es ir contando a ojo. El buscador va fuera de la parte que se
-              desplaza, para no tener que subir a por él. */}
-          <div className="fijo">
-            <input type="search" placeholder="Filtrar…" value={buscaPieza}
-                   onChange={(e) => setBuscaPieza(e.target.value)} />
-            <label className="casilla chico">
-              <input type="checkbox" checked={soloFaltan}
-                     onChange={(e) => setSoloFaltan(e.target.checked)} />
-              Solo las que faltan
-            </label>
-          </div>
-          <div className="contenido">
+        <Seccion
+          titulo="Cargas"
+          principal
+          clave="flujos-cargas"
+          extra={`${cargasPuestas} / ${todasCargas.length}`}
+          /* Con cuarenta sucursales por veintiocho tablas, la lista es de mil
+             renglones: sin buscador y sin saber cuáles ya están, armar un flujo
+             es ir contando a ojo. El buscador va fuera de la parte que se
+             desplaza, para no tener que subir a por él. */
+          fijo={
+            <div className="fijo">
+              <input type="search" placeholder="Filtrar…" value={buscaPieza}
+                     onChange={(e) => setBuscaPieza(e.target.value)} />
+              <label className="casilla chico">
+                <input type="checkbox" checked={soloFaltan}
+                       onChange={(e) => setSoloFaltan(e.target.checked)} />
+                Solo las que faltan
+              </label>
+            </div>
+          }
+        >
+          <>
             <div className="lista">
               {cargas.map((c) => {
                 const puesta = puestas.has(`carga-${c.id}`)
@@ -210,34 +215,27 @@ export function Flujos() {
                 </div>
               )}
             </div>
-          </div>
-        </section>
+          </>
+        </Seccion>
 
-        <section className="seccion">
-          <header>
-            Transformaciones{' '}
-            <span className="cuenta">
-              {transPuestas} / {todasTrans.length}
-            </span>
-          </header>
-          <div className="contenido">
-            <div className="lista">
-              {trans.map((t) => {
-                const puesta = puestas.has(`transformacion-${t.id}`)
-                return (
-                  <button key={t.id} className={puesta ? 'puesta' : ''}
-                          title={puesta ? 'Ya está en este flujo' : undefined}
-                          onClick={() =>
-                            agregar({ tipo: 'transformacion', id: t.id, nombre: t.nombre })}>
-                    <span className="marca">{puesta ? '✓' : ''}</span>
-                    <span className="nom mono">{t.nombre}</span>
-                  </button>
-                )
-              })}
-            </div>
+        <Seccion titulo="Transformaciones" clave="flujos-trans"
+                 extra={`${transPuestas} / ${todasTrans.length}`}>
+          <div className="lista">
+            {trans.map((t) => {
+              const puesta = puestas.has(`transformacion-${t.id}`)
+              return (
+                <button key={t.id} className={puesta ? 'puesta' : ''}
+                        title={puesta ? 'Ya está en este flujo' : undefined}
+                        onClick={() =>
+                          agregar({ tipo: 'transformacion', id: t.id, nombre: t.nombre })}>
+                  <span className="marca">{puesta ? '✓' : ''}</span>
+                  <span className="nom mono">{t.nombre}</span>
+                </button>
+              )
+            })}
           </div>
-        </section>
-      </aside>
+        </Seccion>
+      </PanelLateral>
 
       {/* ------------------------------------------------------- centro */}
       <div className="centro">
@@ -351,8 +349,9 @@ export function Flujos() {
                         >
                           {r.estado === 'exito'
                             ? `${(r.filas ?? 0).toLocaleString('es-MX')} filas · ${r.ms} ms`
+                            + (r.intentos ? ` · ${r.intentos} intentos` : '')
                             : r.estado === 'error'
-                              ? 'falló'
+                              ? `falló${r.intentos ? ` tras ${r.intentos} intentos` : ''}`
                               : r.estado === 'corriendo'
                                 ? 'trayendo…'
                                 : 'omitido'}
@@ -382,7 +381,7 @@ export function Flujos() {
                 )
               })}
 
-              <div className="campo" style={{ marginTop: 10, maxWidth: 380 }}>
+              <div className="campo" style={{ marginTop: 10, maxWidth: 420 }}>
                 <label>Si un paso falla</label>
                 <select
                   value={f.al_fallar}
@@ -395,6 +394,48 @@ export function Flujos() {
                   </option>
                   <option value="continuar">continuar con los demás pasos</option>
                 </select>
+
+                {/* Con cuarenta sucursales, que una esté apagada a las seis de
+                    la mañana pasa seguido, y eso a los dos minutos ya no está.
+                    Cero por omisión: la primera vez que algo falla hay que
+                    verlo, no taparlo con un reintento. */}
+                <label style={{ marginTop: 8 }}>Antes de darlo por fallido</label>
+                <div className="acciones">
+                  <select
+                    value={f.reintentos}
+                    onChange={(e) =>
+                      setF({ ...f, reintentos: Number(e.target.value) })}
+                  >
+                    {[0, 1, 2, 3, 5, 10].map((n) => (
+                      <option key={n} value={n}>
+                        {n === 0 ? 'no reintentar' : `reintentar ${n} vez${n === 1 ? '' : 'es'}`}
+                      </option>
+                    ))}
+                  </select>
+                  {f.reintentos > 0 && (
+                    <>
+                      <span className="chico suave">esperando</span>
+                      <select
+                        value={f.espera_reintento_seg}
+                        onChange={(e) =>
+                          setF({ ...f, espera_reintento_seg: Number(e.target.value) })}
+                      >
+                        {[0, 30, 60, 300, 600, 1800].map((s) => (
+                          <option key={s} value={s}>
+                            {s === 0 ? 'sin esperar'
+                              : s < 60 ? `${s} s`
+                                : `${s / 60} min`}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </div>
+                <span className="chico tenue">
+                  {f.reintentos === 0
+                    ? 'Un fallo se ve a la primera. Súbelo si el origen se cae a ratos.'
+                    : `Cada paso se intenta hasta ${f.reintentos + 1} veces. El historial dice cuántas hicieron falta.`}
+                </span>
               </div>
             </div>
           )}

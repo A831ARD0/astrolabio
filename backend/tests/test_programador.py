@@ -17,7 +17,7 @@ from app import programador
 from app.conectores.base import ErrorConector, particiones_del_rango
 from app.config import config
 from app.db import CrearSesion, motor
-from tests.conftest import necesita_mysql
+from tests.conftest import cargar, necesita_mysql, recargar_rango
 
 
 def _ruta(nombre: str) -> Path:
@@ -103,10 +103,7 @@ def test_recargar_no_duplica_filas(cliente, cab_admin, dataset_csv):
     """
     nombre = None
     for _ in range(3):
-        r = cliente.post(f"/api/conexiones/datasets/{dataset_csv}/cargar",
-                         headers=cab_admin)
-        assert r.status_code == 200, r.text
-        assert r.json()["filas"] == 2
+        assert cargar(cliente, cab_admin, dataset_csv)["filas"] == 2
 
     with CrearSesion() as s:
         nombre = s.execute(text("SELECT nombre FROM dataset WHERE id=:i"),
@@ -261,20 +258,14 @@ def test_recargar_un_mes_no_toca_las_demas_particiones(cliente, cab_admin,
     assert r.status_code == 201, r.text
     ds = r.json()["id"]
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar?limite=40000",
-                     headers=cab_admin)
-    assert r.status_code == 200, r.text
+    cargar(cliente, cab_admin, ds, limite=40000)
 
     raiz = _ruta("ventas_rango")
     antes = {str(p.relative_to(raiz)): p.stat().st_mtime_ns
              for p in raiz.rglob("*.parquet")}
     assert (raiz / "anio=2024" / "mes=1").is_dir(), "hace falta ese mes para la prueba"
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/recargar-rango",
-                     headers=cab_admin,
-                     json={"desde": "2024-01-01", "hasta": "2024-01-31"})
-    assert r.status_code == 200, r.text
-    d = r.json()
+    d = recargar_rango(cliente, cab_admin, ds, "2024-01-01", "2024-01-31")
     assert d["modo"] == "particion"
     assert d["particiones"] == ["anio=2024/mes=1"]
 

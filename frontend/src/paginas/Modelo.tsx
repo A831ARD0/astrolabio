@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import { PanelLateral } from '../comunes/Panel'
 import { useDefinicion, useGuardarDefinicion, useVersiones } from '../api/hooks'
 import type { Entidad, Metrica } from '../api/tipos'
 import { DialogoEntidad } from '../modelo/DialogoEntidad'
@@ -122,7 +123,7 @@ export function Modelo() {
   return (
     <div className="editor">
       {/* ------------------------------------------------------ izquierda */}
-      <aside className="izq">
+      <PanelLateral clave="modelo">
         <section className="seccion">
           <header>
             Entidades <span className="cuenta">{d.entidades.length}</span>
@@ -216,7 +217,7 @@ export function Modelo() {
             </div>
           </div>
         </section>
-      </aside>
+      </PanelLateral>
 
       {/* --------------------------------------------------------- centro */}
       <div className="centro">

@@ -24,6 +24,7 @@ import {
   useVersiones,
   useYo,
 } from '../api/hooks'
+import { PanelLateral } from '../comunes/Panel'
 import type { DefinicionDashboard, TipoWidget, Widget } from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
 import { PanelWidget } from '../tablero/PanelWidget'
@@ -164,7 +165,7 @@ export function Tablero() {
   return (
     <div className="editor">
       {editando && (
-        <aside className="izq">
+        <PanelLateral clave="tablero">
           <section className="seccion">
             <header>Agregar widget</header>
             <div className="contenido">
@@ -196,7 +197,7 @@ export function Tablero() {
               </div>
             </div>
           </section>
-        </aside>
+        </PanelLateral>
       )}
 
       <div className="centro">

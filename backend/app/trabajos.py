@@ -57,13 +57,16 @@ MAXIMO_EN_COLA = 100
 @dataclass
 class Trabajo:
     id: int
-    tipo: str                     # 'flujo'
+    tipo: str                     # 'flujo' | 'carga'
     objeto_id: int
     nombre: str
     actor_id: int | None
     actor_email: str
     a_la_par: bool
     encolado_en: datetime
+    #: Lo que distingue una carga de otra del mismo dataset: incremental,
+    #: completa, o un rango de fechas. Se pasa tal cual a `ejecutar_carga`.
+    opciones: dict = field(default_factory=dict)
     iniciado_en: datetime | None = None
     estado: str = "en_cola"       # en_cola | corriendo
 
@@ -135,7 +138,10 @@ def _correr(t: Trabajo) -> None:
     log.info("Trabajo %s: %s '%s' empieza", t.id, t.tipo, t.nombre)
     try:
         with CrearSesion() as sesion:
-            _ejecutar_flujo(sesion, t)
+            if t.tipo == "carga":
+                _ejecutar_carga(sesion, t)
+            else:
+                _ejecutar_flujo(sesion, t)
     except Exception:
         log.exception("Trabajo %s (%s '%s') murio", t.id, t.tipo, t.nombre)
     finally:
@@ -169,12 +175,34 @@ def _ejecutar_flujo(sesion, t: Trabajo) -> None:
         raise
 
 
+def _ejecutar_carga(sesion, t: Trabajo) -> None:
+    from app.cargas import ErrorCarga, ejecutar_carga
+    from app.modelos_db import Dataset
+
+    ds = sesion.get(Dataset, t.objeto_id)
+    if ds is None:
+        log.warning("El dataset %s ya no existe", t.objeto_id)
+        return
+    try:
+        r = ejecutar_carga(sesion, ds, Actor(id=t.actor_id, email=t.actor_email),
+                           **t.opciones)
+        sesion.commit()
+        log.info("Carga de '%s' completa: %s filas en %s ms",
+                 ds.nombre, r["filas"], r["ms"])
+    except ErrorCarga as e:
+        # Ya quedo registrada y confirmada dentro de `ejecutar_carga`.
+        log.error("Carga de '%s' fallo: %s", ds.nombre, e)
+    except Exception:
+        sesion.rollback()
+        raise
+
+
 # --------------------------------------------------------------------------- #
 # Lo que usan las rutas
 # --------------------------------------------------------------------------- #
 
 def encolar(tipo: str, objeto_id: int, nombre: str, actor: Actor,
-            a_la_par: bool = False) -> Trabajo:
+            a_la_par: bool = False, opciones: dict | None = None) -> Trabajo:
     """
     Registra un trabajo y devuelve su ficha. No espera a que corra.
 
@@ -193,7 +221,8 @@ def encolar(tipo: str, objeto_id: int, nombre: str, actor: Actor,
                 f"Revisa la cola antes de encolar mas.")
         t = Trabajo(id=_reg.siguiente_id, tipo=tipo, objeto_id=objeto_id,
                     nombre=nombre, actor_id=actor.id, actor_email=actor.email,
-                    a_la_par=a_la_par, encolado_en=datetime.now(timezone.utc))
+                    a_la_par=a_la_par, opciones=dict(opciones or {}),
+                    encolado_en=datetime.now(timezone.utc))
         _reg.siguiente_id += 1
         _reg.vivos[t.id] = t
 

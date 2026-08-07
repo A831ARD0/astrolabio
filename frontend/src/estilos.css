@@ -278,35 +278,66 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
   border-right: 1px solid var(--borde);
   background: var(--fondo-panel);
   display: flex;
+  overflow: hidden;
+}
+.panel-cuerpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   /* Red de seguridad: si una pantalla tiene muchas secciones y ninguna
      principal, mejor que se desplace el panel a que algo quede inalcanzable. */
   overflow-y: auto;
 }
-.izq > .seccion {
+
+/* El borde por el que se arrastra para ensanchar. Cinco pixeles de zona
+   sensible y una linea de uno: lo que se ve tiene que ser fino, lo que se
+   agarra no. */
+.tirador {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  position: relative;
+}
+.tirador::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: transparent;
+}
+.tirador:hover::after, .tirador.activo::after { background: var(--acento); }
+
+/* La cabecera entera pliega la seccion: acertarle al triangulo cuarenta veces
+   al dia es trabajo de verdad. */
+.seccion > header.plegable { cursor: pointer; user-select: none; }
+.seccion > header.plegable:hover { color: var(--texto); }
+
+.izq .seccion {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
   min-height: 0;
 }
-.izq > .seccion.principal { flex: 1 1 auto; }
+.izq .seccion.principal { flex: 1 1 auto; }
 /* La seccion principal se desplaza entera por dentro: puede tener varias listas
    con sus subtitulos —el ETL las tiene— y tres barras de desplazamiento en
    veinte centimetros no se manejan. */
-.izq > .seccion.principal > .contenido {
+.izq .seccion.principal > .contenido {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 /* Las cortas se acotan y se desplazan solas: cuarenta sucursales son cuarenta
    flujos, y esa lista tampoco puede comerse la pantalla. */
-.izq > .seccion:not(.principal) .lista {
+.izq .seccion:not(.principal) .lista {
   max-height: 26vh;
   overflow-y: auto;
 }
 /* Lo que se queda quieto arriba de la lista larga: el buscador y sus casillas.
    Van fuera de `.contenido` justo por eso. */
-.izq > .seccion > .fijo {
+.izq .seccion > .fijo {
   display: flex;
   flex-direction: column;
   gap: 4px;

@@ -120,6 +120,16 @@ fuera la columna de partición o la incremental, y dejarlo todo fuera.
 completa** y reescribirá todo. El archivo en disco tiene las columnas viejas, y
 mezclar dos juegos haría que leerlo fallara o —peor— devolviera nulos.
 
+### Cargar no bloquea la pantalla
+
+**Cargar** y **Recargar completo** lanzan la carga y contestan enseguida: puedes
+cerrar la ventana, o el navegador. El resultado aparece en el historial de ese
+mismo panel, que se actualiza solo mientras corre.
+
+Como los flujos, las cargas **hacen cola**: dos a la vez sobre el mismo origen no
+acaban antes. Y **el mismo dataset dos veces a la vez se rechaza** — serían dos
+procesos escribiendo los mismos archivos.
+
 ### ¿La primera carga trae todo?
 
 Sí. El modo no se elige: sale del estado del dataset.
@@ -175,6 +185,20 @@ transformación. Es una propuesta, no un cambio automático.
 
 ⚠️ Un dataset con horario propio que además es paso de un flujo **se carga dos
 veces**. A veces es lo que se quiere; conviene saberlo.
+
+#### Reintentos
+
+Con cuarenta sucursales, que una esté apagada a las 6 de la mañana pasa seguido —
+y a los dos minutos ya no lo está. Cada flujo dice **cuántas veces se reintenta
+un paso** antes de darlo por fallido, y cuánto espera entre intentos.
+
+Por omisión son **cero**, a propósito: reintentar sin que nadie lo pida esconde
+un origen que va mal, y la primera vez que algo falla hay que verlo. Súbelo
+cuando sepas que ese origen se cae a ratos.
+
+Un éxito al tercer intento **no es lo mismo** que un éxito: el historial dice
+cuántos intentos hicieron falta. Si un paso empieza a necesitar tres cada noche,
+el problema no es el reintento.
 
 ### Tareas
 
@@ -302,6 +326,16 @@ inflado, y aquí se ve antes de publicar nada.
 Si algo no se puede representar (funciones de ventana, `HAVING`, subconsultas,
 CTEs…), **se dice cuál y por qué**, y no se convierte. Una conversión aproximada es
 peor que ninguna: seguirías editando unos pasos que dicen otra cosa.
+
+### El panel de la izquierda
+
+Con cuarenta sucursales, el nombre de un dataset es el de la conexión más el de
+la tabla —`MGSALINAC1__Orcamento_Produtos`— y no cabe. **Arrastra el borde
+derecho del panel** para ensancharlo; doble clic lo devuelve a su ancho normal.
+El ancho se recuerda por pantalla.
+
+Y **cada sección se pliega** pulsando su título. Plegar las que no estás usando
+le da su alto a la que sí.
 
 ---
 

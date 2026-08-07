@@ -289,3 +289,43 @@ def conexion_archivos_etl(cliente, cab_admin):
                      json={"nombre": "ventas_csv_etl", "tabla": "ventas.csv"})
     assert r.status_code == 201, r.text
     return r.json()["id"]
+
+
+def cargar(cliente, cab, dataset_id: int, espera: float = 120, **params) -> dict:
+    """
+    Lanza la carga de un dataset y devuelve como salio.
+
+    Desde que las cargas van en segundo plano, la peticion contesta 202 y no
+    trae resultado: esta ahora en el historial, que ademas guarda mas que antes
+    -archivos, particiones, marca maxima-. Este ayudante hace las dos cosas y
+    espera al trabajador, porque comprobar sin esperar seria una carrera.
+
+    Lanza AssertionError si la carga fallo, con el mensaje del historial: es lo
+    que antes hacia el 400 de la peticion.
+    """
+    from app import trabajos
+
+    r = cliente.post(f"/api/conexiones/datasets/{dataset_id}/cargar",
+                     headers=cab, params=params or None)
+    assert r.status_code == 202, r.text
+    assert trabajos.esperar(espera), "la carga no termino a tiempo"
+    return ultima_carga(cliente, cab, dataset_id)
+
+
+def recargar_rango(cliente, cab, dataset_id: int, desde: str, hasta: str,
+                   espera: float = 120) -> dict:
+    """Como `cargar`, para la recarga de un rango de fechas."""
+    from app import trabajos
+
+    r = cliente.post(f"/api/conexiones/datasets/{dataset_id}/recargar-rango",
+                     headers=cab, json={"desde": desde, "hasta": hasta})
+    assert r.status_code == 202, r.text
+    assert trabajos.esperar(espera), "la recarga no termino a tiempo"
+    return ultima_carga(cliente, cab, dataset_id)
+
+
+def ultima_carga(cliente, cab, dataset_id: int) -> dict:
+    h = cliente.get(f"/api/conexiones/datasets/{dataset_id}/historial",
+                    headers=cab).json()
+    assert h["ejecuciones"], "la carga no dejo historial"
+    return h["ejecuciones"][0]

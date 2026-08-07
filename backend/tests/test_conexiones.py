@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import BASE_MYSQL as BASE, necesita_mysql
+from tests.conftest import BASE_MYSQL as BASE, cargar, necesita_mysql
 
 
 # --------------------------------------------------------------------------- #
@@ -154,9 +154,7 @@ def test_ingesta_completa(cliente, cab_admin, conexion_mysql):
     assert r.status_code == 201, r.text
     ds = r.json()["id"]
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
-    assert r.status_code == 200, r.text
-    d = r.json()
+    d = cargar(cliente, cab_admin, ds)
     assert d["estado"] == "exito"
     assert d["filas"] == 40
     assert d["modo"] == "completo"
@@ -183,14 +181,14 @@ def test_un_fallo_inesperado_se_registra_y_se_explica(cliente, cab_admin,
 
     monkeypatch.setattr("app.conectores.mysql.ConectorMySQL.ingestar", revienta)
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
-    assert r.status_code == 400, r.text          # no 500
-    detalle = r.json()["detail"]
-    assert "MemoryError" in detalle              # que fue
-    assert "cat_sucursal" in detalle             # donde
-    assert "no cupo en memoria" in detalle
+    # La carga va en segundo plano, asi que el fallo NO viaja en la respuesta:
+    # esta en el historial, que es donde se mira despues de todas formas.
+    d = cargar(cliente, cab_admin, ds)
+    assert d["estado"] == "error"
+    assert "MemoryError" in d["mensaje"]         # que fue
+    assert "cat_sucursal" in d["mensaje"]        # donde
+    assert "no cupo en memoria" in d["mensaje"]
 
-    # Y sobre todo: quedo en el historial, que es lo que se mira despues.
     h = cliente.get(f"/api/conexiones/datasets/{ds}/historial", headers=cab_admin)
     assert h.status_code == 200, h.text
     ejecuciones = h.json()["ejecuciones"]
@@ -209,15 +207,13 @@ def test_ingesta_incremental_trae_solo_lo_nuevo(cliente, cab_admin, conexion_mys
     ds = r.json()["id"]
 
     # Primera carga: completa, y guarda la marca maxima.
-    primera = cliente.post(f"/api/conexiones/datasets/{ds}/cargar",
-                           headers=cab_admin).json()
+    primera = cargar(cliente, cab_admin, ds)
     assert primera["modo"] == "completo"
     assert primera["filas"] == 10
     assert primera["marca_maxima"] is not None
 
     # Segunda: ya no hay nada nuevo, debe traer 0 filas.
-    segunda = cliente.post(f"/api/conexiones/datasets/{ds}/cargar",
-                           headers=cab_admin).json()
+    segunda = cargar(cliente, cab_admin, ds)
     assert segunda["modo"] == "incremental"
     assert segunda["filas"] == 0
 
@@ -236,10 +232,7 @@ def test_ingesta_particionada_y_grande(cliente, cab_admin, conexion_mysql):
     assert r.status_code == 201, r.text
     ds = r.json()["id"]
 
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar?limite=50000",
-                     headers=cab_admin)
-    assert r.status_code == 200, r.text
-    d = r.json()
+    d = cargar(cliente, cab_admin, ds, limite=50000)
     assert d["filas"] == 50000
     assert d["archivos"] > 1, "el particionado deberia generar varios archivos"
     # La columna es varchar con cadenas vacias: se reporta, no se calla.
@@ -256,8 +249,8 @@ def test_historial_de_cargas(cliente, cab_admin, conexion_mysql):
                      headers=cab_admin,
                      json={"nombre": "hist", "tabla": "presupuesto"})
     ds = r.json()["id"]
-    cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
-    cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
+    cargar(cliente, cab_admin, ds)
+    cargar(cliente, cab_admin, ds)
 
     r = cliente.get(f"/api/conexiones/datasets/{ds}/historial", headers=cab_admin)
     assert r.status_code == 200
@@ -333,9 +326,7 @@ def test_ingesta_de_csv_a_parquet(cliente, cab_admin, conexion_archivos):
                      headers=cab_admin,
                      json={"nombre": "ventas_csv", "tabla": "ventas.csv"})
     ds = r.json()["id"]
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
-    assert r.status_code == 200, r.text
-    assert r.json()["filas"] == 2
+    assert cargar(cliente, cab_admin, ds)["filas"] == 2
 
 
 @necesita_mysql
@@ -351,14 +342,9 @@ def test_columna_de_particion_inexistente_avisa_claro(cliente, cab_admin,
                      json={"nombre": "col_mala", "tabla": "ventas",
                            "particionar_por": "columna_que_no_existe"})
     ds = r.json()["id"]
-    r = cliente.post(f"/api/conexiones/datasets/{ds}/cargar?limite=10",
-                     headers=cab_admin)
-    assert r.status_code == 400, r.text
-    assert "no existe" in r.json()["detail"]
-
-    # Y la ejecucion fallida queda en el historial.
-    h = cliente.get(f"/api/conexiones/datasets/{ds}/historial", headers=cab_admin)
-    assert h.json()["ejecuciones"][0]["estado"] == "error"
+    d = cargar(cliente, cab_admin, ds, limite=10)
+    assert d["estado"] == "error"
+    assert "no existe" in d["mensaje"]
 
 
 # --------------------------------------------------------------------------- #
@@ -416,7 +402,7 @@ def test_dar_de_baja_un_dataset_conserva_el_parquet(cliente, cab_admin,
                      headers=cab_admin,
                      json={"nombre": "ventas_para_borrar", "tabla": "ventas.csv"})
     ds = r.json()["id"]
-    cliente.post(f"/api/conexiones/datasets/{ds}/cargar", headers=cab_admin)
+    cargar(cliente, cab_admin, ds)
 
     r = cliente.delete(f"/api/conexiones/datasets/{ds}", headers=cab_admin)
     assert r.status_code == 200, r.text
@@ -465,14 +451,12 @@ def test_un_archivo_con_columna_incremental_si_es_incremental(cliente, cab_admin
                            "columna_incremental": "monto"})
     ds = r.json()["id"]
 
-    primera = cliente.post(f"/api/conexiones/datasets/{ds}/cargar",
-                           headers=cab_admin).json()
+    primera = cargar(cliente, cab_admin, ds)
     assert primera["filas"] == 2
     assert primera["marca_maxima"] == "480000.5", primera
 
     # Nada nuevo en el archivo: la segunda carga no debe traer nada.
-    segunda = cliente.post(f"/api/conexiones/datasets/{ds}/cargar",
-                           headers=cab_admin).json()
+    segunda = cargar(cliente, cab_admin, ds)
     assert segunda["modo"] == "incremental"
     assert segunda["filas"] == 0
     assert segunda["filas_totales"] == 2, "se duplicaron las filas"

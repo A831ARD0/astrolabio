@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from app.materializar import _catalogo_de_datasets, previsualizar
+from tests.conftest import cargar
 from semantic.transformacion import Transformacion
 
 
@@ -62,10 +63,8 @@ def dos_sucursales(cliente, cab_admin):
             r = cliente.post(f"/api/conexiones/{con}/datasets", headers=cab_admin,
                              json={"nombre": ds_nombre, "tabla": "datos.csv"})
             assert r.status_code == 201, r.text
-            ds = r.json()["id"]
-            assert cliente.post(
-                f"/api/conexiones/datasets/{ds}/cargar",
-                headers=cab_admin).status_code == 200
+            assert cargar(cliente, cab_admin,
+                          r.json()["id"])["estado"] == "exito"
 
         hechas.append((con, ds_nombre, etiquetas))
 

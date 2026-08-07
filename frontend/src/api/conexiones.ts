@@ -423,18 +423,11 @@ export function useOdbcPerfiles(activo: boolean) {
   })
 }
 
-export interface ResultadoCarga {
-  estado: string
-  modo: string
-  disparo: string
-  filas: number
-  mb: number
-  ms: number
-  archivos: number
-  marca_maxima: string | null
-  filas_totales: number
-  filas_sin_particion: number
-  particiones: string[]
+/** Lo que contesta lanzar una carga: que quedo en la cola, no como salio. */
+export interface CargaLanzada {
+  trabajo_id: number
+  estado: 'en_cola' | 'corriendo'
+  esperando_a: string | null
 }
 
 export function useAccionesDataset(id: number | null) {
@@ -446,9 +439,12 @@ export function useAccionesDataset(id: number | null) {
     qc.invalidateQueries({ queryKey: ['catalogo'] })
   }
   return {
+    // Las dos LANZAN, no esperan: el resultado esta en el historial. Con una
+    // tabla grande por el puente, tener la peticion abierta acababa en un 502 y
+    // en no saber como quedo si cerrabas la pantalla.
     cargar: useMutation({
       mutationFn: (v: { incremental: boolean; limite?: number }) =>
-        api.post<ResultadoCarga>(
+        api.post<CargaLanzada>(
           `/conexiones/datasets/${id}/cargar?incremental=${v.incremental}` +
             (v.limite ? `&limite=${v.limite}` : ''),
         ),
@@ -456,7 +452,7 @@ export function useAccionesDataset(id: number | null) {
     }),
     recargarRango: useMutation({
       mutationFn: (v: { desde: string; hasta: string }) =>
-        api.post<ResultadoCarga>(`/conexiones/datasets/${id}/recargar-rango`, v),
+        api.post<CargaLanzada>(`/conexiones/datasets/${id}/recargar-rango`, v),
       onSettled: tras,
     }),
     programar: useMutation({
@@ -488,14 +484,32 @@ export interface EjecucionCarga {
   disparo: string
   filas: number
   ms: number
+  mb: number
   mensaje: string | null
   detalle: Record<string, unknown>
+  /** Lo útil del detalle, en la superficie. */
+  ventana: string | null
+  rango: [string, string] | null
+  archivos: number | null
+  particiones: string[]
+  filas_sin_particion: number | null
+  marca_maxima: string | null
+  filas_totales: number | null
   cuando: string
 }
 
+/**
+ * El historial del dataset. Se vuelve a pedir solo mientras la carga de arriba
+ * siga viva: desde que corre en segundo plano, es el único sitio donde se ve
+ * cómo va y cómo acabó.
+ */
 export function useHistorialDataset(id: number | null) {
   return useQuery({
     queryKey: clavesCon.historial(id ?? 0),
+    refetchInterval: (q) => {
+      const d = q.state.data as { ejecuciones: EjecucionCarga[] } | undefined
+      return d?.ejecuciones[0]?.estado === 'corriendo' ? 2000 : false
+    },
     queryFn: () =>
       api.get<{ ejecuciones: EjecucionCarga[] }>(
         `/conexiones/datasets/${id}/historial`,

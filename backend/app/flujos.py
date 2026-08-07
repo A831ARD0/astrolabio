@@ -242,35 +242,68 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
                         "total": total}
         sesion.commit()
 
+    # Cuantas veces se vuelve a intentar un paso, y cuanto se espera. Con cuarenta
+    # sucursales, que una este apagada a las seis de la manana pasa seguido, y
+    # eso a los dos minutos ya no esta. Cero por omision: la primera vez que algo
+    # falla hay que verlo.
+    reintentos = max(0, int(flujo.reintentos or 0))
+    espera = max(0, int(flujo.espera_reintento_seg or 0))
+
     for i, paso in enumerate(flujo.pasos or [], start=1):
         nombre = paso.get("nombre") or _nombre_de(sesion, paso) or "?"
         inicio = time.perf_counter()
-        _apuntar({"paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
-                  "estado": "corriendo"})
-        try:
-            if paso.get("tipo") == "carga":
-                ds = sesion.get(Dataset, int(paso["id"]))
-                if ds is None:
-                    raise ErrorFlujo(f"el dataset {paso['id']} ya no existe")
-                r = ejecutar_carga(sesion, ds, actor)
-                resultados.append({"paso": i, "tipo": "carga", "nombre": nombre,
-                                   "estado": "exito", "filas": r["filas"],
-                                   "modo": r["modo"], "ms": r["ms"]})
-            else:
-                t = sesion.get(TransformacionDB, int(paso["id"]))
-                if t is None:
-                    raise ErrorFlujo(f"la transformación {paso['id']} ya no existe")
-                r = ejecutar_transformacion(sesion, t, actor)
-                resultados.append({"paso": i, "tipo": "transformacion",
-                                   "nombre": nombre, "estado": "exito",
-                                   "filas": r["filas"], "ms": r["ms"]})
-        except (ErrorCarga, ErrorEjecucion, ErrorFlujo) as e:
+        ultimo_error: Exception | None = None
+        salio: dict[str, Any] | None = None
+
+        for intento in range(1, reintentos + 2):
+            _apuntar({"paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
+                      "estado": "corriendo",
+                      **({"intento": intento} if intento > 1 else {})})
+            try:
+                if paso.get("tipo") == "carga":
+                    ds = sesion.get(Dataset, int(paso["id"]))
+                    if ds is None:
+                        raise ErrorFlujo(f"el dataset {paso['id']} ya no existe")
+                    r = ejecutar_carga(sesion, ds, actor)
+                    salio = {"paso": i, "tipo": "carga", "nombre": nombre,
+                             "estado": "exito", "filas": r["filas"],
+                             "modo": r["modo"], "ms": r["ms"]}
+                else:
+                    t = sesion.get(TransformacionDB, int(paso["id"]))
+                    if t is None:
+                        raise ErrorFlujo(
+                            f"la transformación {paso['id']} ya no existe")
+                    r = ejecutar_transformacion(sesion, t, actor)
+                    salio = {"paso": i, "tipo": "transformacion",
+                             "nombre": nombre, "estado": "exito",
+                             "filas": r["filas"], "ms": r["ms"]}
+                # Un exito al tercer intento NO es lo mismo que un exito: queda
+                # anotado, o el origen que va mal se esconde detras del reintento.
+                if intento > 1:
+                    salio["intentos"] = intento
+                break
+            except (ErrorCarga, ErrorEjecucion, ErrorFlujo) as e:
+                ultimo_error = e
+                if intento <= reintentos:
+                    log.warning("Flujo '%s' paso %s (%s) fallo en el intento %s "
+                                "de %s: %s. Reintenta en %ss",
+                                flujo.nombre, i, nombre, intento,
+                                reintentos + 1, e, espera)
+                    if espera:
+                        time.sleep(espera)
+
+        if salio is not None:
+            resultados.append(salio)
+        else:
+            e = ultimo_error
             resultados.append({
                 "paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
                 "estado": "error", "mensaje": str(e),
                 "ms": round((time.perf_counter() - inicio) * 1000, 1),
+                **({"intentos": reintentos + 1} if reintentos else {}),
             })
-            fallo = f"paso {i} ({nombre}): {e}"
+            fallo = (f"paso {i} ({nombre}): {e}"
+                     + (f" — tras {reintentos + 1} intentos" if reintentos else ""))
             if flujo.al_fallar == "detener":
                 # Los pasos que no se llegaron a intentar se anotan como omitidos:
                 # un hueco en el historial se lee como "corrió y no hizo nada".

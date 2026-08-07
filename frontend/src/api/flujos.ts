@@ -18,6 +18,9 @@ export interface Flujo {
   descripcion: string | null
   pasos: PasoFlujo[]
   al_fallar: 'detener' | 'continuar'
+  /** Cuántas veces se reintenta un paso antes de darlo por fallido. */
+  reintentos: number
+  espera_reintento_seg: number
   cron: string | null
   zona_horaria: string
   programacion_activa: boolean
@@ -38,6 +41,8 @@ export interface ResultadoPaso {
   tipo: string
   nombre: string
   estado: 'exito' | 'error' | 'omitido' | 'corriendo'
+  /** Cuántos intentos hicieron falta. Solo viene si hubo más de uno. */
+  intentos?: number
   filas?: number
   modo?: string
   ms?: number
@@ -94,6 +99,8 @@ export interface CuerpoFlujo {
   descripcion?: string | null
   pasos: PasoFlujo[]
   al_fallar: 'detener' | 'continuar'
+  reintentos: number
+  espera_reintento_seg: number
 }
 
 export function useGuardarFlujo() {

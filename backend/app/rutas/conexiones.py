@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app import programador, ventanas
+from app import programador, trabajos, ventanas
 from app.auditoria import registrar
 from app.cargas import Actor, ErrorCarga, ejecutar_carga, ruta_dataset
 from app.conectores import OPCIONALES, REQUERIDOS, ErrorConector, TIPOS, crear
@@ -942,27 +942,47 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
             "avisos": avisos}
 
 
-@router.post("/datasets/{dataset_id}/cargar")
+def _encolar_carga(ds, actor: Usuario, opciones: dict, a_la_par: bool) -> dict:
+    """
+    Deja la carga en la cola y contesta enseguida.
+
+    No corre dentro de la petición por lo mismo que los flujos: una tabla grande
+    por el puente tarda minutos, el proxy corta y salirse de la pantalla dejaba
+    sin saber cómo acabó. El resultado se sigue por el historial del dataset.
+    """
+    ocupado = trabajos.hay_algo_corriendo()
+    try:
+        t = trabajos.encolar("carga", ds.id, ds.nombre,
+                             Actor(id=actor.id, email=actor.email),
+                             a_la_par=a_la_par, opciones=opciones)
+    except trabajos.YaEnMarcha as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    return {"trabajo_id": t.id, "estado": t.estado,
+            "esperando_a": ocupado.nombre if ocupado and not a_la_par else None}
+
+
+@router.post("/datasets/{dataset_id}/cargar",
+             status_code=status.HTTP_202_ACCEPTED)
 def cargar(dataset_id: int, sesion: SesionDep,
            incremental: bool = True, limite: int | None = None,
+           a_la_par: bool = False,
            actor: Usuario = Depends(exigir_rol(Rol.editor))):
     """
-    Ejecuta la carga. Si el dataset tiene columna incremental y ya hay marca
-    previa, trae solo lo nuevo; si tiene ventana móvil, recarga la ventana.
+    Lanza la carga en segundo plano. Si el dataset tiene columna incremental y
+    ya hay marca previa, trae solo lo nuevo; si tiene ventana móvil, recarga la
+    ventana.
 
     `incremental=false` es "volver a traer todo", y por eso **se salta la ventana**:
     quien pide una carga completa quiere el dataset entero, no el mes en curso.
     """
     ds = _dataset(sesion, dataset_id)
-    try:
-        return ejecutar_carga(sesion, ds, Actor(id=actor.id, email=actor.email),
-                              incremental=incremental, limite=limite,
-                              usar_ventana=incremental)
-    except ErrorCarga as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"La carga fallo: {e}")
+    return _encolar_carga(ds, actor, {"incremental": incremental,
+                                      "limite": limite,
+                                      "usar_ventana": incremental}, a_la_par)
 
 
-@router.post("/datasets/{dataset_id}/recargar-rango")
+@router.post("/datasets/{dataset_id}/recargar-rango",
+             status_code=status.HTTP_202_ACCEPTED)
 def recargar_rango(dataset_id: int, cuerpo: RecargarRango, sesion: SesionDep,
                    actor: Usuario = Depends(exigir_rol(Rol.editor))):
     """
@@ -978,11 +998,8 @@ def recargar_rango(dataset_id: int, cuerpo: RecargarRango, sesion: SesionDep,
             status.HTTP_400_BAD_REQUEST,
             f"El dataset '{ds.nombre}' no esta particionado: no hay particiones "
             f"que reemplazar. Usa la carga completa.")
-    try:
-        return ejecutar_carga(sesion, ds, Actor(id=actor.id, email=actor.email),
-                              rango_desde=cuerpo.desde, rango_hasta=cuerpo.hasta)
-    except ErrorCarga as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"La recarga fallo: {e}")
+    return _encolar_carga(ds, actor, {"rango_desde": cuerpo.desde,
+                                      "rango_hasta": cuerpo.hasta}, False)
 
 
 @router.delete("/datasets/{dataset_id}", status_code=200)
@@ -1020,7 +1037,17 @@ def historial(dataset_id: int, sesion: SesionDep,
     return {"ejecuciones": [
         {"id": e.id, "estado": e.estado.value, "modo": e.modo,
          "disparo": e.origen, "filas": e.filas, "ms": e.ms,
+         "mb": round(e.bytes_escritos / 1024 / 1024, 2),
          "mensaje": e.mensaje, "detalle": e.detalle,
+         # Lo util del detalle, en la superficie: la pantalla no deberia tener
+         # que saber que dentro de `detalle` hay una clave con este nombre.
+         "ventana": (e.detalle or {}).get("ventana"),
+         "rango": (e.detalle or {}).get("rango"),
+         "archivos": (e.detalle or {}).get("archivos"),
+         "particiones": (e.detalle or {}).get("particiones") or [],
+         "filas_sin_particion": (e.detalle or {}).get("filas_sin_particion"),
+         "marca_maxima": (e.detalle or {}).get("marca_maxima"),
+         "filas_totales": (e.detalle or {}).get("filas_totales"),
          "cuando": iso(e.creado_en)}
         for e in ds.ejecuciones[:50]
     ]}

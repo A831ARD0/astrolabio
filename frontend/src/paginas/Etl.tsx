@@ -29,6 +29,7 @@ import {
   useTransformaciones,
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
+import { PanelLateral, Seccion } from '../comunes/Panel'
 import { Velo } from '../comunes/Velo'
 
 const TIPOS: TipoPaso[] = [
@@ -131,12 +132,10 @@ export function Etl() {
   return (
     <div className="editor">
       {/* --------------------------------------------------- izquierda */}
-      <aside className="izq">
-        <section className="seccion">
-          <header>
-            Transformaciones <span className="cuenta">{lista.data?.length ?? 0}</span>
-          </header>
-          <div className="contenido">
+      <PanelLateral clave="etl">
+        <Seccion titulo="Transformaciones" clave="etl-lista"
+                 extra={lista.data?.length ?? 0}>
+          <>
             <div className="lista">
               {lista.data?.map((t) => (
                 <button
@@ -160,14 +159,13 @@ export function Etl() {
                     onClick={nueva}>
               + Nueva transformación
             </button>
-          </div>
-        </section>
+          </>
+        </Seccion>
 
         {/* `principal`: la lista larga se lleva el espacio que sobre, y el boton
             de «+ Nueva transformación» de arriba se queda a la vista. */}
-        <section className="seccion principal">
-          <header>Orígenes disponibles</header>
-          <div className="contenido">
+        <Seccion titulo="Orígenes disponibles" principal clave="etl-origenes">
+          <>
             <div className="chico tenue" style={{ padding: '0 8px 4px' }}>
               Tablas del motor
             </div>
@@ -254,9 +252,9 @@ export function Etl() {
                 </div>
               </>
             )}
-          </div>
-        </section>
-      </aside>
+          </>
+        </Seccion>
+      </PanelLateral>
 
       {/* ------------------------------------------------------- centro */}
       <div className="centro">
