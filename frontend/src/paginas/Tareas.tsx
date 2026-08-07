@@ -23,12 +23,12 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { type Dataset, useConexiones, useDatasets } from '../api/conexiones'
-import { type Flujo, useFlujos, useSacarDeLaCola } from '../api/flujos'
+import { type Flujo, useDetener, useFlujos } from '../api/flujos'
 import { enPalabras } from '../comunes/cron'
 import { useLanzador } from '../flujos/Lanzar'
 
 /** Cómo salió la última vez. Es por lo que se filtra al entrar por la mañana. */
-type Salida = 'error' | 'corriendo' | 'exito' | 'nunca'
+type Salida = 'error' | 'corriendo' | 'cancelado' | 'exito' | 'nunca'
 
 type Filtro = 'todas' | Salida | 'sin_horario'
 
@@ -37,6 +37,7 @@ const FILTROS: { clave: Filtro; nombre: string }[] = [
   { clave: 'error', nombre: 'Fallaron' },
   { clave: 'corriendo', nombre: 'Corriendo' },
   { clave: 'exito', nombre: 'Bien' },
+  { clave: 'cancelado', nombre: 'Detenidos' },
   { clave: 'nunca', nombre: 'Sin correr' },
   { clave: 'sin_horario', nombre: 'Sin horario' },
 ]
@@ -73,6 +74,7 @@ interface Tarea {
 function salidaDe(estado: string | null, cuando: string | null): Salida {
   if (estado === 'error') return 'error'
   if (estado === 'corriendo') return 'corriendo'
+  if (estado === 'cancelado') return 'cancelado'
   if (!cuando) return 'nunca'
   return 'exito'
 }
@@ -111,6 +113,9 @@ function duracion(ms: number | null): string {
 function Marca({ s }: { s: Salida }) {
   if (s === 'error') return <span className="etiqueta critico">falló</span>
   if (s === 'corriendo') return <span className="etiqueta aviso">corriendo</span>
+  // Detenido a propósito: ni verde ni rojo. No se rompió nada, pero tampoco
+  // acabó, y el que mire por la mañana tiene que poder distinguirlo.
+  if (s === 'cancelado') return <span className="etiqueta">detenido</span>
   if (s === 'nunca') return <span className="etiqueta">sin correr</span>
   return <span className="etiqueta ok">bien</span>
 }
@@ -168,7 +173,7 @@ export function Tareas() {
   const datasets = useDatasets()
   const conexiones = useConexiones()
   const { lanzar, dialogo, ejecutar, cola } = useLanzador()
-  const sacar = useSacarDeLaCola()
+  const detener = useDetener()
 
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -216,7 +221,7 @@ export function Tareas() {
         !q || t.nombre.toLowerCase().includes(q) || t.contexto.toLowerCase().includes(q))
       // Lo que falló arriba: es lo único de la pantalla que pide algo.
       .sort((a, b) => {
-        const peso = { error: 0, corriendo: 1, nunca: 2, exito: 3 }
+        const peso = { error: 0, corriendo: 1, cancelado: 2, nunca: 3, exito: 4 }
         if (peso[a.salida] !== peso[b.salida]) return peso[a.salida] - peso[b.salida]
         return a.nombre.localeCompare(b.nombre, 'es')
       })
@@ -286,12 +291,33 @@ export function Tareas() {
         <div className="aviso-caja">
           {cola.data.corriendo.map((t) => (
             <div key={t.id} className="fila-cola">
-              <span className="etiqueta aviso">corriendo</span>
+              <span className="etiqueta aviso">
+                {t.parando ? 'deteniéndose' : 'corriendo'}
+              </span>
               <strong>{t.nombre}</strong>
               <span className="chico suave">
                 desde {t.iniciado_en ? cuando(t.iniciado_en) : '—'} · {t.quien}
                 {t.a_la_par && ' · a la par'}
+                {t.parando && ' · termina la tabla en curso y para'}
               </span>
+              {/* Solo los flujos: una carga suelta no tiene pasos donde pararse.
+                  Ofrecer el botón y que conteste 409 sería peor que no tenerlo. */}
+              {t.tipo === 'flujo' && !t.parando && (
+                <button className="btn chico peligro" style={{ marginLeft: 'auto' }}
+                        disabled={detener.isPending}
+                        title="Termina la tabla que está trayendo y se detiene. Lo que falte queda como cancelado."
+                        onClick={() => {
+                          if (confirm(
+                            `¿Detener «${t.nombre}»?\n\nSe termina la tabla que ` +
+                            `está trayendo —no se corta a la mitad— y los pasos ` +
+                            `que falten quedan como cancelados. Lo ya traído se ` +
+                            `queda.`)) {
+                            detener.mutate(t.id)
+                          }
+                        }}>
+                  Detener
+                </button>
+              )}
             </div>
           ))}
           {cola.data.en_cola.map((t, i) => (
@@ -300,11 +326,22 @@ export function Tareas() {
               <strong>{t.nombre}</strong>
               <span className="chico suave">pedido por {t.quien}</span>
               <button className="btn chico" style={{ marginLeft: 'auto' }}
-                      onClick={() => sacar.mutate(t.id)}>
+                      disabled={detener.isPending}
+                      onClick={() => detener.mutate(t.id)}>
                 Sacar de la cola
               </button>
             </div>
           ))}
+          {detener.data && (
+            <div className="chico suave" style={{ marginTop: 4 }}>
+              {detener.data.mensaje}
+            </div>
+          )}
+          {detener.isError && (
+            <div className="error-caja chico" style={{ marginTop: 4 }}>
+              {(detener.error as Error).message}
+            </div>
+          )}
         </div>
       ) : null}
 

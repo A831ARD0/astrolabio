@@ -22,6 +22,7 @@ import {
   useFlujos,
   useGuardarFlujo,
   useHistorialFlujo,
+  useDetener,
   useProgramarFlujo,
   useSugerirOrden,
 } from '../api/flujos'
@@ -40,6 +41,7 @@ export function Flujos() {
   const disponibles = useDisponiblesFlujo()
   const guardar = useGuardarFlujo()
   const sugerir = useSugerirOrden()
+  const detener = useDetener()
   const { lanzar, dialogo, ejecutar, cola } = useLanzador()
 
   const [busca, setBusca] = useSearchParams()
@@ -331,16 +333,36 @@ export function Flujos() {
             >
               {guardar.isPending ? 'Guardando…' : id === null ? 'Crear' : 'Guardar'}
             </button>
-            <button
-              className="btn primario"
-              disabled={id === null || ejecutar.isPending || !!enMarcha}
-              title={id === null ? 'Guárdalo antes de ejecutarlo' : undefined}
-              onClick={() => lanzar(id!, f.nombre)}
-            >
-              {enMarcha
-                ? enMarcha.estado === 'corriendo' ? 'Corriendo…' : 'En cola'
-                : 'Ejecutar ahora'}
-            </button>
+            {/* Detener está donde se lanzó: quien echó a andar una cadena de
+                treinta y ocho a la una de la tarde vuelve a ESTA pantalla a
+                pararla, no a buscarla en Tareas. */}
+            {enMarcha ? (
+              <button
+                className="btn peligro"
+                disabled={detener.isPending || enMarcha.parando}
+                title="Termina la tabla que está trayendo y se detiene. Lo que falte queda como cancelado."
+                onClick={() => {
+                  if (confirm(
+                    `¿Detener «${f.nombre}»?\n\nSe termina la tabla que está ` +
+                    `trayendo —no se corta a la mitad— y los pasos que falten ` +
+                    `quedan como cancelados. Lo ya traído se queda.`)) {
+                    detener.mutate(enMarcha.id)
+                  }
+                }}
+              >
+                {enMarcha.parando ? 'Deteniéndose…'
+                  : enMarcha.estado === 'corriendo' ? 'Detener' : 'Quitar de la cola'}
+              </button>
+            ) : (
+              <button
+                className="btn primario"
+                disabled={id === null || ejecutar.isPending}
+                title={id === null ? 'Guárdalo antes de ejecutarlo' : undefined}
+                onClick={() => lanzar(id!, f.nombre)}
+              >
+                Ejecutar ahora
+              </button>
+            )}
           </div>
         </div>
 
@@ -354,7 +376,9 @@ export function Flujos() {
             {ejecutar.data.esperando_a
               ? `En cola detrás de «${ejecutar.data.esperando_a}».`
               : `Corriendo ${ejecutar.data.pasos} paso(s) en segundo plano.`}{' '}
-            Puedes irte de esta pantalla: el resultado queda en el historial.
+            Puedes irte de esta pantalla: el resultado queda en el historial. Si
+            hace falta pararlo, el botón de arriba lo detiene al terminar la tabla
+            en curso.
             {actual?.progreso && <strong> Va por el paso {actual.progreso}.</strong>}
           </div>
         )}
@@ -408,7 +432,9 @@ export function Flujos() {
                               ? `falló${r.intentos ? ` tras ${r.intentos} intentos` : ''}`
                               : r.estado === 'corriendo'
                                 ? 'trayendo…'
-                                : 'omitido'}
+                                : r.estado === 'cancelado'
+                                  ? 'detenido'
+                                  : 'omitido'}
                         </span>
                       )}
 
@@ -584,10 +610,15 @@ export function Flujos() {
                   {historial.data?.ejecuciones.map((e) => (
                     <details key={e.id} className="corrida">
                       <summary>
+                        {/* «cancelado» no va en rojo: no se rompió nada, lo
+                            paró alguien. En rojo se confunde con una avería. */}
                         <span
-                          className={`etiqueta ${e.estado === 'exito' ? 'ok' : 'critico'}`}
+                          className={`etiqueta ${
+                            e.estado === 'exito' ? 'ok'
+                              : e.estado === 'cancelado' ? '' : 'critico'
+                          }`}
                         >
-                          {e.estado}
+                          {e.estado === 'cancelado' ? 'detenido' : e.estado}
                         </span>{' '}
                         <span className="chico">
                           {new Date(e.cuando).toLocaleString('es-MX')} ·{' '}

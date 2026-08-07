@@ -285,19 +285,41 @@ def cola(_: Usuario = Depends(exigir_rol(Rol.editor))):
     return trabajos.estado()
 
 
-@router.delete("/cola/{trabajo_id}", status_code=204)
-def sacar_de_la_cola(trabajo_id: int,
-                     _: Usuario = Depends(exigir_rol(Rol.editor))):
+@router.delete("/cola/{trabajo_id}")
+def detener(trabajo_id: int, sesion: SesionDep,
+            actor: Usuario = Depends(exigir_rol(Rol.editor))):
     """
-    Saca de la cola algo que todavía no empezó.
+    Detiene un trabajo: lo saca de la cola si esperaba, o le pide parar si ya
+    corre.
 
-    Lo que ya arrancó no se corta: a mitad de una ingesta, cortar deja el destino
-    a medias y sin nadie que lo cuente.
+    Un flujo que ya arrancó **se detiene entre pasos, no a media tabla**. La que
+    se está trayendo se termina y los pasos que faltan quedan como cancelados.
+    Cortar la ingesta en curso sería peor: el destino se borra ANTES de escribir,
+    así que una recarga completa cortada en el momento justo deja el dataset
+    vacío. Con veintiocho tablas por sucursal, esperar la que corre es cuestión
+    de minutos; recuperar un dataset vacío, no.
+
+    Una carga suelta no tiene pasos donde pararse, así que no se puede: se dice.
     """
-    if not trabajos.cancelar(trabajo_id):
+    que = trabajos.cancelar(trabajo_id)
+    if que is None:
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Ese trabajo ya empezó o ya terminó; no se puede sacar "
-                            "de la cola.")
+                            "Ese trabajo ya terminó.")
+    if que == "no_se_puede":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esa carga ya empezó a traer datos y no tiene pasos donde pararse. "
+            "Cortarla a la mitad puede dejar el dataset vacío: hay que esperarla.")
+
+    registrar(sesion, accion="trabajo_detenido", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="trabajo", objeto_id=trabajo_id,
+              detalle={"como": que})
+    return {
+        "estado": que,
+        "mensaje": ("Sacado de la cola: no va a correr." if que == "sacado" else
+                    "Se detendrá al terminar la tabla que está trayendo. Los pasos "
+                    "que falten quedan como cancelados."),
+    }
 
 
 @router.get("/{id_}/historial")

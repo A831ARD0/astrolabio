@@ -159,6 +159,12 @@ class EstadoCarga(str, enum.Enum):
     corriendo = "corriendo"
     exito = "exito"
     error = "error"
+    #: Lo paro alguien a proposito. Es un estado propio y no `error` por dos
+    #: razones: en la pantalla no debe salir en rojo como si algo se hubiera
+    #: roto, y sobre todo no debe disparar el aviso de fallo — mandar un correo
+    #: de alarma por algo que acaba de hacer quien opera es la forma de que esos
+    #: correos se dejen de leer.
+    cancelado = "cancelado"
 
 
 class CargaEjecucion(Base):

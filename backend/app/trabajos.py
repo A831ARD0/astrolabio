@@ -69,11 +69,14 @@ class Trabajo:
     opciones: dict = field(default_factory=dict)
     iniciado_en: datetime | None = None
     estado: str = "en_cola"       # en_cola | corriendo
+    #: Alguien pidio pararlo. No se corta nada a la fuerza: el ejecutor lo mira
+    #: ENTRE pasos y se detiene sin dejar nada a medias. Ver `cancelar`.
+    parar: bool = False
 
     def como_dict(self) -> dict:
         return {
             "id": self.id, "tipo": self.tipo, "objeto_id": self.objeto_id,
-            "nombre": self.nombre, "estado": self.estado,
+            "nombre": self.nombre, "estado": self.estado, "parando": self.parar,
             "a_la_par": self.a_la_par, "quien": self.actor_email,
             "encolado_en": self.encolado_en.isoformat(),
             "iniciado_en": self.iniciado_en.isoformat() if self.iniciado_en else None,
@@ -163,7 +166,9 @@ def _ejecutar_flujo(sesion, t: Trabajo) -> None:
         return
     actor = Actor(id=t.actor_id, email=t.actor_email)
     try:
-        r = ejecutar_flujo(sesion, f, actor)
+        # `parar` se consulta entre pasos. Se pasa como funcion y no como valor
+        # porque el valor cambia mientras el flujo corre: es justo el punto.
+        r = ejecutar_flujo(sesion, f, actor, parar=lambda: t.parar)
         sesion.commit()
         log.info("Flujo '%s' completo: %d pasos en %s ms",
                  f.nombre, len(r["pasos"]), r["ms"])
@@ -271,21 +276,35 @@ def esperar(segundos: float = 60) -> bool:
     return False
 
 
-def cancelar(trabajo_id: int) -> bool:
+def cancelar(trabajo_id: int) -> str | None:
     """
-    Saca de la cola un trabajo que todavia no empezo.
+    Detiene un trabajo. Devuelve que se hizo, o None si ya no habia nada.
 
-    Lo que ya arranco no se corta: a mitad de una ingesta, cortar deja el destino
-    a medias y sin nadie que lo cuente. Se espera y se mira el historial.
+    Tres respuestas distintas, porque son tres situaciones distintas:
+
+    - `'sacado'` — estaba esperando turno y ya no va a correr.
+    - `'parando'` — un flujo que ya arranco. **No se corta la tabla en curso**:
+      se le pide parar y el ejecutor lo mira ENTRE pasos. La tabla que se esta
+      trayendo se termina, y los pasos que faltan quedan como cancelados. Cortar
+      a media ingesta es lo que deja un destino a medias, y ahi es peor el
+      remedio: el borrado del destino ocurre ANTES de escribir, asi que una
+      recarga completa interrumpida en el momento justo deja el dataset vacio.
+    - `'no_se_puede'` — una carga suelta que ya arranco. No tiene pasos donde
+      pararse: o se termina, o se corta a la mitad. Se dice, en vez de fingir.
     """
     with _reg.candado:
         t = _reg.vivos.get(trabajo_id)
-        if t is None or t.estado != "en_cola":
-            return False
-        # Se marca y se saca del registro; el trabajador lo salta al sacarlo de
-        # la cola porque ya no esta entre los vivos.
-        _reg.vivos.pop(trabajo_id, None)
-    return True
+        if t is None:
+            return None
+        if t.estado == "en_cola":
+            # Se saca del registro; el trabajador lo salta al sacarlo de la cola
+            # porque ya no esta entre los vivos.
+            _reg.vivos.pop(trabajo_id, None)
+            return "sacado"
+        if t.tipo != "flujo":
+            return "no_se_puede"
+        t.parar = True
+        return "parando"
 
 
 def _esta_vivo(t: Trabajo) -> bool:

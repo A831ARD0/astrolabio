@@ -10,6 +10,7 @@ salvo que se pida lo contrario a proposito.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text as sa_text
 
 from app import trabajos
 from tests.test_flujos import (           # noqa: F401
@@ -285,3 +286,131 @@ def test_el_mismo_dataset_dos_veces_se_rechaza(cliente, cab_admin,
     finally:
         monkeypatch.undo()
     assert segunda.get("codigo") == 409
+
+
+# --------------------------------------------------------------------------- #
+# Detener lo que ya arranco
+# --------------------------------------------------------------------------- #
+
+def _registrar_corriendo(tipo: str, objeto_id: int, nombre: str,
+                         estado: str = "corriendo"):
+    """
+    Mete un trabajo en el registro sin encolarlo, para poder mirarlo quieto.
+
+    Encolar de verdad lo pone en manos del trabajador, que lo termina cuando le
+    toca: comprobar su estado seria una carrera.
+    """
+    from datetime import datetime, timezone
+
+    with trabajos._reg.candado:
+        t = trabajos.Trabajo(
+            id=trabajos._reg.siguiente_id, tipo=tipo, objeto_id=objeto_id,
+            nombre=nombre, actor_id=None, actor_email="prueba@astrolabio",
+            a_la_par=False, encolado_en=datetime.now(timezone.utc),
+            estado=estado)
+        trabajos._reg.siguiente_id += 1
+        trabajos._reg.vivos[t.id] = t
+    return t
+
+
+def test_detener_un_flujo_que_corre_no_corta_el_paso_en_curso(
+        cliente, cab_admin, monkeypatch):
+    """
+    La garantia que importa: se para ENTRE pasos, nunca a media tabla.
+
+    Cortar la ingesta en curso seria peor que esperarla — el destino se borra
+    ANTES de escribir, asi que una recarga completa cortada en el momento justo
+    deja el dataset vacio. Aqui se comprueba que el paso que estaba corriendo
+    llega a terminar, y que los que faltan quedan como cancelados.
+    """
+    from app import flujos, trabajos
+    from app.cargas import Actor
+    from app.db import CrearSesion
+    from app.modelos_db import EstadoCarga, Flujo
+
+    hechos: list[int] = []
+    parar_en = 2
+
+    def falso_paso(sesion, ds, actor, **kw):
+        hechos.append(len(hechos) + 1)
+        if len(hechos) == parar_en:
+            # A mitad del segundo paso alguien pide parar. El paso TIENE que
+            # terminar: devuelve su resultado como cualquier otro.
+            for t in trabajos.estado()["corriendo"]:
+                trabajos.cancelar(t["id"])
+        return {"filas": 7, "modo": "completo", "ms": 1}
+
+    monkeypatch.setattr(flujos, "ejecutar_carga", falso_paso)
+
+    with CrearSesion() as s:
+        f = Flujo(nombre="para_detener", pasos=[], al_fallar="detener")
+        s.add(f)
+        s.flush()
+        # Cuatro pasos al mismo dataset: da igual cual, la carga esta simulada.
+        ds_id = s.execute(
+            sa_text("SELECT id FROM dataset LIMIT 1")).scalar()
+        f.pasos = [{"tipo": "carga", "id": ds_id, "nombre": f"p{i}"}
+                   for i in range(1, 5)]
+        s.commit()
+        flujo_id = f.id
+
+    trabajos.encolar("flujo", flujo_id, "para_detener",
+                     Actor(id=None, email="prueba@astrolabio"))
+    assert trabajos.esperar(30)
+
+    with CrearSesion() as s:
+        ejec = s.get(Flujo, flujo_id).ejecuciones[0]
+        pasos = ejec.detalle["pasos"]
+        # El segundo termino: es el paso que corria cuando se pidio parar.
+        assert [p["estado"] for p in pasos[:2]] == ["exito", "exito"]
+        # Y del tercero en adelante, nadie los intento.
+        assert all(p["estado"] == "cancelado" for p in pasos[2:])
+        assert ejec.estado == EstadoCarga.cancelado
+        assert "2 de 4" in ejec.mensaje
+
+    # Lo que de verdad se protege: no se llamo al tercero.
+    assert hechos == [1, 2]
+
+
+def test_detener_es_cancelado_y_no_error(cliente, cab_admin):
+    """
+    Un flujo que alguien paro no salio mal.
+
+    Si se guardara como `error`, la pantalla lo pintaria en rojo como una averia
+    y —peor— saldria el aviso de fallo por correo. Un correo de alarma por algo
+    que acaba de hacer quien opera es la forma de que esos correos se dejen de
+    leer.
+    """
+    from app.modelos_db import EstadoCarga
+
+    assert EstadoCarga.cancelado.value == "cancelado"
+    assert EstadoCarga.cancelado != EstadoCarga.error
+
+
+def test_no_se_puede_cortar_una_carga_suelta(cliente, cab_admin):
+    """
+    Una carga no tiene pasos donde pararse: o termina, o se corta a la mitad.
+    Se dice, en vez de fingir que se hizo algo.
+    """
+    from app import trabajos
+
+    # Se registra a mano, sin encolar: si se encola, el trabajador la levanta y
+    # la termina antes de la comprobacion, y la prueba pasa o falla segun quien
+    # llegue primero. Una prueba que a veces pasa es peor que una que falla.
+    t = _registrar_corriendo("carga", 999999, "inventada")
+    assert trabajos.cancelar(t.id) == "no_se_puede"
+
+    r = cliente.delete(f"/api/flujos/cola/{t.id}", headers=cab_admin)
+    assert r.status_code == 409
+    assert "esperarla" in r.json()["detail"]
+
+    # Limpieza: si se queda vivo, `esperar()` de otras pruebas no vuelve.
+    trabajos._reg.vivos.pop(t.id, None)
+
+
+def test_sacar_de_la_cola_sigue_diciendo_que_se_saco(cliente, cab_admin):
+    from app import trabajos
+
+    t = _registrar_corriendo("carga", 888888, "en_espera", estado="en_cola")
+    assert trabajos.cancelar(t.id) == "sacado"
+    assert trabajos.cancelar(t.id) is None      # ya no esta

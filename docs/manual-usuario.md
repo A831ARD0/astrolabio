@@ -233,6 +233,32 @@ Tijuana son tres horas de diferencia.
 ⚠️ El día del mes llega hasta **28** a propósito. Un `30` o un `31` se salta
 febrero, y una carga que no corre un mes al año es de las que nadie nota.
 
+#### Detener una cadena que ya arrancó
+
+El botón **Detener** —en Flujos, junto al nombre, y también en el aviso de Tareas—
+para un flujo que ya va corriendo.
+
+**No corta la tabla en curso.** La que se está trayendo se termina, y los pasos que
+faltan quedan como *detenidos*. Eso no es prudencia de más: el destino de una carga
+**se borra antes de escribir**, así que una recarga completa cortada en el momento
+justo dejaría el dataset **vacío**. Esperar la tabla en curso son minutos;
+recuperar un dataset vacío, no.
+
+En un maestro, detenerlo detiene también al hijo que esté corriendo —termina su tabla
+y para—, y los hijos que faltaban no se lanzan.
+
+La corrida queda como **detenido**, no como *falló*: en gris, no en rojo, y **sin
+mandar el aviso de fallo**. Un correo de alarma por algo que acabas de hacer tú es la
+forma de que esos correos se dejen de leer. En Tareas hay un filtro *Detenidos*.
+
+Lo ya traído se queda: para continuar, se vuelve a ejecutar el flujo. Las tablas que
+ya se habían actualizado se vuelven a traer —incrementalmente, si tienen columna
+incremental, así que cuesta poco—.
+
+⚠️ **Una carga suelta no se puede detener.** No tiene pasos donde pararse: o termina,
+o se corta a la mitad. La pantalla lo dice en vez de ofrecer un botón que no
+funcionaría.
+
 #### Reintentos
 
 Con cuarenta sucursales, que una esté apagada a las 6 de la mañana pasa seguido —

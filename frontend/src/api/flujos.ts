@@ -43,7 +43,8 @@ export interface ResultadoPaso {
   paso: number
   tipo: string
   nombre: string
-  estado: 'exito' | 'error' | 'omitido' | 'corriendo'
+  /** `cancelado`: alguien detuvo el flujo antes de llegar a este paso. */
+  estado: 'exito' | 'error' | 'omitido' | 'corriendo' | 'cancelado'
   /** Cuántos intentos hicieron falta. Solo viene si hubo más de uno. */
   intentos?: number
   filas?: number
@@ -136,6 +137,8 @@ export interface Trabajo {
   objeto_id: number
   nombre: string
   estado: 'en_cola' | 'corriendo'
+  /** Ya se pidió que pare; termina la tabla en curso y se detiene. */
+  parando: boolean
   a_la_par: boolean
   quien: string
   encolado_en: string
@@ -194,11 +197,22 @@ export function useCola() {
   })
 }
 
-export function useSacarDeLaCola() {
+/**
+ * Detiene un trabajo: lo saca de la cola, o le pide parar si ya corre.
+ *
+ * Un flujo que corre se detiene **entre pasos**, nunca a media tabla: la que se
+ * está trayendo se termina y los pasos que faltan quedan como cancelados.
+ */
+export function useDetener() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (trabajoId: number) => api.del<void>(`/flujos/cola/${trabajoId}`),
-    onSettled: () => qc.invalidateQueries({ queryKey: clave.cola }),
+    mutationFn: (trabajoId: number) =>
+      api.del<{ estado: 'sacado' | 'parando'; mensaje: string }>(
+        `/flujos/cola/${trabajoId}`),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: clave.cola })
+      qc.invalidateQueries({ queryKey: clave.lista })
+    },
   })
 }
 

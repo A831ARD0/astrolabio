@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
@@ -317,11 +318,19 @@ def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
+             parar: Callable[[], bool] | None = None,
              _cadena: frozenset[int] = frozenset(),
              _llamado_por: str | None = None) -> dict[str, Any]:
     """
     Corre el flujo entero. Devuelve el resumen; lanza `ErrorFlujo` si algún paso
     falló y la política es detenerse.
+
+    `parar` es una pregunta que se hace ANTES de cada paso: si contesta que sí, el
+    flujo se detiene ahí. Nunca a media tabla. Con veintiocho tablas por sucursal
+    y treinta y ocho sucursales, quien lanzó la cadena a la una de la tarde tiene
+    que poder pararla; y cortar la ingesta en curso sería peor que esperarla,
+    porque el destino se borra ANTES de escribir y una recarga completa cortada
+    en el momento justo deja el dataset vacío.
 
     `_cadena` son los flujos que ya están corriendo por encima de este, para que
     un paso de tipo `flujo` no vuelva a uno de ellos. Al guardar ya se comprueba,
@@ -378,8 +387,20 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     reintentos = max(0, int(flujo.reintentos or 0))
     espera = max(0, int(flujo.espera_reintento_seg or 0))
 
+    detenido = False
     for i, paso in enumerate(flujo.pasos or [], start=1):
         nombre = paso.get("nombre") or _nombre_de(sesion, paso) or "?"
+        if parar is not None and parar():
+            # Los que faltan se anotan como cancelados. Un hueco en el historial
+            # se lee como «corrió y no hizo nada», que es distinto.
+            for j, restante in enumerate((flujo.pasos or [])[i - 1:], start=i):
+                resultados.append({
+                    "paso": j, "tipo": restante.get("tipo"),
+                    "nombre": restante.get("nombre"), "estado": "cancelado",
+                })
+            detenido = True
+            _apuntar()
+            break
         inicio = time.perf_counter()
         ultimo_error: Exception | None = None
         salio: dict[str, Any] | None = None
@@ -414,8 +435,15 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                     # persona: lo llamo este flujo. Sin eso, su historial dice
                     # «manual» y no hay forma de reconstruir quien disparo que.
                     de_aqui = Actor(id=actor.id, email=actor.email, origen="flujo")
-                    r = ejecutar(sesion, sub, de_aqui, _cadena=cadena,
-                                 _llamado_por=flujo.nombre)
+                    r = ejecutar(sesion, sub, de_aqui, parar=parar,
+                                 _cadena=cadena, _llamado_por=flujo.nombre)
+                    if r.get("estado") == "cancelado":
+                        # El hijo se detuvo porque se lo pidieron; el maestro no
+                        # sigue con el siguiente como si nada.
+                        salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
+                                 "estado": "cancelado",
+                                 "sub_pasos": len(r["pasos"]), "ms": r["ms"]}
+                        break
                     salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
                              "estado": "exito",
                              "filas": sum(int(p.get("filas") or 0)
@@ -437,7 +465,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                 break
             except (ErrorCarga, ErrorEjecucion, ErrorFlujo) as e:
                 ultimo_error = e
-                if intento <= reintentos:
+                if intento <= reintentos and not (parar is not None and parar()):
                     log.warning("Flujo '%s' paso %s (%s) fallo en el intento %s "
                                 "de %s: %s. Reintenta en %ss",
                                 flujo.nombre, i, nombre, intento,
@@ -447,6 +475,8 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
 
         if salio is not None:
             resultados.append(salio)
+            if salio.get("estado") == "cancelado":
+                detenido = True
         else:
             e = ultimo_error
             resultados.append({
@@ -471,13 +501,24 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         _apuntar()
 
     ms = round((time.perf_counter() - t0) * 1000, 1)
+    hechos = sum(1 for r in resultados if r.get("estado") == "exito")
+    if detenido and not fallo:
+        cancelado = (f"Detenido a peticion: se completaron {hechos} de {total} "
+                     f"paso(s). Los demas no se intentaron.")
+    else:
+        cancelado = None
+
     ejec.ms = int(ms)
     ejec.detalle = {"pasos": resultados, "total": total, **contexto}
-    ejec.estado = EstadoCarga.error if fallo else EstadoCarga.exito
-    ejec.mensaje = fallo
+    ejec.estado = (EstadoCarga.error if fallo
+                   else EstadoCarga.cancelado if cancelado
+                   else EstadoCarga.exito)
+    ejec.mensaje = fallo or cancelado
     flujo.ultima_ejecucion = datetime.now(timezone.utc)
 
-    registrar(sesion, accion="flujo_fallido" if fallo else "flujo_ejecutado",
+    registrar(sesion, accion="flujo_fallido" if fallo
+                      else "flujo_cancelado" if cancelado
+                      else "flujo_ejecutado",
               usuario_id=actor.id, email=actor.email, objeto_tipo="flujo",
               objeto_id=flujo.id,
               detalle={"nombre": flujo.nombre, "disparo": actor.origen,
@@ -489,12 +530,17 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     # es lo que evita que eso se vuelva ruido.
     if fallo:
         avisos.por_flujo_fallido(sesion, flujo, fallo, actor.origen, resultados)
+    elif cancelado:
+        # Ni aviso de fallo ni de recuperacion: no se rompio nada y no se arreglo
+        # nada. Un correo de alarma por algo que acaba de hacer quien opera es la
+        # forma de que esos correos se dejen de leer.
+        pass
     elif venia_fallando:
         avisos.por_flujo_recuperado(sesion, flujo, len(resultados), actor.origen)
 
     resumen = {
-        "estado": "error" if fallo else "exito",
-        "ms": ms, "pasos": resultados, "mensaje": fallo,
+        "estado": "error" if fallo else "cancelado" if cancelado else "exito",
+        "ms": ms, "pasos": resultados, "mensaje": fallo or cancelado,
     }
     if fallo:
         # Confirmar antes de lanzar: si no, el rollback se lleva el historial del

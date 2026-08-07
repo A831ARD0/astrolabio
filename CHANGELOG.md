@@ -26,6 +26,25 @@ versionado es [semántico](https://semver.org/lang/es/).
   El anidamiento se corta a cinco niveles. *Ordenar solo* deja los pasos de tipo
   flujo donde están y lo dice, en vez de borrarlos en silencio.
 
+- **Detener un flujo que ya arrancó**, con el botón «Detener» en Flujos y en el
+  aviso de Tareas. Antes solo se podía sacar de la cola algo que no había empezado:
+  una cadena de treinta y ocho extractores lanzada a la una de la tarde no había
+  forma de pararla.
+
+  **Se detiene entre pasos, nunca a media tabla.** La que se está trayendo termina y
+  los pasos que faltan quedan como `cancelado`. No es prudencia de más: el destino se
+  borra ANTES de escribir, así que una recarga completa cortada en el momento justo
+  dejaría el dataset vacío. En un maestro se propaga al hijo que esté corriendo.
+
+  Estado nuevo `cancelado` (migración 0009) en vez de reutilizar `error`: en la
+  pantalla sale en gris y **no dispara el aviso de fallo**. Un correo de alarma por
+  algo que acaba de hacer quien opera es la forma de que esos correos se dejen de
+  leer. Hay filtro «Detenidos» en Tareas.
+
+  Una carga suelta no se puede detener y se dice por qué: no tiene pasos donde
+  pararse. `DELETE /api/flujos/cola/{id}` ahora contesta 200 con `estado`
+  (`sacado` | `parando`) y un mensaje, o 409 explicando por qué no.
+
 - **Se rastrea quién dispara a quién.** La lista de flujos trae `llamado_por`, y con
   eso la pantalla de tareas dejó de decir «a mano» de los treinta y ocho extractores
   que en realidad llama el maestro cada noche: dice *dentro de «X»*, y si además
