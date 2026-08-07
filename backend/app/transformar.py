@@ -69,6 +69,9 @@ def ejecutar(sesion: Session, t: TransformacionDB, actor: Actor) -> dict:
         iniciado_por=actor.id)
     sesion.add(ejec)
     sesion.flush()
+    # Igual que en las cargas: soltar el candado de escritura de SQLite antes de
+    # ponerse a materializar, que es lo que tarda.
+    sesion.commit()
 
     try:
         d = definicion_de(t)

@@ -459,6 +459,14 @@ crearse el usuario, `--crear` lo crea como administrador.
 > llave de casa, y por eso el archivo de metadatos tiene que estar en un
 > directorio con permisos.
 
+**SQLite admite un escritor a la vez.** Por eso las operaciones largas —traer una
+tabla, materializar una transformacion— apuntan su ejecucion en el historial y
+**confirman antes de empezar**, en vez de dejar la transaccion abierta mientras
+trabajan. Si no, cualquier otra escritura espera el `busy_timeout` (15 s) y
+despues falla con «database is locked»; eso se veia como un Error 500 al crear
+un flujo mientras corria una extraccion. Si algun dia se agrega otra operacion
+larga, esa es la regla a respetar.
+
 Ojo con una cosa: el freno de fuerza bruta vive en memoria del proceso. Si te
 frenó la cuenta a base de intentos, restablecer la contraseña no lo levanta —
 espera los 15 minutos o reinicia el servicio.

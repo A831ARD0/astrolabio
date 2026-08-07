@@ -119,6 +119,16 @@ def ejecutar_carga(
     # Se lee ANTES de tocar nada: despues ya no se distingue de la actual.
     venia_fallando = _venia_fallando(sesion, ds.id, ejec.id)
 
+    # Confirmar YA, antes de tocar el origen. SQLite admite un escritor a la
+    # vez: con la transaccion abierta durante toda la ingesta —minutos, en una
+    # tabla grande por el puente— cualquier otra escritura espera el
+    # `busy_timeout` y despues falla con «database is locked». Ahi salia el
+    # Error 500 al crear un flujo mientras corria una extraccion.
+    #
+    # Confirmar aqui suelta el candado durante lo que de verdad tarda, que es
+    # traer los datos, y de paso deja el renglon 'corriendo' a la vista.
+    sesion.commit()
+
     if error_ventana:
         _fallar(sesion, ejec, ds, actor, error_ventana)
 
