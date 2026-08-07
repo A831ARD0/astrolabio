@@ -7,6 +7,25 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Encadenar flujos: un flujo puede ser el paso de otro.** Con el `+` de la lista
+  de flujos se pone uno entero como paso del que se está editando, y así uno
+  empieza cuando el anterior termina.
+
+  Era lo único que no se podía decir con horarios. No se sabe cuánto tarda cada
+  sucursal, y cuarenta crones a las 6:00 no las ponen en fila: las ponen a
+  pelearse por el mismo Pervasive. Un maestro que llame a los cuarenta lo dice
+  exacto y lleva un solo horario.
+
+  Cada eslabón corre entero —con sus reintentos y su regla al fallar— y deja su
+  propia entrada en su propio historial; en el maestro solo queda el resumen
+  («28 pasos · 1,204,331 filas»). Un hijo que falla detiene al maestro.
+
+  Los **ciclos** se rechazan al guardar, directos e indirectos, y hay una segunda
+  comprobación al correr por si entre guardar y correr las cosas cambiaron: un
+  ciclo no daría un error visible, daría un servidor dando vueltas de madrugada.
+  El anidamiento se corta a cinco niveles. *Ordenar solo* deja los pasos de tipo
+  flujo donde están y lo dice, en vez de borrarlos en silencio.
+
 - **Editar una conexión** (`PATCH /api/conexiones/{id}`) y probar el cambio sin
   guardarlo (`POST /api/conexiones/{id}/probar-cambio`). Antes, rotar una
   contraseña obligaba a borrar la conexión y volver a crearla, y con ella se iban

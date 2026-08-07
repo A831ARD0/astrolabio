@@ -118,12 +118,13 @@ def _obtener(sesion: SesionDep, id_: int) -> Flujo:
     return f
 
 
-def _validar(sesion: SesionDep, cuerpo: Guardar) -> list[dict]:
+def _validar(sesion: SesionDep, cuerpo: Guardar,
+             flujo_id: int | None = None) -> list[dict]:
     if cuerpo.al_fallar not in ("detener", "continuar"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "al_fallar debe ser 'detener' o 'continuar'")
     pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
-    errores = revisar_pasos(sesion, pasos)
+    errores = revisar_pasos(sesion, pasos, flujo_id)
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"errores": errores})
@@ -148,10 +149,19 @@ def listar(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
 
 @router.get("/disponibles")
 def disponibles(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
-    """Lo que se puede poner como paso: datasets con carga, y transformaciones."""
+    """Lo que se puede poner como paso: cargas, transformaciones y otros flujos."""
     from app.modelos_db import Dataset, Transformacion as TransformacionDB
 
     return {
+        # Un flujo puede ser el paso de otro: asi se encadena. Con cuarenta
+        # sucursales, lo que se quiere es un maestro que llame a los cuarenta
+        # extractores uno tras otro, no cuarenta horarios a la misma hora
+        # peleandose por el mismo origen.
+        "flujos": [
+            {"id": f.id, "nombre": f.nombre, "pasos": len(f.pasos or []),
+             "cron_propio": f.cron if f.programacion_activa else None}
+            for f in sesion.scalars(select(Flujo).order_by(Flujo.nombre))
+        ],
         "cargas": [
             {"id": d.id, "nombre": d.nombre, "tabla": d.tabla_origen,
              "cron_propio": d.cron}
@@ -175,7 +185,14 @@ def sugerir(cuerpo: Guardar, sesion: SesionDep,
     """
     pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
     propuesta = sugerir_orden(sesion, pasos)
-    return {"pasos": propuesta, "avisos": revisar_orden(sesion, propuesta)}
+    avisos = revisar_orden(sesion, propuesta)
+    if any(p.get("tipo") == "flujo" for p in pasos):
+        # Se devuelve la lista tal cual. Decirlo importa: si no, el boton parece
+        # roto —«le doy y no hace nada»— cuando en realidad se esta absteniendo.
+        avisos = ["Este flujo llama a otros flujos, y esos no se reordenan desde "
+                  "aqui: el orden de sus pasos lo manda cada uno. Se dejo como "
+                  "estaba."] + avisos
+    return {"pasos": propuesta, "avisos": avisos}
 
 
 @router.post("", response_model=Salida, status_code=201)
@@ -203,7 +220,7 @@ def crear(cuerpo: Guardar, sesion: SesionDep,
 def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
                actor: Usuario = Depends(exigir_rol(Rol.editor))):
     f = _obtener(sesion, id_)
-    pasos = _validar(sesion, cuerpo)
+    pasos = _validar(sesion, cuerpo, id_)
     f.nombre = cuerpo.nombre
     f.descripcion = cuerpo.descripcion
     f.pasos = pasos

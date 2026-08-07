@@ -157,22 +157,46 @@ export function Flujos() {
                  extra={lista.data?.length ?? 0}>
           <>
             <div className="lista">
-              {lista.data?.map((x) => (
-                <button key={x.id} className={id === x.id ? 'sel' : ''}
-                        onClick={() => cargar(x)}>
-                  <span
-                    className="punto"
-                    style={{
-                      background: x.programacion_activa
-                        ? 'var(--ok)'
-                        : 'var(--borde-fuerte)',
-                    }}
-                    title={x.programacion_activa ? 'Programado' : 'Sin programar'}
-                  />
-                  <span className="nom">{x.nombre}</span>
-                  <span className="dcha">{x.pasos.length} pasos</span>
-                </button>
-              ))}
+              {lista.data?.map((x) => {
+                const dentro = puestas.has(`flujo-${x.id}`)
+                return (
+                  <button key={x.id} className={id === x.id ? 'sel' : ''}
+                          onClick={() => cargar(x)}>
+                    <span
+                      className="punto"
+                      style={{
+                        background: x.programacion_activa
+                          ? 'var(--ok)'
+                          : 'var(--borde-fuerte)',
+                      }}
+                      title={x.programacion_activa ? 'Programado' : 'Sin programar'}
+                    />
+                    <span className="nom">{x.nombre}</span>
+                    <span className="dcha">{x.pasos.length} pasos</span>
+                    {/* Encadenar: este flujo como paso del que se está
+                        editando. No aparece sobre sí mismo —un flujo no puede
+                        llamarse a sí mismo— ni sobre los que ya están puestos. */}
+                    {x.id !== id && (
+                      <span
+                        className={`agregar${dentro ? ' puesta' : ''}`}
+                        role="button"
+                        tabIndex={-1}
+                        title={dentro
+                          ? 'Ya es un paso de este flujo'
+                          : `Encadenar: correr «${x.nombre}» como un paso de este`}
+                        onClick={(e) => {
+                          e.stopPropagation()   // no cambiar de flujo al agregar
+                          if (!dentro) {
+                            agregar({ tipo: 'flujo', id: x.id, nombre: x.nombre })
+                          }
+                        }}
+                      >
+                        {dentro ? '✓' : '+'}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
             <button className="btn chico" style={{ marginTop: 8, width: '100%' }}
                     onClick={nuevo}>
@@ -337,7 +361,9 @@ export function Flujos() {
           {f.pasos.length === 0 ? (
             <div className="vacio">
               Elige de la izquierda qué cargar y qué recalcular. El orden se puede
-              acomodar, y hay un botón que lo propone.
+              acomodar, y hay un botón que lo propone. Con el <b>+</b> de la lista
+              de flujos pones un flujo entero como paso: así uno espera a que el
+              anterior termine.
             </div>
           ) : (
             <div className="pasos">
@@ -349,7 +375,8 @@ export function Flujos() {
                     <header style={{ cursor: 'default' }}>
                       <span className="orden">{i + 1}</span>
                       <span className="etiqueta">
-                        {p.tipo === 'carga' ? 'cargar' : 'transformar'}
+                        {p.tipo === 'carga' ? 'cargar'
+                          : p.tipo === 'flujo' ? 'flujo' : 'transformar'}
                       </span>
                       <span className="nom mono">{p.nombre}</span>
 
@@ -367,7 +394,8 @@ export function Flujos() {
                           title={r.mensaje ?? undefined}
                         >
                           {r.estado === 'exito'
-                            ? `${(r.filas ?? 0).toLocaleString('es-MX')} filas · ${r.ms} ms`
+                            ? (r.sub_pasos ? `${r.sub_pasos} pasos · ` : '')
+                            + `${(r.filas ?? 0).toLocaleString('es-MX')} filas · ${r.ms} ms`
                             + (r.intentos ? ` · ${r.intentos} intentos` : '')
                             : r.estado === 'error'
                               ? `falló${r.intentos ? ` tras ${r.intentos} intentos` : ''}`

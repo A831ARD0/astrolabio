@@ -398,6 +398,33 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 }
 .lista button.puesta .nom { color: var(--texto-suave); }
 
+/* Encadenar: poner este flujo como paso del que se edita. Se mantiene discreto
+   —el uso normal de la lista es abrir un flujo, no encadenarlo— y aparece al
+   pasar por encima, salvo cuando ya esta puesto, que entonces hay algo que
+   decir aunque nadie apunte. */
+.lista button .agregar {
+  flex: 0 0 18px;
+  height: 18px;
+  margin-left: 4px;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--texto-suave);
+  opacity: 0;
+  cursor: pointer;
+}
+.lista button:hover .agregar { opacity: 1; }
+.lista button .agregar:hover { background: var(--acento-suave); color: var(--acento); }
+.lista button .agregar.puesta {
+  opacity: 1;
+  border-color: transparent;
+  color: var(--ok);
+  cursor: default;
+}
+.lista button .agregar.puesta:hover { background: none; color: var(--ok); }
+
 .punto { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 7px; }
 .punto.hecho { background: var(--hecho); }
 .punto.dimension { background: var(--acento); }

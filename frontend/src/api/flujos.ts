@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './cliente'
 
 export interface PasoFlujo {
-  tipo: 'carga' | 'transformacion'
+  /** `flujo` es un flujo entero como paso de otro: así se encadena. */
+  tipo: 'carga' | 'transformacion' | 'flujo'
   id: number
   nombre?: string | null
 }
@@ -44,6 +45,8 @@ export interface ResultadoPaso {
   /** Cuántos intentos hicieron falta. Solo viene si hubo más de uno. */
   intentos?: number
   filas?: number
+  /** Cuántos pasos traía dentro, cuando el paso es un flujo. */
+  sub_pasos?: number
   modo?: string
   ms?: number
   mensaje?: string
@@ -88,6 +91,7 @@ export function useDisponiblesFlujo() {
     queryKey: clave.disponibles,
     queryFn: () =>
       api.get<{
+        flujos: { id: number; nombre: string; pasos: number; cron_propio: string | null }[]
         cargas: { id: number; nombre: string; tabla: string; cron_propio: string | null }[]
         transformaciones: { id: number; nombre: string; lee_de: Record<string, string[]> }[]
       }>('/flujos/disponibles'),

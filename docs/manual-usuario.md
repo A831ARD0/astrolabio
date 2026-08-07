@@ -186,6 +186,28 @@ transformación. Es una propuesta, no un cambio automático.
 ⚠️ Un dataset con horario propio que además es paso de un flujo **se carga dos
 veces**. A veces es lo que se quiere; conviene saberlo.
 
+#### Encadenar flujos: que uno empiece cuando el otro acabe
+
+Un flujo también puede ser **un paso de otro**. En la lista de flujos, el **+**
+que aparece al pasar por encima lo pone como paso del que estás editando.
+
+Es la respuesta a «primero la sucursal A, y cuando termine, la B». Con horarios no
+se puede decir: no sabes cuánto va a tardar cada una, y cuarenta crones a las 6:00
+no las ponen en fila — las ponen a pelearse por el mismo Pervasive. Un flujo
+maestro que llame a los cuarenta sí lo dice exacto, y lleva **un solo horario**.
+
+Cada eslabón corre entero, con **sus** reintentos y **su** regla al fallar, y deja
+su propia entrada en su propio historial: en el maestro ves «hijo_a · 28 pasos ·
+1,204,331 filas», y para saber cuál de esos 28 falló abres el hijo. Si un hijo
+falla, el maestro se detiene igual que con cualquier otro paso.
+
+Dos cosas que no se pueden hacer, y se avisan al guardar: que un flujo **se llame
+a sí mismo**, y que dos flujos se llamen **en círculo**. Eso no daría un error
+visible — daría un servidor dando vueltas de madrugada sin nadie mirando.
+
+*Ordenar solo* no toca los pasos de tipo flujo: desde fuera no se puede saber qué
+trae dentro cada uno.
+
 #### Reintentos
 
 Con cuarenta sucursales, que una esté apagada a las 6 de la mañana pasa seguido —

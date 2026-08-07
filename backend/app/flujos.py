@@ -34,7 +34,12 @@ from app.transformar import ejecutar as ejecutar_transformacion
 
 log = logging.getLogger("astrolabio.flujos")
 
-TIPOS_PASO = ("carga", "transformacion")
+TIPOS_PASO = ("carga", "transformacion", "flujo")
+
+#: Cuantos flujos se pueden anidar. No hay razon para bajar mas: con cuarenta
+#: sucursales basta un maestro que llame a los cuarenta, y un arbol de cinco
+#: niveles ya nadie lo puede seguir. El limite es una red, no un diseno.
+PROFUNDIDAD_MAXIMA = 5
 
 
 class ErrorFlujo(Exception):
@@ -45,10 +50,58 @@ class ErrorFlujo(Exception):
 # Validación del orden
 # --------------------------------------------------------------------------- #
 
-def revisar_pasos(sesion: Session, pasos: list[dict]) -> list[str]:
+def alcanzables(sesion: Session, raiz: int) -> set[int]:
+    """
+    Todos los flujos a los que se llega desde `raiz`, él incluido.
+
+    Sirve para lo único que un flujo dentro de otro puede romper: el ciclo. «A
+    llama a B, B llama a A» no da un error visible —da un servidor que se queda
+    dando vueltas hasta quedarse sin pila, de madrugada y sin nadie mirando—, así
+    que se corta al guardar, que es cuando hay alguien delante a quien decírselo.
+    """
+    vistos: set[int] = set()
+    pila = [raiz]
+    while pila:
+        actual = pila.pop()
+        if actual in vistos:
+            continue
+        vistos.add(actual)
+        f = sesion.get(Flujo, actual)
+        if f is None:
+            continue
+        for p in f.pasos or []:
+            if p.get("tipo") == "flujo":
+                try:
+                    pila.append(int(p["id"]))
+                except (TypeError, ValueError):
+                    pass
+    return vistos
+
+
+def _profundidad(sesion: Session, flujo_id: int, nivel: int = 0) -> int:
+    """Cuántos niveles de flujos cuelgan de este. Asume que no hay ciclos."""
+    if nivel >= PROFUNDIDAD_MAXIMA:
+        return nivel
+    f = sesion.get(Flujo, flujo_id)
+    hondo = nivel
+    for p in (f.pasos or []) if f else []:
+        if p.get("tipo") == "flujo":
+            try:
+                hondo = max(hondo, _profundidad(sesion, int(p["id"]), nivel + 1))
+            except (TypeError, ValueError):
+                pass
+    return hondo
+
+
+def revisar_pasos(sesion: Session, pasos: list[dict],
+                  flujo_id: int | None = None) -> list[str]:
     """
     Errores que impiden guardar el flujo: pasos mal formados o que apuntan a algo
     que no existe.
+
+    `flujo_id` es el flujo que se está guardando —None si es nuevo—. Hace falta
+    para el paso de tipo `flujo`: sin saber quién soy no se puede ver si me estoy
+    llamando a mí mismo.
     """
     errores: list[str] = []
     if not pasos:
@@ -76,6 +129,21 @@ def revisar_pasos(sesion: Session, pasos: list[dict]) -> list[str]:
         if tipo == "carga":
             if sesion.get(Dataset, id_) is None:
                 errores.append(f"Paso {i}: el dataset {id_} ya no existe.")
+        elif tipo == "flujo":
+            sub = sesion.get(Flujo, id_)
+            if sub is None:
+                errores.append(f"Paso {i}: el flujo {id_} ya no existe.")
+            elif flujo_id is not None and id_ == flujo_id:
+                errores.append(
+                    f"Paso {i}: un flujo no puede llamarse a sí mismo.")
+            elif flujo_id is not None and flujo_id in alcanzables(sesion, id_):
+                errores.append(
+                    f"Paso {i}: '{sub.nombre}' vuelve a este flujo, directa o "
+                    f"indirectamente. Eso no tiene final.")
+            elif _profundidad(sesion, id_) + 1 > PROFUNDIDAD_MAXIMA:
+                errores.append(
+                    f"Paso {i}: '{sub.nombre}' anida más de {PROFUNDIDAD_MAXIMA} "
+                    f"niveles de flujos. A esa altura ya nadie sabe qué corre.")
         elif sesion.get(TransformacionDB, id_) is None:
             errores.append(f"Paso {i}: la transformación {id_} ya no existe.")
     return errores
@@ -95,8 +163,7 @@ def revisar_orden(sesion: Session, pasos: list[dict]) -> list[str]:
     # Posición en la que cada nombre queda disponible.
     disponible_en: dict[str, int] = {}
     for i, p in enumerate(pasos):
-        nombre = _nombre_de(sesion, p)
-        if nombre:
+        for nombre in _produce(sesion, p):
             disponible_en[nombre] = i
 
     for i, p in enumerate(pasos):
@@ -134,8 +201,34 @@ def _nombre_de(sesion: Session, paso: dict) -> str | None:
     if paso.get("tipo") == "carga":
         ds = sesion.get(Dataset, id_)
         return ds.nombre if ds else None
+    if paso.get("tipo") == "flujo":
+        f = sesion.get(Flujo, id_)
+        return f.nombre if f else None
     t = sesion.get(TransformacionDB, id_)
     return t.nombre if t else None
+
+
+def _produce(sesion: Session, paso: dict, nivel: int = 0) -> list[str]:
+    """
+    Qué queda actualizado después de este paso.
+
+    Para una carga o una transformación es su propio nombre. Para un flujo, todo
+    lo que ese flujo actualiza —y lo que actualicen los suyos—: si no, el maestro
+    que primero llama a los cuarenta extractores y luego recalcula avisaría de que
+    la transformación lee de algo «que este flujo no actualiza», que es falso.
+    """
+    if paso.get("tipo") != "flujo":
+        nombre = _nombre_de(sesion, paso)
+        return [nombre] if nombre else []
+    if nivel >= PROFUNDIDAD_MAXIMA:
+        return []
+    try:
+        sub = sesion.get(Flujo, int(paso.get("id")))
+    except (TypeError, ValueError):
+        return []
+    if sub is None:
+        return []
+    return [n for p in sub.pasos or [] for n in _produce(sesion, p, nivel + 1)]
 
 
 def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
@@ -159,6 +252,12 @@ def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
                     if o.tipo == "dataset"]
         except Exception:
             return []
+
+    # Un flujo dentro de otro no se reordena: lo que trae dentro no se puede
+    # deducir desde aqui sin abrirlo, y moverlo cambiaria el sentido del maestro.
+    # Se deja como esta y se dice por que, en vez de proponer algo peor.
+    if any(p.get("tipo") == "flujo" for p in pasos):
+        return list(pasos)
 
     pedidos: list[str] = []
     for p in pasos:
@@ -198,11 +297,18 @@ def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
 # Ejecución
 # --------------------------------------------------------------------------- #
 
-def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
+def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
+             _cadena: frozenset[int] = frozenset()) -> dict[str, Any]:
     """
     Corre el flujo entero. Devuelve el resumen; lanza `ErrorFlujo` si algún paso
     falló y la política es detenerse.
+
+    `_cadena` son los flujos que ya están corriendo por encima de este, para que
+    un paso de tipo `flujo` no vuelva a uno de ellos. Al guardar ya se comprueba,
+    pero entre guardar y correr pueden pasar semanas y dos ediciones; esto es lo
+    que impide que un ciclo llegue a la madrugada.
     """
+    cadena = frozenset(_cadena) | {flujo.id}
     total = len(flujo.pasos or [])
     ejec = FlujoEjecucion(flujo_id=flujo.id, estado=EstadoCarga.corriendo,
                           origen=actor.origen, iniciado_por=actor.id,
@@ -268,6 +374,25 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
                     salio = {"paso": i, "tipo": "carga", "nombre": nombre,
                              "estado": "exito", "filas": r["filas"],
                              "modo": r["modo"], "ms": r["ms"]}
+                elif paso.get("tipo") == "flujo":
+                    # Un flujo dentro de otro: es la forma de encadenar. El
+                    # subflujo se ejecuta entero —con SUS reintentos y SU regla
+                    # al fallar— y deja su propia entrada en su propio historial,
+                    # que es donde se mira cuál de sus pasos falló. Aquí solo
+                    # queda el resumen.
+                    sub = sesion.get(Flujo, int(paso["id"]))
+                    if sub is None:
+                        raise ErrorFlujo(f"el flujo {paso['id']} ya no existe")
+                    if sub.id in cadena:
+                        raise ErrorFlujo(
+                            f"'{sub.nombre}' vuelve a un flujo que ya está "
+                            f"corriendo; se corta aquí")
+                    r = ejecutar(sesion, sub, actor, _cadena=cadena)
+                    salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
+                             "estado": "exito",
+                             "filas": sum(int(p.get("filas") or 0)
+                                          for p in r["pasos"]),
+                             "sub_pasos": len(r["pasos"]), "ms": r["ms"]}
                 else:
                     t = sesion.get(TransformacionDB, int(paso["id"]))
                     if t is None:
