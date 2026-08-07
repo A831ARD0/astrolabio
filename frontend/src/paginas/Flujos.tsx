@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import {
   HORARIOS,
@@ -40,6 +41,7 @@ export function Flujos() {
   const sugerir = useSugerirOrden()
   const { lanzar, dialogo, ejecutar, cola } = useLanzador()
 
+  const [busca, setBusca] = useSearchParams()
   const [id, setId] = useState<number | null>(null)
   const [buscaPieza, setBuscaPieza] = useState('')
   const [soloFaltan, setSoloFaltan] = useState(false)
@@ -57,6 +59,23 @@ export function Flujos() {
       if (actual.cron) setCron(actual.cron)
     }
   }, [actual])
+
+  /**
+   * Abrir un flujo desde otra pantalla: `/flujos?flujo=12`.
+   *
+   * Sin esto, «Abrir» en Tareas solo cambiaba de pantalla y había que buscar el
+   * flujo a mano entre treinta y ocho con el nombre recortado. El parámetro se
+   * quita de la dirección en cuanto se usa, para que recargar no vuelva a
+   * arrastrarte al mismo sitio si ya te habías movido a otro.
+   */
+  useEffect(() => {
+    const pedido = Number(busca.get('flujo'))
+    if (!pedido || !lista.data) return
+    const x = lista.data.find((f) => f.id === pedido)
+    if (x) cargar(x)
+    setBusca({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, lista.data])
 
   function cargar(x: Flujo) {
     setId(x.id)

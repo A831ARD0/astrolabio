@@ -17,7 +17,8 @@
  * enseñar las cuarenta filas sin tener que abrirlas una por una.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import {
   type Conexion,
@@ -258,6 +259,29 @@ export function Conexiones() {
   const [busca, setBusca] = useState('')
   const [estado, setEstado] = useState<Estado>('todos')
   const [plegadas, setPlegadas] = useState<Set<number>>(new Set())
+  const [enlace, setEnlace] = useSearchParams()
+
+  /**
+   * Abrir un dataset desde otra pantalla: `/conexiones?dataset=12`.
+   *
+   * Es la otra mitad de «Abrir» en Tareas: con mil datasets repartidos en
+   * cuarenta conexiones plegadas, llegar a la pantalla y tener que encontrarlo
+   * es el trabajo que el enlace se supone que ahorra. Se abre su panel y se
+   * despliega su conexión.
+   */
+  useEffect(() => {
+    const pedido = Number(enlace.get('dataset'))
+    if (!pedido) return
+    const ds = datasets.data?.datasets.find((d) => d.id === pedido)
+    if (!ds) return
+    setAbierto(ds)
+    setPlegadas((p) => {
+      const s = new Set(p)
+      s.delete(ds.conexion_id)
+      return s
+    })
+    setEnlace({}, { replace: true })
+  }, [enlace, datasets.data, setEnlace])
 
   const esAdmin = yo.data?.rol === 'administrador'
   // `?? []` dentro de useMemo, no fuera: un arreglo nuevo en cada render hace que

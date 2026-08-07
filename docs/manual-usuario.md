@@ -214,8 +214,7 @@ Lo que falló sale arriba. Los filtros de la barra —*Fallaron*, *Corriendo*, *
 *Sin correr*, *Sin horario*— y el buscador, que también busca por tabla y por
 conexión, sirven para responder «¿quién carga esta tabla?».
 
-Aquí no se edita nada: **Abrir** lleva a Flujos o a Conexiones, que es donde se
-cambia. **Ejecutar** lanza un flujo a mano.
+Aquí no se edita nada: **Abrir** lleva a Flujos o a Conexiones **con esa tarea ya abierta** — no hay que volver a buscarla entre las demás. **Ejecutar** lanza un flujo a mano.
 
 #### Ejecutar a mano: corre en segundo plano
 

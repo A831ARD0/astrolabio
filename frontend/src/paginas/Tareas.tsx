@@ -60,7 +60,7 @@ interface Tarea {
   salida: Salida
   detalle: string | null
   proxima: string | null
-  /** A dónde se va a editarla. */
+  /** A dónde se va a editarla, con lo que hay que abrir ya en la dirección. */
   destino: string
   flujoId: number | null
   /** Un dataset con horario propio que además es paso de un flujo corre dos veces. */
@@ -120,7 +120,7 @@ function deFlujo(f: Flujo): Tarea {
     // solo estorba.
     detalle: f.progreso ?? f.ultimo_mensaje ?? (duracion(f.ultima_ms) || null),
     proxima: f.proxima_corrida,
-    destino: '/flujos',
+    destino: `/flujos?flujo=${f.id}`,
     flujoId: f.id,
     tambienEn: null,
   }
@@ -140,7 +140,7 @@ function deCarga(ds: Dataset, conexion: string, enFlujo: string | null): Tarea {
     salida: salidaDe(ds.ultimo_estado, ds.ultima_carga),
     detalle: ds.filas ? `${ds.filas.toLocaleString('es-MX')} filas` : null,
     proxima: ds.proxima_corrida,
-    destino: '/conexiones',
+    destino: `/conexiones?dataset=${ds.id}`,
     flujoId: null,
     tambienEn: enFlujo,
   }
