@@ -116,7 +116,9 @@ function deFlujo(f: Flujo): Tarea {
     zona: f.zona_horaria,
     ultima: f.ultima_ejecucion,
     salida: salidaDe(f.ultimo_estado, f.ultima_ejecucion),
-    detalle: f.ultimo_mensaje ?? (duracion(f.ultima_ms) || null),
+    // Mientras corre, lo util es por que paso va; el mensaje de la vez anterior
+    // solo estorba.
+    detalle: f.progreso ?? f.ultimo_mensaje ?? (duracion(f.ultima_ms) || null),
     proxima: f.proxima_corrida,
     destino: '/flujos',
     flujoId: f.id,

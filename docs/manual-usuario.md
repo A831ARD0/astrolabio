@@ -203,6 +203,10 @@ Si ya hay algo corriendo, Astrolabio pregunta:
 - **Correr ya, a la par**. Arranca de inmediato. Tiene sentido cuando son
   sucursales en servidores distintos.
 
+Mientras corre **se ve por dónde va**: el paso en curso queda marcado como
+*trayendo…*, los que ya acabaron enseñan sus filas y su tiempo, y arriba dice
+«va por el paso 7 de 28». Se actualiza solo, sin recargar.
+
 Arriba de la tabla aparece una barra con lo que corre y lo que espera turno; de
 la cola se puede sacar algo que **todavía no empezó**. Lo que ya arrancó no se
 corta: a mitad de una ingesta, cortar deja el destino a medias.

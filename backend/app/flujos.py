@@ -203,9 +203,10 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
     Corre el flujo entero. Devuelve el resumen; lanza `ErrorFlujo` si algún paso
     falló y la política es detenerse.
     """
+    total = len(flujo.pasos or [])
     ejec = FlujoEjecucion(flujo_id=flujo.id, estado=EstadoCarga.corriendo,
                           origen=actor.origen, iniciado_por=actor.id,
-                          detalle={"pasos": []})
+                          detalle={"pasos": [], "total": total})
     sesion.add(ejec)
     sesion.flush()
 
@@ -218,13 +219,34 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
         .order_by(FlujoEjecucion.id.desc()).limit(1)
     ) == EstadoCarga.error
 
+    # Confirmar YA, antes del primer paso. Sin esto, la corrida no existe para
+    # nadie mas hasta que termina: veintiocho tablas escribiendose en el disco y
+    # la pantalla diciendo "todavia no ha corrido". Lo que se ve es lo que esta
+    # confirmado.
+    sesion.commit()
+
     t0 = time.perf_counter()
     resultados: list[dict[str, Any]] = []
     fallo: str | None = None
 
+    def _apuntar(en_curso: dict[str, Any] | None = None) -> None:
+        """
+        Deja el avance en la base y lo confirma.
+
+        Se llama antes y despues de cada paso: antes con el paso marcado como
+        'corriendo' —para saber en cual va— y despues con su resultado. Es una
+        escritura pequena por paso; al lado de traer una tabla entera no se nota,
+        y es la diferencia entre ver avanzar la noche y mirar una pantalla muda.
+        """
+        ejec.detalle = {"pasos": resultados + ([en_curso] if en_curso else []),
+                        "total": total}
+        sesion.commit()
+
     for i, paso in enumerate(flujo.pasos or [], start=1):
         nombre = paso.get("nombre") or _nombre_de(sesion, paso) or "?"
         inicio = time.perf_counter()
+        _apuntar({"paso": i, "tipo": paso.get("tipo"), "nombre": nombre,
+                  "estado": "corriendo"})
         try:
             if paso.get("tipo") == "carga":
                 ds = sesion.get(Dataset, int(paso["id"]))
@@ -258,11 +280,13 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor) -> dict[str, Any]:
                         "paso": j, "tipo": restante.get("tipo"),
                         "nombre": restante.get("nombre"), "estado": "omitido",
                     })
+                _apuntar()
                 break
+        _apuntar()
 
     ms = round((time.perf_counter() - t0) * 1000, 1)
     ejec.ms = int(ms)
-    ejec.detalle = {"pasos": resultados}
+    ejec.detalle = {"pasos": resultados, "total": total}
     ejec.estado = EstadoCarga.error if fallo else EstadoCarga.exito
     ejec.mensaje = fallo
     flujo.ultima_ejecucion = datetime.now(timezone.utc)

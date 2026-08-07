@@ -241,6 +241,7 @@ export function Flujos() {
               ? `En cola detrás de «${ejecutar.data.esperando_a}».`
               : `Corriendo ${ejecutar.data.pasos} paso(s) en segundo plano.`}{' '}
             Puedes irte de esta pantalla: el resultado queda en el historial.
+            {actual?.progreso && <strong> Va por el paso {actual.progreso}.</strong>}
           </div>
         )}
         {ejecutar.isError && (
@@ -276,7 +277,9 @@ export function Flujos() {
                               ? 'ok'
                               : r.estado === 'error'
                                 ? 'critico'
-                                : ''
+                                : r.estado === 'corriendo'
+                                  ? 'aviso'
+                                  : ''
                           }`}
                           title={r.mensaje ?? undefined}
                         >
@@ -284,7 +287,9 @@ export function Flujos() {
                             ? `${(r.filas ?? 0).toLocaleString('es-MX')} filas · ${r.ms} ms`
                             : r.estado === 'error'
                               ? 'falló'
-                              : 'omitido'}
+                              : r.estado === 'corriendo'
+                                ? 'trayendo…'
+                                : 'omitido'}
                         </span>
                       )}
 

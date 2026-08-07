@@ -27,6 +27,8 @@ export interface Flujo {
   /** Cuánto tardó y qué dijo la última corrida, sin abrir el historial. */
   ultima_ms: number | null
   ultimo_mensaje: string | null
+  /** «7 de 28» mientras corre; null el resto del tiempo. */
+  progreso: string | null
   /** Problemas de orden deducidos del linaje. Se recalculan al leer. */
   avisos: string[]
 }
@@ -35,7 +37,7 @@ export interface ResultadoPaso {
   paso: number
   tipo: string
   nombre: string
-  estado: 'exito' | 'error' | 'omitido'
+  estado: 'exito' | 'error' | 'omitido' | 'corriendo'
   filas?: number
   modo?: string
   ms?: number
@@ -49,6 +51,8 @@ export interface EjecucionFlujo {
   ms: number
   mensaje: string | null
   pasos: ResultadoPaso[]
+  /** Cuantos pasos tiene el flujo, para poder decir «7 de 28». */
+  total: number | null
   cuando: string
 }
 
@@ -59,8 +63,19 @@ const clave = {
   historial: (id: number) => ['flujos', id, 'historial'] as const,
 }
 
+/**
+ * La lista de flujos. Se vuelve a pedir sola mientras alguno corra: es de donde
+ * sale el «va por el paso 7 de 28», y un numero que no avanza no sirve de nada.
+ */
 export function useFlujos() {
-  return useQuery({ queryKey: clave.lista, queryFn: () => api.get<Flujo[]>('/flujos') })
+  return useQuery({
+    queryKey: clave.lista,
+    queryFn: () => api.get<Flujo[]>('/flujos'),
+    refetchInterval: (q) => {
+      const d = q.state.data as Flujo[] | undefined
+      return d?.some((f) => f.progreso) ? 3000 : false
+    },
+  })
 }
 
 export function useDisponiblesFlujo() {

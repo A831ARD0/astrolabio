@@ -17,7 +17,7 @@ from app.auditoria import registrar
 from app.cargas import Actor
 from app.dependencias import SesionDep, exigir_rol
 from app.flujos import revisar_orden, revisar_pasos, sugerir_orden
-from app.modelos_db import Flujo, Rol, Usuario, iso
+from app.modelos_db import EstadoCarga, Flujo, Rol, Usuario, iso
 
 router = APIRouter(prefix="/api/flujos", tags=["flujos"])
 
@@ -62,6 +62,9 @@ class Salida(BaseModel):
     # sin abrir cada flujo.
     ultima_ms: int | None
     ultimo_mensaje: str | None
+    # "7 de 28" mientras corre. Con veintiocho tablas, saber que sigue viva no
+    # basta: hace falta saber por donde va.
+    progreso: str | None
     avisos: list[str]
 
 
@@ -81,11 +84,23 @@ def _salida(sesion: SesionDep, f: Flujo) -> Salida:
         ultimo_estado=ultima.estado.value if ultima else None,
         ultima_ms=ultima.ms if ultima else None,
         ultimo_mensaje=ultima.mensaje if ultima else None,
+        progreso=_progreso(ultima),
         # Los avisos se recalculan al leer: el orden puede quedar mal por un
         # cambio en otra parte (una transformación que ahora lee de otro dataset),
         # no solo al guardar el flujo.
         avisos=revisar_orden(sesion, f.pasos or []),
     )
+
+
+def _progreso(ultima) -> str | None:
+    """Por que paso va, mientras corre. Fuera de eso no hay nada que decir."""
+    if ultima is None or ultima.estado != EstadoCarga.corriendo:
+        return None
+    d = ultima.detalle or {}
+    pasos = d.get("pasos") or []
+    total = d.get("total") or len(pasos)
+    hechos = sum(1 for p in pasos if p.get("estado") != "corriendo")
+    return f"{min(hechos + 1, total)} de {total}" if total else None
 
 
 def _obtener(sesion: SesionDep, id_: int) -> Flujo:
@@ -253,6 +268,7 @@ def historial(id_: int, sesion: SesionDep,
     return {"ejecuciones": [
         {"id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
          "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
+         "total": (e.detalle or {}).get("total"),
          "cuando": iso(e.creado_en)}
         for e in f.ejecuciones[:30]
     ]}

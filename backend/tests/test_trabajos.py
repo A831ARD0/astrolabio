@@ -110,3 +110,50 @@ def test_un_flujo_que_ya_no_existe_no_tumba_al_trabajador():
 def _actor():
     from app.cargas import Actor
     return Actor(id=None, email="prueba@astrolabio")
+
+
+def test_el_avance_se_ve_mientras_corre(cliente, cab_admin, transformacion_flujo):
+    """
+    Lo que motivo esto: veintiocho tablas escribiendose en el disco y la pantalla
+    diciendo «todavia no ha corrido». El renglon de la corrida se confirmaba al
+    final, asi que hasta entonces no existia para nadie mas.
+    """
+    from app.cargas import Actor
+    from app.db import CrearSesion
+    from app.flujos import ejecutar as ejecutar_flujo
+    from app.modelos_db import EstadoCarga, Flujo, FlujoEjecucion
+
+    id_ = crear_flujo(cliente, cab_admin, {
+        "nombre": "con_avance",
+        "pasos": [{"tipo": "transformacion", "id": transformacion_flujo}]})["id"]
+
+    # Otra sesion, como la que atiende la peticion del navegador: solo ve lo
+    # confirmado.
+    with CrearSesion() as propia, CrearSesion() as mirona:
+        f = propia.get(Flujo, id_)
+        ejecutar_flujo(propia, f, Actor(id=None, email="prueba@astrolabio"))
+        propia.commit()
+        vistas = mirona.query(FlujoEjecucion).filter(
+            FlujoEjecucion.flujo_id == id_).all()
+
+    assert vistas, "la corrida no era visible desde fuera"
+    ultima = vistas[-1]
+    assert ultima.estado == EstadoCarga.exito
+    assert ultima.detalle["total"] == 1
+    assert [p["estado"] for p in ultima.detalle["pasos"]] == ["exito"]
+
+
+def test_el_progreso_dice_por_que_paso_va(cliente, cab_admin, transformacion_flujo):
+    from app.rutas.flujos import _progreso
+    from app.modelos_db import EstadoCarga
+
+    class _Falsa:
+        estado = EstadoCarga.corriendo
+        detalle = {"total": 28, "pasos": [
+            {"paso": 1, "estado": "exito"}, {"paso": 2, "estado": "exito"},
+            {"paso": 3, "estado": "corriendo"}]}
+
+    assert _progreso(_Falsa()) == "3 de 28"
+    # Terminada no hay nada que decir: para eso esta el resultado.
+    _Falsa.estado = EstadoCarga.exito
+    assert _progreso(_Falsa()) is None
