@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from app.auditoria import registrar
 from app import intentos
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
-from app.modelos_db import AtributoUsuario, Rol, Usuario
+from app.modelos_db import AtributoUsuario, Rol, Usuario, iso
 from app.seguridad import crear_token, hashear, verificar
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -99,8 +99,8 @@ def _salida(u: Usuario) -> UsuarioSalida:
     return UsuarioSalida(
         id=u.id, email=u.email, nombre=u.nombre, rol=u.rol,
         activo=u.activo, atributos=u.dict_atributos,
-        ultimo_ingreso=u.ultimo_ingreso.isoformat() if u.ultimo_ingreso else None,
-        creado_en=u.creado_en.isoformat() if u.creado_en else None,
+        ultimo_ingreso=iso(u.ultimo_ingreso),
+        creado_en=iso(u.creado_en),
     )
 
 

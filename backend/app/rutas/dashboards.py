@@ -26,7 +26,7 @@ from sqlalchemy import func, select
 
 from app.auditoria import registrar
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
-from app.modelos_db import Dashboard, Rol, Usuario, VersionModelo
+from app.modelos_db import Dashboard, Rol, Usuario, VersionModelo, iso
 
 router = APIRouter(prefix="/api/dashboards", tags=["dashboards"])
 
@@ -126,7 +126,7 @@ def _salida(sesion: SesionDep, d: Dashboard) -> DashboardSalida:
         version_vigente_del_modelo=int(vigente or v.version),
         definicion=d.definicion, publicado=d.publicado,
         certificado=d.certificado,
-        actualizado_en=d.actualizado_en.isoformat(),
+        actualizado_en=iso(d.actualizado_en),
     )
 
 

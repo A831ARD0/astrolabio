@@ -188,6 +188,28 @@ conexión, sirven para responder «¿quién carga esta tabla?».
 Aquí no se edita nada: **Abrir** lleva a Flujos o a Conexiones, que es donde se
 cambia. **Ejecutar** lanza un flujo a mano.
 
+#### Ejecutar a mano: corre en segundo plano
+
+**Ejecutar** no se queda esperando. Un flujo de veintiocho tablas por el puente
+tarda minutos; tener la pantalla esperando todo ese rato terminaba en un *Error
+502* del proxy aunque el servidor siguiera trabajando. Ahora la corrida se lanza
+y se sigue por el historial: **puedes cerrar la pantalla, o el navegador**.
+
+Si ya hay algo corriendo, Astrolabio pregunta:
+
+- **Esperar turno** (lo normal). Se pone en cola y arranca cuando acabe lo de
+  antes. Si los dos leen del mismo servidor de origen, lanzarlos a la vez no
+  acaba antes — y a veces acaba peor.
+- **Correr ya, a la par**. Arranca de inmediato. Tiene sentido cuando son
+  sucursales en servidores distintos.
+
+Arriba de la tabla aparece una barra con lo que corre y lo que espera turno; de
+la cola se puede sacar algo que **todavía no empezó**. Lo que ya arrancó no se
+corta: a mitad de una ingesta, cortar deja el destino a medias.
+
+**El mismo flujo dos veces a la vez se rechaza**, y eso no se pregunta: serían
+dos procesos escribiendo los mismos archivos.
+
 ---
 
 ## 5. Transformar

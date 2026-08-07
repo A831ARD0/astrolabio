@@ -946,6 +946,15 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 }
 .pasos-tarea li::marker { color: var(--texto-tenue); font-size: 11px; }
 
+/* Un renglon de la cola: lo que corre ahora y lo que espera turno. */
+.fila-cola {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.fila-cola + .fila-cola { border-top: 1px solid var(--borde); }
+
 /* La barra de busqueda y filtros de la pantalla de conexiones.
 
    Se queda pegada arriba al bajar. Con cuarenta conexiones abiertas la pagina

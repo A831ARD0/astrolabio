@@ -8,7 +8,25 @@ el mismo rastro que el botón.
 
 import pytest
 
+from app import trabajos
 from tests.conftest import necesita_mysql   # noqa: F401
+
+
+def correr(cliente, cab, flujo_id: int) -> dict:
+    """
+    Lanza el flujo y espera a que el trabajador lo termine.
+
+    Desde que las corridas a mano van en segundo plano, la peticion contesta 202
+    y no trae resultado: el resultado esta en el historial. Sin esta espera la
+    prueba seria una carrera, y una prueba que a veces pasa es peor que una que
+    falla.
+    """
+    r = cliente.post(f"/api/flujos/{flujo_id}/ejecutar", headers=cab)
+    assert r.status_code == 202, r.text
+    assert trabajos.esperar(60), "el trabajo no termino a tiempo"
+    h = cliente.get(f"/api/flujos/{flujo_id}/historial", headers=cab).json()
+    assert h["ejecuciones"], "la corrida no dejo historial"
+    return h["ejecuciones"][0]
 
 
 def crear_flujo(cliente, cab, cuerpo: dict) -> dict:
@@ -61,9 +79,7 @@ def flujo(cliente, cab_admin, transformacion_flujo):
 # --------------------------------------------------------------------------- #
 
 def test_ejecutar_un_flujo_corre_sus_pasos(cliente, cab_admin, flujo):
-    r = cliente.post(f"/api/flujos/{flujo['id']}/ejecutar", headers=cab_admin)
-    assert r.status_code == 200, r.text
-    d = r.json()
+    d = correr(cliente, cab_admin, flujo["id"])
     assert d["estado"] == "exito"
     assert len(d["pasos"]) == 1
     assert d["pasos"][0]["estado"] == "exito"
@@ -76,7 +92,7 @@ def test_cada_paso_deja_su_propio_historial(cliente, cab_admin, flujo,
     El flujo no reemplaza el historial de cada pieza: lo alimenta. Un paso corrido
     por el flujo y el mismo paso a mano tienen que ser comparables.
     """
-    cliente.post(f"/api/flujos/{flujo['id']}/ejecutar", headers=cab_admin)
+    correr(cliente, cab_admin, flujo["id"])
     h = cliente.get(f"/api/transformaciones/{transformacion_flujo}/historial",
                     headers=cab_admin).json()
     assert h["ejecuciones"], "la transformación no registró su ejecución"
@@ -84,9 +100,7 @@ def test_cada_paso_deja_su_propio_historial(cliente, cab_admin, flujo,
 
 
 def test_el_flujo_guarda_el_resultado_de_cada_paso(cliente, cab_admin, flujo):
-    cliente.post(f"/api/flujos/{flujo['id']}/ejecutar", headers=cab_admin)
-    h = cliente.get(f"/api/flujos/{flujo['id']}/historial", headers=cab_admin).json()
-    ultima = h["ejecuciones"][0]
+    ultima = correr(cliente, cab_admin, flujo["id"])
     assert ultima["estado"] == "exito"
     assert ultima["disparo"] == "manual"
     assert ultima["pasos"][0]["nombre"] == "resumen_flujo"
@@ -117,9 +131,9 @@ def test_al_fallar_se_detiene_y_los_demas_quedan_omitidos(cliente, cab_admin,
             {"tipo": "transformacion", "id": transformacion_flujo},
         ]})["id"]
 
-    r = cliente.post(f"/api/flujos/{id_}/ejecutar", headers=cab_admin)
-    assert r.status_code == 400
-    pasos = r.json()["detail"]["pasos"]
+    d = correr(cliente, cab_admin, id_)
+    assert d["estado"] == "error"
+    pasos = d["pasos"]
     assert pasos[0]["estado"] == "error"
     assert pasos[1]["estado"] == "omitido", "el segundo paso no debió intentarse"
 
@@ -137,9 +151,9 @@ def test_con_continuar_los_demas_pasos_si_corren(cliente, cab_admin,
             {"tipo": "transformacion", "id": transformacion_flujo},
         ]})["id"]
 
-    r = cliente.post(f"/api/flujos/{id_}/ejecutar", headers=cab_admin)
-    assert r.status_code == 400            # el flujo falló, aunque siguiera
-    pasos = r.json()["detail"]["pasos"]
+    d = correr(cliente, cab_admin, id_)
+    assert d["estado"] == "error"          # el flujo falló, aunque siguiera
+    pasos = d["pasos"]
     assert pasos[0]["estado"] == "error"
     assert pasos[1]["estado"] == "exito"
 

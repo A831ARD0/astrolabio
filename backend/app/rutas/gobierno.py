@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from app.auditoria import registrar
 from app.dependencias import SesionDep, exigir_rol
 from app.gobierno import contexto_de, contexto_ficticio, simular
-from app.modelos_db import Auditoria, Rol, Usuario
+from app.modelos_db import Auditoria, Rol, Usuario, iso
 from app.rutas.modelos import _cargar_semantico, _version_exacta, _version_vigente
 from semantic.engine import Consulta, ErrorModelo
 
@@ -142,7 +142,7 @@ def listar_auditoria(
         "pagina": pagina,
         "por_pagina": por_pagina,
         "eventos": [
-            {"id": a.id, "cuando": a.creado_en.isoformat(),
+            {"id": a.id, "cuando": iso(a.creado_en),
              "email": a.email_usuario, "usuario_id": a.usuario_id,
              "accion": a.accion, "objeto_tipo": a.objeto_tipo,
              "objeto_id": a.objeto_id, "detalle": a.detalle}

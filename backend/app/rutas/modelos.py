@@ -24,7 +24,7 @@ from app.exportar import (
 )
 from app.dependencias import ContextoDep, SesionDep, UsuarioDep, exigir_rol
 from app.modelos_db import Modelo as ModeloDB
-from app.modelos_db import Rol, Usuario, VersionModelo
+from app.modelos_db import Rol, Usuario, VersionModelo, iso
 from app.politicas import PoliticaInvalida
 from semantic.definicion import Definicion, desde_yaml, volcar_yaml
 from semantic.politica import PoliticaDef, atributos_requeridos
@@ -229,7 +229,7 @@ def versiones(modelo_id: int, sesion: SesionDep, _: UsuarioDep):
         except Exception:
             conteo = {"entidades": 0, "relaciones": 0, "metricas": 0}
         salida.append({"version": v.version, "notas": v.notas,
-                       "creado_en": v.creado_en.isoformat(), **conteo})
+                       "creado_en": iso(v.creado_en), **conteo})
     return {"versiones": salida}
 
 

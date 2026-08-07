@@ -23,7 +23,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { type Dataset, useConexiones, useDatasets } from '../api/conexiones'
-import { HORARIOS, type Flujo, useEjecutarFlujo, useFlujos } from '../api/flujos'
+import { HORARIOS, type Flujo, useFlujos, useSacarDeLaCola } from '../api/flujos'
+import { useLanzador } from '../flujos/Lanzar'
 
 /** Cómo salió la última vez. Es por lo que se filtra al entrar por la mañana. */
 type Salida = 'error' | 'corriendo' | 'exito' | 'nunca'
@@ -147,7 +148,8 @@ export function Tareas() {
   const flujos = useFlujos()
   const datasets = useDatasets()
   const conexiones = useConexiones()
-  const ejecutar = useEjecutarFlujo()
+  const { lanzar, dialogo, ejecutar, cola } = useLanzador()
+  const sacar = useSacarDeLaCola()
 
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -197,10 +199,21 @@ export function Tareas() {
   }, [tareas, busca, filtro])
 
   const fallaron = tareas.filter((t) => t.salida === 'error').length
+
+  // Lo que esta vivo AHORA. La columna «Resultado» dice como salio la vez
+  // anterior; sin esto, un flujo lanzado hace un minuto sigue diciendo «bien»
+  // de anoche mientras corre, que es justo lo que confunde.
+  const enMarcha = new Set<number | null>(
+    [...(cola.data?.corriendo ?? []), ...(cola.data?.en_cola ?? [])]
+      .filter((t) => t.tipo === 'flujo').map((t) => t.objeto_id))
+  const enCola = new Set<number | null>(
+    (cola.data?.en_cola ?? []).filter((t) => t.tipo === 'flujo')
+      .map((t) => t.objeto_id))
   const cargando = flujos.isLoading || datasets.isLoading
 
   return (
     <div className="pagina pegada">
+      {dialogo}
       <div className="cabecera-pagina">
         <h1>Tareas</h1>
         <p className="suave chico">
@@ -242,6 +255,34 @@ export function Tareas() {
       {ejecutar.isError && (
         <div className="error-caja">{(ejecutar.error as Error).message}</div>
       )}
+
+      {/* La cola: lo unico que responde «¿sigue viva la extraccion de anoche?».
+          Solo aparece cuando hay algo, para no ocupar sitio el resto del dia. */}
+      {(cola.data?.corriendo.length || cola.data?.en_cola.length) ? (
+        <div className="aviso-caja">
+          {cola.data.corriendo.map((t) => (
+            <div key={t.id} className="fila-cola">
+              <span className="etiqueta aviso">corriendo</span>
+              <strong>{t.nombre}</strong>
+              <span className="chico suave">
+                desde {t.iniciado_en ? cuando(t.iniciado_en) : '—'} · {t.quien}
+                {t.a_la_par && ' · a la par'}
+              </span>
+            </div>
+          ))}
+          {cola.data.en_cola.map((t, i) => (
+            <div key={t.id} className="fila-cola">
+              <span className="etiqueta">turno {i + 1}</span>
+              <strong>{t.nombre}</strong>
+              <span className="chico suave">pedido por {t.quien}</span>
+              <button className="btn chico" style={{ marginLeft: 'auto' }}
+                      onClick={() => sacar.mutate(t.id)}>
+                Sacar de la cola
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {cargando ? (
         <div className="vacio">Cargando…</div>
@@ -302,7 +343,13 @@ export function Tareas() {
                     <td className="chico">{horario(t.cron, t.activa)}</td>
                     <td className="chico">{cuando(t.ultima)}</td>
                     <td>
-                      <Marca s={t.salida} />{' '}
+                      {enMarcha.has(t.flujoId) ? (
+                        <span className="etiqueta aviso">
+                          {enCola.has(t.flujoId) ? 'en cola' : 'corriendo'}
+                        </span>
+                      ) : (
+                        <Marca s={t.salida} />
+                      )}{' '}
                       {t.detalle && <span className="chico suave">{t.detalle}</span>}
                     </td>
                     <td className="chico suave">
@@ -312,8 +359,8 @@ export function Tareas() {
                       {t.flujoId !== null && (
                         <button
                           className="btn chico"
-                          disabled={ejecutar.isPending}
-                          onClick={() => ejecutar.mutate(t.flujoId!)}
+                          disabled={ejecutar.isPending || enMarcha.has(t.flujoId)}
+                          onClick={() => lanzar(t.flujoId!, t.nombre)}
                         >
                           Ejecutar
                         </button>

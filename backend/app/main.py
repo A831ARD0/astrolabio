@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
-from app import programador
+from app import programador, trabajos
 from app.config import VERSION, config
 from app.db import CrearSesion
 from app.esquema import actualizar as actualizar_esquema
@@ -85,6 +85,10 @@ def arranque() -> None:
                 "  Cambiala en el primer ingreso. No se vuelve a mostrar.\n%s",
                 "=" * 66, config().correo_admin, temporal, "=" * 66,
             )
+
+    # Lo que quedo a medias en el reinicio anterior. Si no se cierra, la pantalla
+    # de tareas ensena 'corriendo' para siempre algo que nadie va a terminar.
+    trabajos.limpiar_interrumpidos()
 
     # Despues de las migraciones: el jobstore necesita su tabla, y sincronizar()
     # necesita leer los datasets.

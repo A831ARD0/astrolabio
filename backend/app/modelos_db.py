@@ -22,6 +22,25 @@ def ahora() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def iso(dt: datetime | None) -> str | None:
+    """
+    ISO **con la marca de UTC**, para todo lo que salga de una columna de fecha.
+
+    `ahora()` guarda en UTC, pero la columna es `DateTime` sin zona: al leerla
+    vuelve naive, y un `isoformat()` pelado produce '2026-08-07T00:15:00', que el
+    navegador interpreta como hora local. Una carga de las seis de la tarde se
+    ensenaba como las doce y cuarto de la noche del dia siguiente.
+
+    Lo que ya viene con zona —las proximas corridas, que las calcula el
+    programador— se deja tal cual.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 class Base(DeclarativeBase):
     pass
 

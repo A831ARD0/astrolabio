@@ -12,15 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app import programador
+from app import programador, trabajos
 from app.auditoria import registrar
 from app.cargas import Actor
 from app.dependencias import SesionDep, exigir_rol
-from app.flujos import (
-    ErrorFlujo, ejecutar as ejecutar_flujo, revisar_orden, revisar_pasos,
-    sugerir_orden,
-)
-from app.modelos_db import Flujo, Rol, Usuario
+from app.flujos import revisar_orden, revisar_pasos, sugerir_orden
+from app.modelos_db import Flujo, Rol, Usuario, iso
 
 router = APIRouter(prefix="/api/flujos", tags=["flujos"])
 
@@ -80,8 +77,7 @@ def _salida(sesion: SesionDep, f: Flujo) -> Salida:
         pasos=f.pasos or [], al_fallar=f.al_fallar, cron=f.cron,
         zona_horaria=f.zona_horaria, programacion_activa=f.programacion_activa,
         proxima_corrida=proxima.isoformat() if proxima else None,
-        ultima_ejecucion=(f.ultima_ejecucion.isoformat()
-                          if f.ultima_ejecucion else None),
+        ultima_ejecucion=iso(f.ultima_ejecucion),
         ultimo_estado=ultima.estado.value if ultima else None,
         ultima_ms=ultima.ms if ultima else None,
         ultimo_mensaje=ultima.mensaje if ultima else None,
@@ -193,20 +189,61 @@ def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
     return _salida(sesion, f)
 
 
-@router.post("/{id_}/ejecutar")
-def ejecutar(id_: int, sesion: SesionDep,
+@router.post("/{id_}/ejecutar", status_code=status.HTTP_202_ACCEPTED)
+def ejecutar(id_: int, sesion: SesionDep, a_la_par: bool = False,
              actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Lanza el flujo en segundo plano y contesta enseguida.
+
+    No lo corre dentro de la petición a propósito. Veintiocho tablas por el
+    puente tardan minutos: el proxy corta con un 502 aunque el servidor siga
+    trabajando, y salirse de la pantalla dejaba sin forma de saber cómo acabó.
+    Ahora la corrida se sigue por el historial, igual que las programadas.
+
+    `a_la_par=false` (lo normal) hace cola: el cuello de botella es el origen, y
+    cuarenta sucursales sobre el mismo Pervasive no van más rápido por pedírselo
+    todo de golpe. `a_la_par=true` arranca ya, y lo decide quien opera.
+    """
     f = _obtener(sesion, id_)
+    ocupado = trabajos.hay_algo_corriendo()
     try:
-        return ejecutar_flujo(sesion, f, Actor(id=actor.id, email=actor.email))
-    except ErrorFlujo as e:
-        # 400 con el detalle: el flujo no se completó, pero el historial ya tiene
-        # el resultado de cada paso, incluidos los que sí salieron bien.
-        ultima = f.ejecuciones[0] if f.ejecuciones else None
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, {
-            "mensaje": str(e),
-            "pasos": (ultima.detalle or {}).get("pasos", []) if ultima else [],
-        })
+        t = trabajos.encolar("flujo", f.id, f.nombre,
+                             Actor(id=actor.id, email=actor.email),
+                             a_la_par=a_la_par)
+    except trabajos.YaEnMarcha as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    registrar(sesion, accion="flujo_lanzado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
+              detalle={"nombre": f.nombre, "a_la_par": a_la_par})
+    return {
+        "trabajo_id": t.id,
+        "estado": t.estado,
+        "pasos": len(f.pasos or []),
+        # Qué había corriendo cuando se lanzó: es lo que la pantalla necesita
+        # para decir "espera turno detrás de X" sin volver a preguntar.
+        "esperando_a": ocupado.nombre if ocupado and not a_la_par else None,
+    }
+
+
+@router.get("/cola")
+def cola(_: Usuario = Depends(exigir_rol(Rol.editor))):
+    """Qué corre ahora mismo y qué espera turno."""
+    return trabajos.estado()
+
+
+@router.delete("/cola/{trabajo_id}", status_code=204)
+def sacar_de_la_cola(trabajo_id: int,
+                     _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Saca de la cola algo que todavía no empezó.
+
+    Lo que ya arrancó no se corta: a mitad de una ingesta, cortar deja el destino
+    a medias y sin nadie que lo cuente.
+    """
+    if not trabajos.cancelar(trabajo_id):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Ese trabajo ya empezó o ya terminó; no se puede sacar "
+                            "de la cola.")
 
 
 @router.get("/{id_}/historial")
@@ -216,7 +253,7 @@ def historial(id_: int, sesion: SesionDep,
     return {"ejecuciones": [
         {"id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
          "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
-         "cuando": e.creado_en.isoformat()}
+         "cuando": iso(e.creado_en)}
         for e in f.ejecuciones[:30]
     ]}
 

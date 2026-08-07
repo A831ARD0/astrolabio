@@ -55,6 +55,7 @@ export interface EjecucionFlujo {
 const clave = {
   lista: ['flujos'] as const,
   disponibles: ['flujos', 'disponibles'] as const,
+  cola: ['flujos', 'cola'] as const,
   historial: (id: number) => ['flujos', id, 'historial'] as const,
 }
 
@@ -98,27 +99,93 @@ export function useSugerirOrden() {
   })
 }
 
+/** Lo que corre ahora y lo que espera turno. */
+export interface Trabajo {
+  id: number
+  tipo: string
+  objeto_id: number
+  nombre: string
+  estado: 'en_cola' | 'corriendo'
+  a_la_par: boolean
+  quien: string
+  encolado_en: string
+  iniciado_en: string | null
+}
+
+export interface Cola {
+  corriendo: Trabajo[]
+  en_cola: Trabajo[]
+}
+
+export interface Lanzado {
+  trabajo_id: number
+  estado: 'en_cola' | 'corriendo'
+  pasos: number
+  /** Nombre de lo que ya estaba corriendo cuando este quedó en cola. */
+  esperando_a: string | null
+}
+
+/**
+ * Lanza el flujo. NO espera a que termine.
+ *
+ * Antes esta llamada tenía la petición abierta hasta el último paso; con
+ * veintiocho tablas por el puente eso son minutos, el proxy corta con un 502 y
+ * salirse de la pantalla dejaba sin saber cómo acabó. Ahora contesta enseguida
+ * y el resultado se sigue por el historial.
+ */
 export function useEjecutarFlujo() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) =>
-      api.post<{ estado: string; ms: number; pasos: ResultadoPaso[] }>(
-        `/flujos/${id}/ejecutar`,
-      ),
+    mutationFn: ({ id, aLaPar = false }: { id: number; aLaPar?: boolean }) =>
+      api.post<Lanzado>(`/flujos/${id}/ejecutar?a_la_par=${aLaPar}`),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: clave.lista })
+      qc.invalidateQueries({ queryKey: clave.cola })
       qc.invalidateQueries({ queryKey: ['flujos'] })
       qc.invalidateQueries({ queryKey: ['transformaciones'] })
     },
   })
 }
 
+/**
+ * La cola, refrescada sola mientras haya algo.
+ *
+ * Se pregunta seguido a propósito: es la única señal de que la extracción de la
+ * noche sigue viva. Cuando no hay nada, baja el ritmo y deja de molestar.
+ */
+export function useCola() {
+  return useQuery({
+    queryKey: clave.cola,
+    queryFn: () => api.get<Cola>('/flujos/cola'),
+    refetchInterval: (q) => {
+      const d = q.state.data as Cola | undefined
+      return d && (d.corriendo.length || d.en_cola.length) ? 3000 : 15000
+    },
+  })
+}
+
+export function useSacarDeLaCola() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (trabajoId: number) => api.del<void>(`/flujos/cola/${trabajoId}`),
+    onSettled: () => qc.invalidateQueries({ queryKey: clave.cola }),
+  })
+}
+
+/**
+ * El historial. Mientras la corrida de arriba siga viva se vuelve a pedir sola:
+ * es donde se ve avanzar una extraccion larga, paso a paso.
+ */
 export function useHistorialFlujo(id: number | null) {
   return useQuery({
     queryKey: clave.historial(id ?? 0),
     queryFn: () =>
       api.get<{ ejecuciones: EjecucionFlujo[] }>(`/flujos/${id}/historial`),
     enabled: !!id,
+    refetchInterval: (q) => {
+      const d = q.state.data as { ejecuciones: EjecucionFlujo[] } | undefined
+      return d?.ejecuciones[0]?.estado === 'corriendo' ? 3000 : false
+    },
   })
 }
 

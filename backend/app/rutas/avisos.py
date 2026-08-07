@@ -15,7 +15,9 @@ from sqlalchemy import func, select
 from app import avisos as srv
 from app.auditoria import registrar
 from app.dependencias import SesionDep, exigir_rol
-from app.modelos_db import AvisoEnviado, Dataset, Flujo, ReglaAviso, Rol, Usuario
+from app.modelos_db import (
+    AvisoEnviado, Dataset, Flujo, ReglaAviso, Rol, Usuario, iso,
+)
 
 router = APIRouter(prefix="/api/avisos", tags=["avisos"])
 
@@ -77,7 +79,7 @@ def _salida(sesion: SesionDep, r: ReglaAviso) -> Salida:
         objeto_nombre=_nombre_objeto(sesion, r.objeto_tipo, r.objeto_id),
         silencio_minutos=r.silencio_minutos, activa=r.activa,
         canal_listo=listo, canal_detalle=detalle,
-        ultimo_envio=ultimo.creado_en.isoformat() if ultimo else None,
+        ultimo_envio=iso(ultimo.creado_en) if ultimo else None,
         ultimo_estado=ultimo.estado if ultimo else None,
     )
 
@@ -209,7 +211,7 @@ def historial(sesion: SesionDep, limite: int = Query(default=60, le=300),
         {"id": e.id, "regla": nombres.get(e.regla_id, f"(regla {e.regla_id})"),
          "evento": e.evento, "objeto_tipo": e.objeto_tipo, "objeto_id": e.objeto_id,
          "asunto": e.asunto, "estado": e.estado, "mensaje": e.mensaje,
-         "cuando": e.creado_en.isoformat()}
+         "cuando": iso(e.creado_en)}
         for e in filas
     ]}
 

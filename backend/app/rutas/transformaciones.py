@@ -23,7 +23,7 @@ from app.dependencias import SesionDep, UsuarioDep, exigir_rol
 from app.cargas import Actor
 from app.materializar import columnas_de, previsualizar, ruta_datos_dataset
 from app.modelos_db import (
-    Dataset, Rol, Transformacion as TransformacionDB, Usuario,
+    Dataset, Rol, Transformacion as TransformacionDB, Usuario, iso,
 )
 from app.transformar import (
     ErrorEjecucion, ejecutar as ejecutar_transformacion, linaje as _linaje,
@@ -71,8 +71,7 @@ def _salida(t: TransformacionDB) -> Salida:
         id=t.id, nombre=t.nombre, descripcion=t.descripcion,
         definicion=t.definicion, lee_de=t.lee_de or {},
         filas=t.filas, mb=round(t.bytes_parquet / 1024 / 1024, 2),
-        ultima_ejecucion=(t.ultima_ejecucion.isoformat()
-                          if t.ultima_ejecucion else None),
+        ultima_ejecucion=iso(t.ultima_ejecucion),
         ultimo_estado=ultima.estado.value if ultima else None,
         tiene_datos=ruta_datos_dataset(t.nombre) is not None,
     )
@@ -286,7 +285,7 @@ def historial(id_: int, sesion: SesionDep,
     t = _obtener(sesion, id_)
     return {"ejecuciones": [
         {"id": e.id, "estado": e.estado.value, "filas": e.filas, "ms": e.ms,
-         "mensaje": e.mensaje, "cuando": e.creado_en.isoformat()}
+         "mensaje": e.mensaje, "cuando": iso(e.creado_en)}
         for e in t.ejecuciones[:50]
     ]}
 

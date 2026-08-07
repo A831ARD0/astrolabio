@@ -21,7 +21,7 @@ from app.cargas import Actor, ErrorCarga, ejecutar_carga, ruta_dataset
 from app.conectores import OPCIONALES, REQUERIDOS, ErrorConector, TIPOS, crear
 from app.config import config
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
-from app.modelos_db import Conexion, Dataset, Rol, Usuario
+from app.modelos_db import Conexion, Dataset, Rol, Usuario, iso
 from app.seguridad import cifrar, descifrar
 from app.ventanas import VentanaInvalida
 
@@ -767,7 +767,7 @@ def listar_datasets(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.edito
             "ventana": ds.ventana,
             "ventana_dicha": _describir_sin_reventar(ds),
             "marca_maxima": ds.marca_maxima,
-            "ultima_carga": ds.ultima_carga.isoformat() if ds.ultima_carga else None,
+            "ultima_carga": iso(ds.ultima_carga),
             "ultimo_estado": ultima.estado.value if ultima else None,
             "cron": ds.cron,
             "zona_horaria": ds.zona_horaria,
@@ -929,7 +929,7 @@ def historial(dataset_id: int, sesion: SesionDep,
         {"id": e.id, "estado": e.estado.value, "modo": e.modo,
          "disparo": e.origen, "filas": e.filas, "ms": e.ms,
          "mensaje": e.mensaje, "detalle": e.detalle,
-         "cuando": e.creado_en.isoformat()}
+         "cuando": iso(e.creado_en)}
         for e in ds.ejecuciones[:50]
     ]}
 

@@ -19,14 +19,13 @@ import {
   type PasoFlujo,
   type ResultadoPaso,
   useDisponiblesFlujo,
-  useEjecutarFlujo,
   useFlujos,
   useGuardarFlujo,
   useHistorialFlujo,
   useProgramarFlujo,
   useSugerirOrden,
 } from '../api/flujos'
-import { ErrorApi } from '../api/cliente'
+import { useLanzador } from '../flujos/Lanzar'
 
 const VACIO: CuerpoFlujo = { nombre: '', descripcion: null, pasos: [], al_fallar: 'detener' }
 
@@ -35,7 +34,7 @@ export function Flujos() {
   const disponibles = useDisponiblesFlujo()
   const guardar = useGuardarFlujo()
   const sugerir = useSugerirOrden()
-  const ejecutar = useEjecutarFlujo()
+  const { lanzar, dialogo, ejecutar, cola } = useLanzador()
 
   const [id, setId] = useState<number | null>(null)
   const [f, setF] = useState<CuerpoFlujo>(VACIO)
@@ -90,14 +89,17 @@ export function Flujos() {
   const avisoDe = (paso: PasoFlujo, i: number) =>
     avisos.find((a) => a.startsWith(`Paso ${i + 1} (${paso.nombre}`))
 
-  const resultados: ResultadoPaso[] =
-    ejecutar.data?.pasos ??
-    ((ejecutar.error instanceof ErrorApi
-      ? ((ejecutar.error.detalle as { pasos?: ResultadoPaso[] })?.pasos ?? [])
-      : []) as ResultadoPaso[])
+  // Los resultados por paso salen del historial y no de la respuesta de lanzar:
+  // desde que la corrida va en segundo plano, lanzar solo dice "queda en cola".
+  const resultados: ResultadoPaso[] = historial.data?.ejecuciones[0]?.pasos ?? []
+
+  /** Este flujo, ¿está corriendo o esperando turno ahora mismo? */
+  const enMarcha = [...(cola.data?.corriendo ?? []), ...(cola.data?.en_cola ?? [])]
+    .find((t) => t.tipo === 'flujo' && t.objeto_id === id)
 
   return (
     <div className="editor">
+      {dialogo}
       {/* --------------------------------------------------- izquierda */}
       <aside className="izq">
         <section className="seccion">
@@ -217,11 +219,13 @@ export function Flujos() {
             </button>
             <button
               className="btn primario"
-              disabled={id === null || ejecutar.isPending}
+              disabled={id === null || ejecutar.isPending || !!enMarcha}
               title={id === null ? 'Guárdalo antes de ejecutarlo' : undefined}
-              onClick={() => ejecutar.mutate(id!)}
+              onClick={() => lanzar(id!, f.nombre)}
             >
-              {ejecutar.isPending ? 'Ejecutando…' : 'Ejecutar ahora'}
+              {enMarcha
+                ? enMarcha.estado === 'corriendo' ? 'Corriendo…' : 'En cola'
+                : 'Ejecutar ahora'}
             </button>
           </div>
         </div>
@@ -233,7 +237,10 @@ export function Flujos() {
         )}
         {ejecutar.isSuccess && (
           <div className="aviso-caja" style={{ margin: '10px 12px 0' }}>
-            Flujo completo: {ejecutar.data.pasos.length} paso(s) en {ejecutar.data.ms} ms.
+            {ejecutar.data.esperando_a
+              ? `En cola detrás de «${ejecutar.data.esperando_a}».`
+              : `Corriendo ${ejecutar.data.pasos} paso(s) en segundo plano.`}{' '}
+            Puedes irte de esta pantalla: el resultado queda en el historial.
           </div>
         )}
         {ejecutar.isError && (
