@@ -157,16 +157,31 @@ def origenes_disponibles(sesion: SesionDep,
         for t in sesion.scalars(select(TransformacionDB)
                                 .order_by(TransformacionDB.nombre))
     ]
-    return {"tablas": tablas, "datasets": datasets, "transformaciones": trans}
+    # La misma tabla del origen traida por varias conexiones. Es lo que permite
+    # decir «Funcionarios de todas las sucursales» en vez de enumerar cuarenta
+    # datasets a mano —y acordarse del cuarenta y uno cuando abra una agencia.
+    por_tabla: dict[str, list] = {}
+    for d in sesion.scalars(select(Dataset)):
+        por_tabla.setdefault(d.tabla_origen or "", []).append(d)
+    en_varias = sorted(
+        ({"tabla": tabla,
+          "conexiones": len(ds),
+          "cargados": sum(1 for x in ds if ruta_datos_dataset(x.nombre) is not None)}
+         for tabla, ds in por_tabla.items() if tabla and len(ds) > 1),
+        key=lambda x: x["tabla"].lower())
+
+    return {"tablas": tablas, "datasets": datasets, "transformaciones": trans,
+            "en_varias_conexiones": en_varias}
 
 
 @router.get("/columnas")
 def columnas(tipo: str, referencia: str,
              _: Usuario = Depends(exigir_rol(Rol.editor))):
     """Columnas de un origen, para no tener que teclear nombres de memoria."""
-    if tipo not in ("tabla", "dataset"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            "El tipo de origen debe ser 'tabla' o 'dataset'")
+    if tipo not in ("tabla", "dataset", "tabla_en_conexiones"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El tipo de origen debe ser 'tabla', 'dataset' o 'tabla_en_conexiones'")
     try:
         return {"columnas": columnas_de(tipo, referencia)}
     except ErrorTransformacion as e:

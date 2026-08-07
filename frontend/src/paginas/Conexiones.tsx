@@ -29,6 +29,7 @@ import {
 } from '../api/conexiones'
 import { useYo } from '../api/hooks'
 import { DialogoConexion } from '../conexiones/DialogoConexion'
+import { Etiquetas } from '../conexiones/Etiquetas'
 import { Explorador } from '../conexiones/Explorador'
 import { PanelDataset } from '../conexiones/PanelDataset'
 import { TraerEnLote } from '../conexiones/TraerEnLote'
@@ -250,6 +251,7 @@ export function Conexiones() {
 
   const [nueva, setNueva] = useState(false)
   const [traerVarias, setTraerVarias] = useState(false)
+  const [etiquetas, setEtiquetas] = useState(false)
   const [editando, setEditando] = useState<Conexion | null>(null)
   const [explorando, setExplorando] = useState<number | null>(null)
   const [abierto, setAbierto] = useState<Dataset | null>(null)
@@ -362,6 +364,10 @@ export function Conexiones() {
                   entera para dar de alta algo. */}
               {esAdmin && (
                 <>
+                  <button className="btn chico" title="La constante de cada sucursal, que sale como columna"
+                          onClick={() => setEtiquetas(true)}>
+                    Etiquetas
+                  </button>
                   <button className="btn chico" onClick={() => setTraerVarias(true)}>
                     + Traer tablas
                   </button>
@@ -409,6 +415,7 @@ export function Conexiones() {
 
       {nueva && <DialogoConexion alCerrar={() => setNueva(false)} />}
       {traerVarias && <TraerEnLote alCerrar={() => setTraerVarias(false)} />}
+      {etiquetas && <Etiquetas alCerrar={() => setEtiquetas(false)} />}
       {/* `key`: el diálogo toma su estado inicial de la conexión, así que abrir
           otra tiene que montarlo de nuevo, no reutilizar el formulario anterior. */}
       {editando && (

@@ -222,14 +222,23 @@ class Origen(_Paso):
     """
     De dónde sale una tabla de entrada.
 
-      tabla     una tabla o vista del motor analítico
-      dataset   un dataset ingestado (Parquet particionado)
+      tabla                 una tabla o vista del motor analítico
+      dataset               un dataset ingestado (Parquet particionado)
+      tabla_en_conexiones   la MISMA tabla traída de todas las conexiones,
+                            apilada; `referencia` es el nombre de la tabla en el
+                            origen, no el de un dataset
 
-    En los dos casos el motor la ve como un nombre; la diferencia la resuelve
-    quien prepara la conexión, no el compilador.
+    El tercero existe por las cuarenta sucursales: declarar cuarenta orígenes a
+    mano —y acordarse de agregar el cuarenta y uno cuando abra una agencia
+    nueva— es trabajo que la máquina hace sola. Cada parte llega con las
+    etiquetas de su conexión, que es lo que después distingue de dónde vino cada
+    fila.
+
+    En los tres casos el motor ve un nombre; la diferencia la resuelve quien
+    prepara la conexión, no el compilador.
     """
     nombre: str                     # alias dentro de la transformación
-    tipo: Literal["tabla", "dataset"] = "tabla"
+    tipo: Literal["tabla", "dataset", "tabla_en_conexiones"] = "tabla"
     referencia: str                 # nombre de la tabla o del dataset
 
 

@@ -105,7 +105,10 @@ export function Etl() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(d)])
 
-  const agregarOrigen = (tipo: 'tabla' | 'dataset', referencia: string) => {
+  const agregarOrigen = (
+    tipo: 'tabla' | 'dataset' | 'tabla_en_conexiones',
+    referencia: string,
+  ) => {
     const base = referencia.replace(/[^A-Za-z0-9_]/g, '_')
     let nombre = base
     let n = 2
@@ -193,6 +196,39 @@ export function Etl() {
                       <span className="nom mono">{t.nombre}</span>
                     </button>
                   ))}
+                </div>
+              </>
+            )}
+
+            {(disponibles.data?.en_varias_conexiones.length ?? 0) > 0 && (
+              <>
+                {/* Una sola entrada por tabla en vez de cuarenta datasets: es
+                    lo que en el script de Qlik era un bucle sobre las
+                    sucursales. Cada parte llega con las etiquetas de su
+                    conexión, así que se sabe de dónde vino cada fila. */}
+                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
+                  La misma tabla en varias conexiones
+                </div>
+                <div className="lista">
+                  {disponibles.data?.en_varias_conexiones.map((t) => {
+                    const listo = t.cargados === t.conexiones
+                    return (
+                      <button
+                        key={t.tabla}
+                        title={listo
+                          ? `Apila las ${t.conexiones} conexiones que traen esta tabla`
+                          : `Faltan ${t.conexiones - t.cargados} por cargar; hasta ` +
+                            'entonces la transformación se detiene en vez de dejar ' +
+                            'sucursales fuera'}
+                        onClick={() => agregarOrigen('tabla_en_conexiones', t.tabla)}
+                      >
+                        <span className="nom mono">{t.tabla}</span>
+                        <span className={`dcha${listo ? '' : ' aviso-texto'}`}>
+                          {t.cargados}/{t.conexiones}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </>
             )}
@@ -303,7 +339,11 @@ export function Etl() {
                 <span className="chip" key={o.nombre}>
                   <span className="mono">{o.nombre}</span>
                   <span className="tenue chico">
-                    {o.tipo === 'tabla' ? 'tabla' : 'datos'}
+                    {o.tipo === 'tabla'
+                      ? 'tabla'
+                      : o.tipo === 'tabla_en_conexiones'
+                        ? 'todas'
+                        : 'datos'}
                   </span>
                   {i === 0 && <span className="etiqueta dim">principal</span>}
                   <button

@@ -39,8 +39,18 @@ def linaje(sesion: Session, d: Transformacion) -> dict:
     nombres_datasets = {x.nombre for x in sesion.scalars(select(Dataset))}
     salida: dict[str, list[str]] = {"tablas": [], "datasets": [],
                                     "transformaciones": []}
+    # La misma tabla en todas las conexiones se resuelve a la lista de datasets
+    # que la traen: asi el flujo sabe que hay que cargarlos ANTES, sin que nadie
+    # los tenga que enumerar.
+    por_tabla: dict[str, list[str]] = {}
+    for x in sesion.scalars(select(Dataset)):
+        por_tabla.setdefault((x.tabla_origen or "").lower(), []).append(x.nombre)
+
     for o in d.origenes:
-        if o.tipo == "tabla":
+        if o.tipo == "tabla_en_conexiones":
+            salida["datasets"].extend(
+                sorted(por_tabla.get((o.referencia or "").lower(), [])))
+        elif o.tipo == "tabla":
             salida["tablas"].append(o.referencia)
         elif o.referencia in nombres_trans:
             salida["transformaciones"].append(o.referencia)

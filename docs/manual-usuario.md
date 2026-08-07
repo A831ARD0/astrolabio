@@ -219,6 +219,56 @@ corta: a mitad de una ingesta, cortar deja el destino a medias.
 **El mismo flujo dos veces a la vez se rechaza**, y eso no se pregunta: serían
 dos procesos escribiendo los mismos archivos.
 
+### Etiquetas: de qué sucursal viene cada fila
+
+**Conexiones → Etiquetas.**
+
+Cuarenta agencias con el mismo sistema dan cuarenta veces la misma tabla. Una vez
+juntas, nada dice de cuál venía cada fila — y ese dato no está en el origen,
+porque allá cada base es «la base».
+
+Una etiqueta es una **constante de la conexión** que sale como **columna** al leer
+cualquiera de sus datasets: `id_sucursal = 3` en VW_MATRIZ, `= 5` en PTO. Es el
+equivalente exacto de la variable por sucursal de un script de Qlik.
+
+Se editan **todas juntas**, en una tabla de conexiones × etiquetas: ir una por una
+cuarenta veces es justo el trabajo que esto quita. La flecha ↓ copia el primer
+valor a las vacías, para las etiquetas que casi siempre son la misma (la marca,
+el país). Si dos conexiones acaban con el mismo valor, la celda se marca en
+ámbar: casi siempre es un dedazo.
+
+**No se escriben en los archivos.** Se agregan al leer, así que corregir un
+número no obliga a volver a extraer nada.
+
+> Si una etiqueta se llama igual que una columna de la tabla, la transformación
+> se detiene y lo dice. Cámbiale el nombre a la etiqueta.
+
+### La misma tabla de todas las conexiones
+
+En **Transformar**, la lista de orígenes tiene un apartado *La misma tabla en
+varias conexiones*: eliges `Funcionarios` una vez y se apilan las cuarenta, cada
+una con las etiquetas de su conexión. No hay que enumerar cuarenta datasets ni
+acordarse de agregar el cuarenta y uno cuando abra una agencia nueva.
+
+- Se apila **por nombre de columna**: una sucursal con una columna de más —o de
+  menos— no tumba a las otras treinta y nueve. Lo que falte llega en nulo.
+- Si a alguna le faltan datos, **se detiene y la nombra**. Devolver un total al
+  que le faltan sucursales sin que nadie lo note hace más daño que un fallo.
+
+El contador `38/40` de al lado dice cuántas están cargadas.
+
+Con eso, el `If(...)` de tu script de Qlik es una **columna calculada** y la
+variable de sucursal es la etiqueta:
+
+```sql
+CASE
+  WHEN LEFT("Nm Funcionario", 3) = 'HU-'  THEN 3
+  WHEN LEFT("Nm Funcionario", 4) = 'PTO-' THEN 5
+  WHEN LEFT("Nm Funcionario", 3) = 'VW-'  THEN 1
+  ELSE id_sucursal
+END
+```
+
 ---
 
 ## 5. Transformar

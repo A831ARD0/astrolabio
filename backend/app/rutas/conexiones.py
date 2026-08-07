@@ -65,6 +65,10 @@ class ConexionSalida(BaseModel):
     tipo: str
     config: dict                  # sin secretos
     tiene_credenciales: bool
+    # Constantes de la conexion: {"id_sucursal": 3}. Salen como columna al leer
+    # cualquiera de sus datasets. NO son secretas: son de negocio, y se ven en
+    # los tableros.
+    etiquetas: dict = {}
 
 
 class RecargarRango(BaseModel):
@@ -130,6 +134,7 @@ def _salida(fila: Conexion) -> ConexionSalida:
         id=fila.id, nombre=fila.nombre, tipo=fila.tipo,
         config=con.config_publica(),
         tiene_credenciales=any(k.lower() in SECRETOS and v for k, v in cfg.items()),
+        etiquetas=fila.etiquetas or {},
     )
 
 
@@ -349,6 +354,93 @@ def odbc_perfiles(_: UsuarioDep):
         instalados, disponible = [], False
     return {"disponible": disponible, "drivers": instalados,
             "perfiles": catalogo(instalados)}
+
+
+# --------------------------------------------------------------------------- #
+# Etiquetas: la constante de cada sucursal
+# --------------------------------------------------------------------------- #
+
+#: Una etiqueta acaba siendo un NOMBRE DE COLUMNA, asi que la regla es la dura:
+#: la elegimos nosotros, no viene del origen.
+_ETIQUETA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,39}$")
+
+#: Suficientes para lo que son —una o dos por sucursal— y pocas como para que
+#: nadie intente meter aqui una tabla de dimensiones.
+MAX_ETIQUETAS = 10
+
+
+class EtiquetasDeConexion(BaseModel):
+    conexion_id: int
+    etiquetas: dict[str, str | int | float | bool | None]
+
+
+class CambioEtiquetas(BaseModel):
+    """
+    Se guardan TODAS las de cada conexión de una vez: lo que no venga, se quita.
+    Un PATCH por clave obligaría a llevar la cuenta de lo que se borró, y estas
+    se editan en una tabla de cuarenta filas donde eso no se puede seguir.
+    """
+    cambios: list[EtiquetasDeConexion] = Field(min_length=1)
+
+
+def _revisar_etiquetas(etiquetas: dict, conexion: str) -> dict:
+    if len(etiquetas) > MAX_ETIQUETAS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"'{conexion}': {len(etiquetas)} etiquetas es demasiado; el máximo "
+            f"es {MAX_ETIQUETAS}. Son constantes de la sucursal, no una tabla.")
+    limpio: dict = {}
+    for clave, valor in etiquetas.items():
+        if not _ETIQUETA.match(clave):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"'{conexion}': '{clave}' no sirve como nombre de columna. Letras, "
+                f"dígitos y guion bajo, empezando por letra.")
+        if isinstance(valor, str):
+            valor = valor.strip()
+            if len(valor) > 200:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"'{conexion}': el valor de '{clave}' es demasiado largo.")
+            # Vacío es "no la pongas": una columna de cadenas vacías se lee como
+            # dato y no lo es.
+            if not valor:
+                continue
+        limpio[clave] = valor
+    return limpio
+
+
+@router.put("/etiquetas")
+def guardar_etiquetas(cuerpo: CambioEtiquetas, sesion: SesionDep,
+                      actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Las constantes de cada conexión, de varias conexiones a la vez.
+
+    Son el equivalente de la variable por sucursal de un script de Qlik: un
+    `id_sucursal = 3` que todos los datasets de esa conexión heredan y que sale
+    como columna al leerlos. **No se escriben en el Parquet**: se agregan al
+    leer, así que corregir un número no obliga a volver a extraer nada.
+
+    De varias a la vez porque son cuarenta sucursales: ir una por una es
+    exactamente el trabajo que esto quiere quitar.
+    """
+    tocadas = []
+    for cambio in cuerpo.cambios:
+        fila = sesion.get(Conexion, cambio.conexion_id)
+        if fila is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                f"La conexión {cambio.conexion_id} no existe")
+        nuevas = _revisar_etiquetas(cambio.etiquetas, fila.nombre)
+        if nuevas != (fila.etiquetas or {}):
+            fila.etiquetas = nuevas
+            tocadas.append({"id": fila.id, "nombre": fila.nombre,
+                            "etiquetas": nuevas})
+
+    if tocadas:
+        registrar(sesion, accion="etiquetas_cambiadas", usuario_id=actor.id,
+                  email=actor.email, objeto_tipo="conexion", objeto_id=None,
+                  detalle={"conexiones": tocadas})
+    return {"cambiadas": len(tocadas)}
 
 
 @router.get("", response_model=list[ConexionSalida])

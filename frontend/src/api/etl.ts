@@ -76,7 +76,7 @@ export interface Paso {
 
 export interface Origen {
   nombre: string
-  tipo: 'tabla' | 'dataset'
+  tipo: 'tabla' | 'dataset' | 'tabla_en_conexiones'
   referencia: string
 }
 
@@ -139,6 +139,8 @@ export function useOrigenesDisponibles() {
         tablas: { nombre: string; filas: number }[]
         datasets: { nombre: string; filas: number; tiene_datos: boolean }[]
         transformaciones: { nombre: string; filas: number; tiene_datos: boolean }[]
+        /** La misma tabla del origen traída por varias conexiones. */
+        en_varias_conexiones: { tabla: string; conexiones: number; cargados: number }[]
       }>('/transformaciones/origenes'),
   })
 }

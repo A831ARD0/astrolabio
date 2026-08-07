@@ -17,6 +17,11 @@ export interface Conexion {
   /** Config pública: nunca trae la contraseña. */
   config: Record<string, unknown>
   tiene_credenciales: boolean
+  /**
+   * Constantes de esta conexión: `{ id_sucursal: 3 }`. Salen como columna al
+   * leer cualquiera de sus datasets. No son secretas: son de negocio.
+   */
+  etiquetas: Record<string, string | number | boolean | null>
 }
 
 export interface TablaOrigen {
@@ -83,6 +88,16 @@ export const clavesCon = {
 // --------------------------------------------------------------------------- //
 // Conexiones
 // --------------------------------------------------------------------------- //
+
+/** Guarda las etiquetas de varias conexiones de una vez. */
+export function useGuardarEtiquetas() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (cambios: { conexion_id: number; etiquetas: Record<string, string | number | boolean | null> }[]) =>
+      api.put<{ cambiadas: number }>('/conexiones/etiquetas', { cambios }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: clavesCon.lista }),
+  })
+}
 
 export function useConexiones() {
   return useQuery({

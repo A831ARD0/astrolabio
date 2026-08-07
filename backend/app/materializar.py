@@ -70,22 +70,143 @@ def _resolver(t: Transformacion) -> dict[str, str]:
 
     Un dataset es un directorio de Parquet particionado; una tabla vive en la base
     adjunta. El compilador no sabe de rutas: se enteran aquí.
+
+    Aquí también entran **las etiquetas de la conexión**: constantes como
+    `id_sucursal = 3` que se agregan como columna al leer el dataset. Se agregan
+    al LEER y no se escriben en el Parquet a propósito — cambiar el número de una
+    sucursal no puede obligar a volver a extraer cuarenta tablas.
     """
+    etiquetas, por_tabla = _catalogo_de_datasets()
     salida: dict[str, str] = {}
-    for o in t.origenes:
-        if o.tipo == "dataset":
-            ruta = ruta_datos_dataset(o.referencia)
-            if ruta is None:
-                raise ErrorTransformacion(
-                    f"El dataset '{o.referencia}' no tiene datos cargados todavía. "
-                    f"Ejecuta su carga antes de usarlo en una transformación.")
-            salida[o.nombre] = f"read_parquet('{ruta}', hive_partitioning=true)"
-        else:
-            if not _nombre_simple(o.referencia):
-                raise ErrorTransformacion(
-                    f"Nombre de tabla no válido: {o.referencia!r}")
-            salida[o.nombre] = f'origen."{o.referencia}"'
+    con = _conexion_trabajo()
+    try:
+        for o in t.origenes:
+            if o.tipo == "dataset":
+                salida[o.nombre] = _lee_dataset(
+                    con, o.referencia, etiquetas.get(o.referencia, {}))
+            elif o.tipo == "tabla_en_conexiones":
+                salida[o.nombre] = _lee_de_todas(
+                    con, o.referencia, etiquetas, por_tabla)
+            else:
+                if not _nombre_simple(o.referencia):
+                    raise ErrorTransformacion(
+                        f"Nombre de tabla no válido: {o.referencia!r}")
+                salida[o.nombre] = f'origen."{o.referencia}"'
+    finally:
+        con.close()
     return salida
+
+
+def _catalogo_de_datasets() -> tuple[dict[str, dict], dict[str, list[str]]]:
+    """
+    Lo que hace falta saber de los datasets para resolver un origen:
+
+      - que etiquetas hereda cada uno de su conexion,
+      - que datasets traen la misma tabla del origen, para poder apilarlos.
+
+    La tabla se indexa en minusculas: dos sucursales del mismo sistema pueden
+    tener la tabla escrita distinto y siguen siendo la misma tabla.
+    """
+    from sqlalchemy import select as _select
+
+    from app.db import CrearSesion
+    from app.modelos_db import Conexion, Dataset
+
+    with CrearSesion() as sesion:
+        filas = sesion.execute(
+            _select(Dataset.nombre, Dataset.tabla_origen, Conexion.etiquetas)
+            .join(Conexion, Dataset.conexion_id == Conexion.id)
+        ).all()
+
+    etiquetas = {nombre: (etq or {}) for nombre, _, etq in filas}
+    por_tabla: dict[str, list[str]] = {}
+    for nombre, tabla, _ in filas:
+        por_tabla.setdefault((tabla or "").lower(), []).append(nombre)
+    return etiquetas, por_tabla
+
+
+def _literal(v) -> str:
+    """Un valor de etiqueta como literal de SQL. Solo escalares."""
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _columnas_de_parquet(con, desde: str) -> set[str]:
+    """Los nombres de columna que ya trae el archivo. Lee solo la cabecera."""
+    return {d[0] for d in con.execute(f"SELECT * FROM {desde} LIMIT 0").description}
+
+
+def _lee_dataset(con, nombre: str, etiquetas: dict) -> str:
+    ruta = ruta_datos_dataset(nombre)
+    if ruta is None:
+        raise ErrorTransformacion(
+            f"El dataset '{nombre}' no tiene datos cargados todavía. "
+            f"Ejecuta su carga antes de usarlo en una transformación.")
+    base = f"read_parquet('{ruta}', hive_partitioning=true)"
+    if not etiquetas:
+        return base
+
+    # Una etiqueta que se llama igual que una columna del origen dejaria dos
+    # columnas con el mismo nombre y cualquier referencia a ella seria ambigua.
+    # Se para aqui, con el nombre de las dos, en vez de dar un error de SQL.
+    choques = sorted(set(etiquetas) & _columnas_de_parquet(con, base))
+    if choques:
+        raise ErrorTransformacion(
+            f"La etiqueta {', '.join(repr(c) for c in choques)} de la conexión de "
+            f"'{nombre}' se llama igual que una columna de la tabla. Cámbiale el "
+            f"nombre a la etiqueta.")
+
+    extra = ", ".join(f"{_literal(v)} AS {_ident(k)}"
+                      for k, v in sorted(etiquetas.items()))
+    return f"(SELECT *, {extra} FROM {base})"
+
+
+def _lee_de_todas(con, tabla: str, etiquetas: dict[str, dict],
+                  por_tabla: dict[str, list[str]]) -> str:
+    """
+    La misma tabla traida de TODAS las conexiones, apilada.
+
+    `UNION ALL BY NAME` y no `UNION ALL` a secas: una sucursal con una columna de
+    mas —o de menos— no puede tumbar la union de las otras treinta y nueve. Lo
+    que falte llega en nulo.
+
+    Si alguna no tiene datos todavia **se detiene y las nombra**, en vez de
+    apilar las que si y devolver un total al que le faltan sucursales sin que
+    nadie lo note. Es la misma regla que en los flujos: un numero que parece
+    fresco y no lo es hace mas dano que un fallo.
+    """
+    nombres = sorted(por_tabla.get((tabla or "").lower(), []))
+    if not nombres:
+        raise ErrorTransformacion(
+            f"Ninguna conexión trae la tabla '{tabla}'. Créala como dataset en "
+            f"las conexiones que la tengan.")
+
+    sin_datos = [n for n in nombres if ruta_datos_dataset(n) is None]
+    if sin_datos:
+        raise ErrorTransformacion(
+            f"{len(sin_datos)} de {len(nombres)} datasets de '{tabla}' no tienen "
+            f"datos todavía: {', '.join(sin_datos[:6])}"
+            f"{'…' if len(sin_datos) > 6 else ''}. Cárgalos antes, o el resultado "
+            f"no tendría todas las sucursales.")
+
+    partes = [f"SELECT * FROM {_lee_dataset(con, n, etiquetas.get(n, {}))}"
+              for n in nombres]
+    return "(" + " UNION ALL BY NAME ".join(partes) + ")"
+
+
+def _ident(nombre: str) -> str:
+    """
+    Comillas para un nombre de etiqueta.
+
+    Las claves se validan al guardarlas (letras, digitos y guion bajo), asi que
+    esto es el segundo cinturon, no el primero.
+    """
+    return '"' + str(nombre).replace('"', '""') + '"'
 
 
 def _nombre_simple(nombre: str) -> bool:
@@ -222,11 +343,18 @@ def columnas_de(origen_tipo: str, referencia: str) -> list[dict[str, str]]:
     """
     con = _conexion_trabajo()
     try:
-        if origen_tipo == "dataset":
-            ruta = ruta_datos_dataset(referencia)
-            if ruta is None:
+        if origen_tipo in ("dataset", "tabla_en_conexiones"):
+            etiquetas, por_tabla = _catalogo_de_datasets()
+            try:
+                desde = (_lee_dataset(con, referencia,
+                                      etiquetas.get(referencia, {}))
+                         if origen_tipo == "dataset"
+                         else _lee_de_todas(con, referencia, etiquetas, por_tabla))
+            except ErrorTransformacion:
+                # Ofrecer los nombres de columna es una ayuda de la interfaz: si
+                # todavia no hay datos no es un error, simplemente no hay nada
+                # que ofrecer.
                 return []
-            desde = f"read_parquet('{ruta}', hive_partitioning=true)"
         else:
             if not _nombre_simple(referencia):
                 raise ErrorTransformacion(f"Nombre no válido: {referencia!r}")
