@@ -208,6 +208,31 @@ visible — daría un servidor dando vueltas de madrugada sin nadie mirando.
 *Ordenar solo* no toca los pasos de tipo flujo: desde fuera no se puede saber qué
 trae dentro cada uno.
 
+**Se ve de dónde viene cada cosa.** En Tareas, un flujo al que llama un maestro ya
+no dice «a mano» —era falso—: dice *dentro de «EXTRACTOR_ALL»*, y debajo del nombre
+*lo llama «EXTRACTOR_ALL»*. Si además tiene horario propio, la columna dice las dos
+cosas, porque entonces corre dos veces. En su historial, esas corridas aparecen como
+*desde «EXTRACTOR_ALL»* en vez de *manual*, así que se puede reconstruir quién
+disparó qué. Y el filtro *Sin horario* ya no los acusa: sí corren solos.
+
+#### El horario se elige por partes, no en cron
+
+Se elige **cada cuánto** (cada hora, todos los días, de lunes a viernes o a sábado,
+un día de la semana, un día del mes), **a qué hora** en a. m./p. m., y **en qué
+zona**. El cron se escribe solo y queda a la vista; si escribes ahí algo que no
+encaja en esas formas —`*/15 * * * *`, por ejemplo— el selector se pone en
+*Avanzado* en vez de mentir sobre lo que hay guardado.
+
+La **zona** antes estaba fija en `America/Mexico_City`: era el valor por omisión de
+la base de datos, no una elección. Ahora se elige de una lista con las once de
+México por su nombre de a pie —Cancún, Hermosillo, Tijuana…— y el resto del mundo
+debajo; un horario nuevo arranca en la zona de **tu navegador**, y si la guardada es
+otra, la pantalla te dice cuál es la tuya. Importa: «las 6:00» en Cancún y en
+Tijuana son tres horas de diferencia.
+
+⚠️ El día del mes llega hasta **28** a propósito. Un `30` o un `31` se salta
+febrero, y una carga que no corre un mes al año es de las que nadie nota.
+
 #### Reintentos
 
 Con cuarenta sucursales, que una esté apagada a las 6 de la mañana pasa seguido —

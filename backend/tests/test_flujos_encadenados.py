@@ -210,3 +210,39 @@ def test_ordenar_solo_no_se_come_los_flujos(cliente, cab_admin, cadena):
     assert r.status_code == 200, r.text
     assert [p["id"] for p in r.json()["pasos"]] == [a["id"], b["id"]]
     assert any("no se reordenan" in x for x in r.json()["avisos"])
+
+
+# --------------------------------------------------------------------------- #
+# Rastrear quién disparó qué
+# --------------------------------------------------------------------------- #
+
+def test_el_hijo_sabe_quien_lo_llama(cliente, cab_admin, cadena):
+    """
+    Sin esto, la pantalla de tareas decía «a mano» de los treinta y ocho
+    extractores. Es falso —los llama el maestro cada noche— y hace imposible ver
+    si una sucursal se quedó fuera de la cadena o corre y nadie lo sabe.
+    """
+    a, b, maestro = cadena
+    lista = cliente.get("/api/flujos", headers=cab_admin).json()
+    por_id = {f["id"]: f for f in lista}
+
+    assert por_id[a["id"]]["llamado_por"] == ["maestro"]
+    assert por_id[b["id"]]["llamado_por"] == ["maestro"]
+    # Al maestro no lo llama nadie: es la raíz.
+    assert por_id[maestro["id"]]["llamado_por"] == []
+
+
+def test_la_corrida_del_hijo_dice_desde_donde(cliente, cab_admin, cadena):
+    a, _, maestro = cadena
+    correr(cliente, cab_admin, maestro["id"])
+
+    hijo = cliente.get(f"/api/flujos/{a['id']}/historial",
+                       headers=cab_admin).json()["ejecuciones"][0]
+    assert hijo["disparo"] == "flujo"
+    assert hijo["llamado_por"] == "maestro"
+
+    # Y el maestro, que sí lo lanzó una persona, sigue diciendo «manual».
+    arriba = cliente.get(f"/api/flujos/{maestro['id']}/historial",
+                         headers=cab_admin).json()["ejecuciones"][0]
+    assert arriba["disparo"] == "manual"
+    assert arriba["llamado_por"] is None

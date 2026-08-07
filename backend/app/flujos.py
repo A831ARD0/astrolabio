@@ -78,6 +78,25 @@ def alcanzables(sesion: Session, raiz: int) -> set[int]:
     return vistos
 
 
+def quien_llama(sesion: Session) -> dict[int, list[str]]:
+    """
+    Para cada flujo, los flujos que lo tienen como paso.
+
+    La pantalla de tareas decia «a mano» de los treinta y ocho extractores, y era
+    falso: los llama el maestro cada noche. Una tarea que corre sola y en la
+    pantalla parece manual es justo lo que hace perder el hilo.
+    """
+    mapa: dict[int, list[str]] = {}
+    for f in sesion.scalars(select(Flujo).order_by(Flujo.nombre)):
+        for p in f.pasos or []:
+            if p.get("tipo") == "flujo":
+                try:
+                    mapa.setdefault(int(p["id"]), []).append(f.nombre)
+                except (TypeError, ValueError):
+                    pass
+    return mapa
+
+
 def _profundidad(sesion: Session, flujo_id: int, nivel: int = 0) -> int:
     """Cuántos niveles de flujos cuelgan de este. Asume que no hay ciclos."""
     if nivel >= PROFUNDIDAD_MAXIMA:
@@ -298,7 +317,8 @@ def sugerir_orden(sesion: Session, pasos: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
-             _cadena: frozenset[int] = frozenset()) -> dict[str, Any]:
+             _cadena: frozenset[int] = frozenset(),
+             _llamado_por: str | None = None) -> dict[str, Any]:
     """
     Corre el flujo entero. Devuelve el resumen; lanza `ErrorFlujo` si algún paso
     falló y la política es detenerse.
@@ -310,9 +330,12 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     """
     cadena = frozenset(_cadena) | {flujo.id}
     total = len(flujo.pasos or [])
+    # Va en cada version del detalle, no solo en la primera: `_apuntar` lo
+    # reescribe entero en cada paso.
+    contexto = {"llamado_por": _llamado_por} if _llamado_por else {}
     ejec = FlujoEjecucion(flujo_id=flujo.id, estado=EstadoCarga.corriendo,
                           origen=actor.origen, iniciado_por=actor.id,
-                          detalle={"pasos": [], "total": total})
+                          detalle={"pasos": [], "total": total, **contexto})
     sesion.add(ejec)
     sesion.flush()
 
@@ -345,7 +368,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         y es la diferencia entre ver avanzar la noche y mirar una pantalla muda.
         """
         ejec.detalle = {"pasos": resultados + ([en_curso] if en_curso else []),
-                        "total": total}
+                        "total": total, **contexto}
         sesion.commit()
 
     # Cuantas veces se vuelve a intentar un paso, y cuanto se espera. Con cuarenta
@@ -387,7 +410,12 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                         raise ErrorFlujo(
                             f"'{sub.nombre}' vuelve a un flujo que ya está "
                             f"corriendo; se corta aquí")
-                    r = ejecutar(sesion, sub, actor, _cadena=cadena)
+                    # El subflujo deja constancia de que no lo lanzo una
+                    # persona: lo llamo este flujo. Sin eso, su historial dice
+                    # «manual» y no hay forma de reconstruir quien disparo que.
+                    de_aqui = Actor(id=actor.id, email=actor.email, origen="flujo")
+                    r = ejecutar(sesion, sub, de_aqui, _cadena=cadena,
+                                 _llamado_por=flujo.nombre)
                     salio = {"paso": i, "tipo": "flujo", "nombre": nombre,
                              "estado": "exito",
                              "filas": sum(int(p.get("filas") or 0)
@@ -444,7 +472,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
 
     ms = round((time.perf_counter() - t0) * 1000, 1)
     ejec.ms = int(ms)
-    ejec.detalle = {"pasos": resultados, "total": total}
+    ejec.detalle = {"pasos": resultados, "total": total, **contexto}
     ejec.estado = EstadoCarga.error if fallo else EstadoCarga.exito
     ejec.mensaje = fallo
     flujo.ultima_ejecucion = datetime.now(timezone.utc)

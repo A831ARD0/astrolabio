@@ -917,6 +917,11 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 .paso-cuerpo { display: flex; flex-direction: column; gap: 9px; }
 
 .fila-condicion { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* El selector de horario. `min-width: 0` en los desplegables porque el de zonas
+   lleva nombres largos —«America/Bahia_Banderas»— y sin eso estira el panel. */
+.horario { display: flex; flex-direction: column; gap: 2px; }
+.horario select { min-width: 0; max-width: 100%; }
 .fila-condicion > select, .fila-condicion > input { width: auto; flex: 1 1 130px; min-width: 100px; }
 .fila-condicion > .campo { flex: 1 1 180px; }
 

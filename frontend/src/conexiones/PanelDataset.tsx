@@ -18,7 +18,8 @@ import {
   useHistorialDataset,
   useVentanas,
 } from '../api/conexiones'
-import { HORARIOS } from '../api/flujos'
+import { Horario } from '../comunes/Horario'
+import { enPalabras, zonaDelNavegador } from '../comunes/cron'
 import { Velo } from '../comunes/Velo'
 
 function cuando(iso: string | null): string {
@@ -199,6 +200,9 @@ export function PanelDataset({
   const [desde, setDesde] = useState(mesRelativo(1))
   const [hasta, setHasta] = useState(mesRelativo(0))
   const [cron, setCron] = useState(ds.cron ?? '0 6 * * *')
+  // Sin horario guardado, la zona de partida es la de este navegador y no una
+  // escrita en el código: es la única que se puede defender sin preguntar.
+  const [zona, setZona] = useState(ds.cron ? ds.zona_horaria : zonaDelNavegador())
   const [confirmarBaja, setConfirmarBaja] = useState(false)
 
   // La carga corre en segundo plano: el resultado sale del historial, no de la
@@ -371,33 +375,20 @@ export function PanelDataset({
 
           {/* --------------------------------------------------------- horario */}
           <h4>Horario</h4>
-          <div className="fila-condicion">
-            <select
-              value={HORARIOS.some((h) => h.cron === cron) ? cron : ''}
-              onChange={(e) => e.target.value && setCron(e.target.value)}
-            >
-              <option value="">(a mano)</option>
-              {HORARIOS.map((h) => (
-                <option key={h.cron} value={h.cron}>
-                  {h.etiqueta}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              className="mono"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-            />
+          <Horario
+            cron={cron}
+            zona={zona}
+            onCambio={(c, z) => {
+              setCron(c)
+              setZona(z)
+            }}
+          />
+          <div className="fila-condicion" style={{ marginTop: 6 }}>
             <button
               className="btn"
-              disabled={acc.programar.isPending}
+              disabled={acc.programar.isPending || !cron.trim()}
               onClick={() =>
-                acc.programar.mutate({
-                  cron,
-                  zona_horaria: ds.zona_horaria,
-                  activa: true,
-                })
+                acc.programar.mutate({ cron, zona_horaria: zona, activa: true })
               }
             >
               Programar
@@ -413,8 +404,9 @@ export function PanelDataset({
           </div>
           <span className="chico tenue">
             {ds.programacion_activa && ds.proxima_corrida
-              ? `Próxima corrida: ${new Date(ds.proxima_corrida).toLocaleString('es-MX')} (${ds.zona_horaria})`
-              : 'Sin horario: solo se carga cuando alguien le da al botón.'}
+              ? `${enPalabras(ds.cron ?? '', ds.zona_horaria)}. Próxima corrida: `
+                + new Date(ds.proxima_corrida).toLocaleString('es-MX')
+              : 'Sin horario: solo se carga cuando alguien le da al botón, o si es paso de un flujo.'}
           </span>
           {acc.programar.isError && (
             <div className="error-caja">{(acc.programar.error as Error).message}</div>

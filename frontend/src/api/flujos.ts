@@ -33,6 +33,8 @@ export interface Flujo {
   ultimo_mensaje: string | null
   /** «7 de 28» mientras corre; null el resto del tiempo. */
   progreso: string | null
+  /** Los flujos que llaman a este. Vacío si nadie lo llama. */
+  llamado_por: string[]
   /** Problemas de orden deducidos del linaje. Se recalculan al leer. */
   avisos: string[]
 }
@@ -61,6 +63,8 @@ export interface EjecucionFlujo {
   pasos: ResultadoPaso[]
   /** Cuantos pasos tiene el flujo, para poder decir «7 de 28». */
   total: number | null
+  /** Si esta corrida la disparó otro flujo, cuál. */
+  llamado_por?: string | null
   cuando: string
 }
 

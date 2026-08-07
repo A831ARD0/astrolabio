@@ -14,7 +14,6 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import {
-  HORARIOS,
   type CuerpoFlujo,
   type Flujo,
   type PasoFlujo,
@@ -26,6 +25,8 @@ import {
   useProgramarFlujo,
   useSugerirOrden,
 } from '../api/flujos'
+import { Horario } from '../comunes/Horario'
+import { zonaDelNavegador } from '../comunes/cron'
 import { PanelLateral, Seccion } from '../comunes/Panel'
 import { useLanzador } from '../flujos/Lanzar'
 
@@ -48,6 +49,10 @@ export function Flujos() {
   const [f, setF] = useState<CuerpoFlujo>(VACIO)
   const [avisos, setAvisos] = useState<string[]>([])
   const [cron, setCron] = useState('0 6 * * *')
+  // La zona por omisión es la de este navegador, no una escrita en el código: en
+  // un grupo con sucursales en Tijuana y en Cancún «las 6:00» son tres horas
+  // distintas, y quien programa está en una de ellas.
+  const [zona, setZona] = useState(zonaDelNavegador())
 
   const programacion = useProgramarFlujo(id)
   const historial = useHistorialFlujo(id)
@@ -57,6 +62,7 @@ export function Flujos() {
     if (actual) {
       setAvisos(actual.avisos)
       if (actual.cron) setCron(actual.cron)
+      if (actual.programacion_activa) setZona(actual.zona_horaria)
     }
   }, [actual])
 
@@ -89,6 +95,7 @@ export function Flujos() {
     })
     setAvisos(x.avisos)
     setCron(x.cron ?? '0 6 * * *')
+    setZona(x.cron ? x.zona_horaria : zonaDelNavegador())
     ejecutar.reset()
   }
 
@@ -502,31 +509,29 @@ export function Flujos() {
             <div className="vacio chico">Guarda el flujo para poder programarlo.</div>
           ) : (
             <>
+              {/* De quién es paso este flujo. Va arriba del horario a propósito:
+                  explica por qué un extractor sin horario propio igual corre
+                  cada noche, que es lo que se perdía de vista con treinta y
+                  ocho de ellos. */}
+              {actual && actual.llamado_por.length > 0 && (
+                <div className="aviso-caja chico">
+                  Lo llama{' '}
+                  <b>{actual.llamado_por.map((n) => `«${n}»`).join(', ')}</b>, así
+                  que corre cuando ese flujo corre. No necesita horario
+                  propio; si además le pones uno, correrá dos veces.
+                </div>
+              )}
+
               <div className="campo">
                 <label>Horario</label>
-                <select
-                  value={HORARIOS.some((h) => h.cron === cron) ? cron : ''}
-                  onChange={(e) => e.target.value && setCron(e.target.value)}
-                >
-                  {!HORARIOS.some((h) => h.cron === cron) && (
-                    <option value="">(personalizado)</option>
-                  )}
-                  {HORARIOS.map((h) => (
-                    <option key={h.cron} value={h.cron}>
-                      {h.etiqueta}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  className="mono"
-                  value={cron}
-                  onChange={(e) => setCron(e.target.value)}
+                <Horario
+                  cron={cron}
+                  zona={zona}
+                  onCambio={(c, z) => {
+                    setCron(c)
+                    setZona(z)
+                  }}
                 />
-                <span className="chico tenue">
-                  minuto hora día mes día-semana · hora de{' '}
-                  {actual?.zona_horaria ?? 'America/Mexico_City'}
-                </span>
               </div>
 
               {programacion.programar.isError && (
@@ -541,9 +546,7 @@ export function Flujos() {
                   disabled={programacion.programar.isPending}
                   onClick={() =>
                     programacion.programar.mutate({
-                      cron,
-                      zona_horaria: actual?.zona_horaria ?? 'America/Mexico_City',
-                      activa: true,
+                      cron, zona_horaria: zona, activa: true,
                     })
                   }
                 >
@@ -554,9 +557,7 @@ export function Flujos() {
                     className="btn"
                     onClick={() =>
                       programacion.programar.mutate({
-                        cron,
-                        zona_horaria: actual.zona_horaria,
-                        activa: false,
+                        cron, zona_horaria: zona, activa: false,
                       })
                     }
                   >
@@ -589,7 +590,8 @@ export function Flujos() {
                           {e.estado}
                         </span>{' '}
                         <span className="chico">
-                          {new Date(e.cuando).toLocaleString('es-MX')} · {e.disparo} ·{' '}
+                          {new Date(e.cuando).toLocaleString('es-MX')} ·{' '}
+                          {e.llamado_por ? `desde «${e.llamado_por}»` : e.disparo} ·{' '}
                           {e.ms} ms
                         </span>
                       </summary>

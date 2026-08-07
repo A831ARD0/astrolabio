@@ -23,7 +23,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { type Dataset, useConexiones, useDatasets } from '../api/conexiones'
-import { HORARIOS, type Flujo, useFlujos, useSacarDeLaCola } from '../api/flujos'
+import { type Flujo, useFlujos, useSacarDeLaCola } from '../api/flujos'
+import { enPalabras } from '../comunes/cron'
 import { useLanzador } from '../flujos/Lanzar'
 
 /** Cómo salió la última vez. Es por lo que se filtra al entrar por la mañana. */
@@ -65,6 +66,8 @@ interface Tarea {
   flujoId: number | null
   /** Un dataset con horario propio que además es paso de un flujo corre dos veces. */
   tambienEn: string | null
+  /** Los flujos que llaman a este. Un flujo así NO corre a mano. */
+  llamadoPor: string[]
 }
 
 function salidaDe(estado: string | null, cuando: string | null): Salida {
@@ -74,10 +77,21 @@ function salidaDe(estado: string | null, cuando: string | null): Salida {
   return 'exito'
 }
 
-function horario(cron: string | null, activa: boolean): string {
-  if (!cron) return 'a mano'
-  const conocido = HORARIOS.find((h) => h.cron === cron)
-  return (conocido?.etiqueta ?? cron) + (activa ? '' : ' (pausado)')
+/**
+ * Cómo se dispara esta tarea, en una línea.
+ *
+ * Un flujo sin cron pero que otro flujo llama **no corre a mano**: decir «a
+ * mano» de los treinta y ocho extractores era falso, y hacía imposible saber si
+ * una sucursal se estaba actualizando o se había quedado fuera del maestro.
+ */
+function horario(t: Tarea): string {
+  const dentro = t.llamadoPor.length
+    ? `dentro de «${t.llamadoPor.join('», «')}»`
+    : null
+  if (!t.cron) return dentro ?? 'a mano'
+  const propio = enPalabras(t.cron, t.zona) + (t.activa ? '' : ' (pausado)')
+  // Con horario propio Y dentro de un maestro corre dos veces. Se dice.
+  return dentro ? `${propio} · y ${dentro}` : propio
 }
 
 function cuando(iso: string | null): string {
@@ -108,7 +122,8 @@ function deFlujo(f: Flujo): Tarea {
     nombre: f.nombre,
     contexto: f.pasos.map((p) => p.nombre ?? '').join(' '),
     pasos: f.pasos.map((p) => ({
-      etiqueta: p.tipo === 'carga' ? 'cargar' : 'transformar',
+      etiqueta: p.tipo === 'carga' ? 'cargar'
+        : p.tipo === 'flujo' ? 'flujo' : 'transformar',
       nombre: p.nombre ?? `#${p.id}`,
     })),
     cron: f.cron,
@@ -123,6 +138,7 @@ function deFlujo(f: Flujo): Tarea {
     destino: `/flujos?flujo=${f.id}`,
     flujoId: f.id,
     tambienEn: null,
+    llamadoPor: f.llamado_por,
   }
 }
 
@@ -143,6 +159,7 @@ function deCarga(ds: Dataset, conexion: string, enFlujo: string | null): Tarea {
     destino: `/conexiones?dataset=${ds.id}`,
     flujoId: null,
     tambienEn: enFlujo,
+    llamadoPor: [],
   }
 }
 
@@ -186,7 +203,12 @@ export function Tareas() {
     const q = busca.trim().toLowerCase()
     return tareas
       .filter((t) => {
-        if (filtro === 'sin_horario') return !t.cron || !t.activa
+        // Un flujo al que llama un maestro SÍ corre solo, aunque no tenga cron:
+        // meterlo en «sin horario» manda a revisar treinta y ocho tareas que
+        // estan bien y esconde la que de verdad se quedo fuera.
+        if (filtro === 'sin_horario') {
+          return (!t.cron || !t.activa) && t.llamadoPor.length === 0
+        }
         if (filtro !== 'todas' && t.salida !== filtro) return false
         return true
       })
@@ -336,13 +358,18 @@ export function Tareas() {
                           también corre dentro de «{t.tambienEn}»
                         </div>
                       )}
+                      {t.llamadoPor.length > 0 && (
+                        <div className="chico suave">
+                          lo llama {t.llamadoPor.map((n) => `«${n}»`).join(', ')}
+                        </div>
+                      )}
                     </td>
                     <td className="chico suave">
                       {t.tipo === 'flujo'
                         ? `${t.pasos.length} paso${t.pasos.length === 1 ? '' : 's'}`
                         : t.contexto}
                     </td>
-                    <td className="chico">{horario(t.cron, t.activa)}</td>
+                    <td className="chico">{horario(t)}</td>
                     <td className="chico">{cuando(t.ultima)}</td>
                     <td>
                       {enMarcha.has(t.flujoId) ? (

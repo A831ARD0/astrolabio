@@ -16,7 +16,7 @@ from app import programador, trabajos
 from app.auditoria import registrar
 from app.cargas import Actor
 from app.dependencias import SesionDep, exigir_rol
-from app.flujos import revisar_orden, revisar_pasos, sugerir_orden
+from app.flujos import quien_llama, revisar_orden, revisar_pasos, sugerir_orden
 from app.modelos_db import EstadoCarga, Flujo, Rol, Usuario, iso
 
 router = APIRouter(prefix="/api/flujos", tags=["flujos"])
@@ -71,6 +71,9 @@ class Salida(BaseModel):
     # "7 de 28" mientras corre. Con veintiocho tablas, saber que sigue viva no
     # basta: hace falta saber por donde va.
     progreso: str | None
+    # Los flujos que tienen a este como paso. Sin esto, la pantalla de tareas
+    # dice «a mano» de un flujo que en realidad lo llama el maestro cada noche.
+    llamado_por: list[str]
     avisos: list[str]
 
 
@@ -78,7 +81,12 @@ class Salida(BaseModel):
 # Utilidades
 # --------------------------------------------------------------------------- #
 
-def _salida(sesion: SesionDep, f: Flujo) -> Salida:
+def _salida(sesion: SesionDep, f: Flujo,
+            llamadores: dict[int, list[str]] | None = None) -> Salida:
+    # `llamadores` se calcula una vez para toda la lista; suelto, cada flujo
+    # volveria a recorrer los treinta y ocho.
+    if llamadores is None:
+        llamadores = quien_llama(sesion)
     ultima = f.ejecuciones[0] if f.ejecuciones else None
     proxima = programador.proxima_corrida_flujo(f.id)
     return Salida(
@@ -93,6 +101,7 @@ def _salida(sesion: SesionDep, f: Flujo) -> Salida:
         ultima_ms=ultima.ms if ultima else None,
         ultimo_mensaje=ultima.mensaje if ultima else None,
         progreso=_progreso(ultima),
+        llamado_por=llamadores.get(f.id, []),
         # Los avisos se recalculan al leer: el orden puede quedar mal por un
         # cambio en otra parte (una transformación que ahora lee de otro dataset),
         # no solo al guardar el flujo.
@@ -143,7 +152,8 @@ def _validar(sesion: SesionDep, cuerpo: Guardar,
 
 @router.get("", response_model=list[Salida])
 def listar(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
-    return [_salida(sesion, f)
+    llamadores = quien_llama(sesion)
+    return [_salida(sesion, f, llamadores)
             for f in sesion.scalars(select(Flujo).order_by(Flujo.nombre))]
 
 
@@ -298,6 +308,7 @@ def historial(id_: int, sesion: SesionDep,
         {"id": e.id, "estado": e.estado.value, "disparo": e.origen, "ms": e.ms,
          "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
          "total": (e.detalle or {}).get("total"),
+         "llamado_por": (e.detalle or {}).get("llamado_por"),
          "cuando": iso(e.creado_en)}
         for e in f.ejecuciones[:30]
     ]}

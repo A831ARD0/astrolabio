@@ -26,6 +26,26 @@ versionado es [semántico](https://semver.org/lang/es/).
   El anidamiento se corta a cinco niveles. *Ordenar solo* deja los pasos de tipo
   flujo donde están y lo dice, en vez de borrarlos en silencio.
 
+- **Se rastrea quién dispara a quién.** La lista de flujos trae `llamado_por`, y con
+  eso la pantalla de tareas dejó de decir «a mano» de los treinta y ocho extractores
+  que en realidad llama el maestro cada noche: dice *dentro de «X»*, y si además
+  tienen horario propio, las dos cosas, porque entonces corren dos veces. El filtro
+  *Sin horario* ya no los cuenta.
+
+  Las corridas que dispara un flujo se guardan con `origen = "flujo"` y el nombre de
+  quien llamó en el detalle, así que el historial del hijo dice *desde «X»* en vez de
+  *manual*.
+
+- **El horario se elige por partes, y la zona se elige.** Cada cuánto, a qué hora en
+  a. m./p. m., y en qué zona; el cron se genera y sigue a la vista para los casos que
+  solo se pueden decir así. Al escribir un cron que no encaja en las formas
+  conocidas, el selector pasa a *Avanzado* en vez de mentir sobre lo guardado.
+
+  La zona estaba fija en `America/Mexico_City` —el valor por omisión de la base— sin
+  forma de cambiarla desde la interfaz. Ahora hay una lista con las once de México
+  por su nombre de a pie y el resto del mundo debajo; un horario nuevo parte de la
+  zona del navegador. El mismo selector se usa en flujos y en datasets.
+
 - **Editar una conexión** (`PATCH /api/conexiones/{id}`) y probar el cambio sin
   guardarlo (`POST /api/conexiones/{id}/probar-cambio`). Antes, rotar una
   contraseña obligaba a borrar la conexión y volver a crearla, y con ella se iban
