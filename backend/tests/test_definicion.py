@@ -6,6 +6,7 @@ cambia y la guarda. Si en ese viaje se pierde algo, se pierde en silencio, y el
 modelo queda distinto de lo que su autor cree.
 """
 
+import itertools
 from pathlib import Path
 
 import pytest
@@ -14,10 +15,18 @@ RAIZ = Path(__file__).resolve().parent.parent
 YAML_DEMO = (RAIZ / "demo" / "modelo_demo.yaml").read_text(encoding="utf-8")
 
 
+#: Un contador propio. Antes el nombre salia de `id(cliente)` —la direccion en
+#: memoria del cliente de pruebas— y CPython reutiliza direcciones cuando el
+#: objeto anterior se recoge: dos pruebas distintas acababan pidiendo el mismo
+#: nombre y la segunda se llevaba un 409. Fallaba una vez de cada tantas, que es
+#: la peor forma de fallar.
+_siguiente = itertools.count(1)
+
+
 @pytest.fixture
 def modelo(cliente, cab_admin):
     r = cliente.post("/api/modelos", headers=cab_admin, json={
-        "nombre": f"def_{id(cliente)}", "descripcion": "Fase 2",
+        "nombre": f"def_{next(_siguiente)}", "descripcion": "Fase 2",
         "yaml": YAML_DEMO,
     })
     assert r.status_code == 201, r.text
