@@ -166,9 +166,40 @@ export function Etl() {
             de «+ Nueva transformación» de arriba se queda a la vista. */}
         <Seccion titulo="Orígenes disponibles" principal clave="etl-origenes">
           <>
-            <div className="chico tenue" style={{ padding: '0 8px 4px' }}>
-              Tablas del motor
-            </div>
+            {/* Un panel vacío y callado es lo peor que puede pasar aquí: no se
+                distingue «no hay nada cargado» de «no pude leerlo». Antes esta
+                pantalla no decía ninguna de las dos cosas. */}
+            {disponibles.isLoading && (
+              <div className="chico tenue" style={{ padding: '4px 8px' }}>
+                Leyendo lo que hay…
+              </div>
+            )}
+            {disponibles.isError && (
+              <div className="error-caja chico" style={{ margin: '0 8px 8px' }}>
+                No se pudieron leer los orígenes:{' '}
+                {(disponibles.error as Error).message}
+              </div>
+            )}
+            {disponibles.data?.avisos.map((a) => (
+              <div key={a} className="aviso-caja chico" style={{ margin: '0 8px 8px' }}>
+                {a}
+              </div>
+            ))}
+            {disponibles.data
+             && disponibles.data.tablas.length === 0
+             && disponibles.data.datasets.length === 0
+             && disponibles.data.transformaciones.length === 0 && (
+              <div className="chico tenue" style={{ padding: '4px 8px' }}>
+                No hay nada que usar como origen todavía. Trae una tabla desde
+                Conexiones y cárgala; aquí aparecerá.
+              </div>
+            )}
+
+            {(disponibles.data?.tablas.length ?? 0) > 0 && (
+              <div className="chico tenue" style={{ padding: '0 8px 4px' }}>
+                Tablas del motor
+              </div>
+            )}
             <div className="lista">
               {disponibles.data?.tablas.map((t) => (
                 <button key={t.nombre} onClick={() => agregarOrigen('tabla', t.nombre)}>
@@ -187,11 +218,16 @@ export function Etl() {
                   {disponibles.data?.datasets.map((t) => (
                     <button
                       key={t.nombre}
-                      disabled={!t.tiene_datos}
-                      title={t.tiene_datos ? undefined : 'Todavía no tiene datos cargados'}
+                      disabled={!t.tiene_datos || !t.usable}
+                      title={!t.usable
+                        ? 'Su nombre no se puede usar como origen'
+                        : t.tiene_datos
+                          ? undefined
+                          : 'Todavía no tiene datos cargados'}
                       onClick={() => agregarOrigen('dataset', t.nombre)}
                     >
                       <span className="nom mono">{t.nombre}</span>
+                      {!t.usable && <span className="dcha">⚠</span>}
                     </button>
                   ))}
                 </div>

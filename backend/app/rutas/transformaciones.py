@@ -14,6 +14,8 @@ aproximada que cambia lo que la consulta hacía es peor que no convertir.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -32,6 +34,8 @@ from semantic.transformacion import (
     ErrorTransformacion, Transformacion, compilar,
 )
 from semantic.sql_a_visual import desde_sql
+
+log = logging.getLogger("astrolabio.transformaciones")
 
 router = APIRouter(prefix="/api/transformaciones", tags=["transformaciones"])
 
@@ -142,36 +146,72 @@ def origenes_disponibles(sesion: SesionDep,
     """
     Todo lo que se puede usar como entrada: tablas del motor, datasets cargados y
     resultados de otras transformaciones.
+
+    **Cada bloque se calcula por separado y ningun fallo tumba la lista entera.**
+    Antes no era asi y el resultado era el peor posible: `ruta_datos_dataset`
+    lanza si un nombre trae un caracter raro, esa excepcion subia hasta aqui, la
+    peticion contestaba 500 y la pantalla se quedaba con el panel de origenes
+    VACIO —sin decir por que—. Con mil sesenta y cinco datasets, uno con un
+    nombre raro dejaba sin poder transformar nada.
+
+    Lo que no se puede usar se dice: sale en `avisos` y el origen queda marcado.
     """
     from app.rutas.catalogo import tablas as tablas_catalogo
 
-    tablas = tablas_catalogo(_)["tablas"]
+    avisos: list[str] = []
+
+    # El motor analitico puede no estar disponible —archivo bloqueado, disco
+    # lleno—. Eso no debe impedir armar una transformacion sobre los Parquet.
+    try:
+        tablas = tablas_catalogo(_)["tablas"]
+    except Exception as e:
+        log.exception("No se pudieron listar las tablas del motor")
+        tablas = []
+        avisos.append(f"No se pudieron leer las tablas del motor: {e}")
+
+    def con_datos(nombre: str) -> bool | None:
+        """True/False si se pudo mirar; None si el nombre no sirve como origen."""
+        try:
+            return ruta_datos_dataset(nombre) is not None
+        except Exception as e:
+            avisos.append(f"'{nombre}' no se puede usar como origen: {e}")
+            return None
+
+    # Se mira UNA vez por dataset y se reutiliza: la comprobacion recorre
+    # directorios, y con mil sesenta y cinco datasets hacerla dos veces —aqui y
+    # en el bloque de «la misma tabla en varias conexiones»— se nota.
+    listos: dict[str, bool | None] = {}
+    orden = list(sesion.scalars(select(Dataset).order_by(Dataset.nombre)))
+    for d in orden:
+        listos[d.nombre] = con_datos(d.nombre)
+
     datasets = [
         {"nombre": d.nombre, "filas": d.filas,
-         "tiene_datos": ruta_datos_dataset(d.nombre) is not None}
-        for d in sesion.scalars(select(Dataset).order_by(Dataset.nombre))
+         "tiene_datos": listos[d.nombre] is True,
+         "usable": listos[d.nombre] is not None}
+        for d in orden
     ]
-    trans = [
-        {"nombre": t.nombre, "filas": t.filas,
-         "tiene_datos": ruta_datos_dataset(t.nombre) is not None}
-        for t in sesion.scalars(select(TransformacionDB)
-                                .order_by(TransformacionDB.nombre))
-    ]
+    trans = []
+    for t in sesion.scalars(select(TransformacionDB).order_by(TransformacionDB.nombre)):
+        hay = con_datos(t.nombre)
+        trans.append({"nombre": t.nombre, "filas": t.filas,
+                      "tiene_datos": hay is True, "usable": hay is not None})
+
     # La misma tabla del origen traida por varias conexiones. Es lo que permite
     # decir «Funcionarios de todas las sucursales» en vez de enumerar cuarenta
     # datasets a mano —y acordarse del cuarenta y uno cuando abra una agencia.
     por_tabla: dict[str, list] = {}
-    for d in sesion.scalars(select(Dataset)):
+    for d in orden:
         por_tabla.setdefault(d.tabla_origen or "", []).append(d)
     en_varias = sorted(
         ({"tabla": tabla,
           "conexiones": len(ds),
-          "cargados": sum(1 for x in ds if ruta_datos_dataset(x.nombre) is not None)}
+          "cargados": sum(1 for x in ds if listos.get(x.nombre) is True)}
          for tabla, ds in por_tabla.items() if tabla and len(ds) > 1),
         key=lambda x: x["tabla"].lower())
 
     return {"tablas": tablas, "datasets": datasets, "transformaciones": trans,
-            "en_varias_conexiones": en_varias}
+            "en_varias_conexiones": en_varias, "avisos": avisos}
 
 
 @router.get("/columnas")

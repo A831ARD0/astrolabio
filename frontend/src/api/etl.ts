@@ -137,10 +137,14 @@ export function useOrigenesDisponibles() {
     queryFn: () =>
       api.get<{
         tablas: { nombre: string; filas: number }[]
-        datasets: { nombre: string; filas: number; tiene_datos: boolean }[]
-        transformaciones: { nombre: string; filas: number; tiene_datos: boolean }[]
+        datasets: { nombre: string; filas: number; tiene_datos: boolean
+                    usable: boolean }[]
+        transformaciones: { nombre: string; filas: number; tiene_datos: boolean
+                            usable: boolean }[]
         /** La misma tabla del origen traída por varias conexiones. */
         en_varias_conexiones: { tabla: string; conexiones: number; cargados: number }[]
+        /** Lo que no se pudo leer, y por qué. Un bloque roto no tumba los demás. */
+        avisos: string[]
       }>('/transformaciones/origenes'),
   })
 }

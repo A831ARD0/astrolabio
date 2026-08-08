@@ -457,3 +457,44 @@ def test_una_consulta_convertida_da_el_mismo_numero_que_el_sql(cliente, cab_admi
     a, b = por_sucursal(directo), por_sucursal(visual)
     assert a and b
     assert a == b, "los pasos reconstruidos dan otro numero que el SQL original"
+
+
+def test_un_dataset_con_nombre_raro_no_tumba_la_lista_de_origenes(
+        cliente, cab_admin, conexion_archivos_etl):
+    """
+    Con mil sesenta y cinco datasets, uno con un nombre raro dejaba sin poder
+    transformar nada.
+
+    `ruta_datos_dataset` lanza si el nombre trae un caracter que no sirve para
+    nombrar un origen. Esa excepcion subia hasta la ruta, la peticion contestaba
+    500 y el panel de origenes se quedaba VACIO —sin decir por que—. Ahora ese
+    origen se marca como inservible, se dice en `avisos`, y los demas se listan.
+    """
+    from app.db import CrearSesion
+    from app.modelos_db import Dataset
+
+    with CrearSesion() as s:
+        base = s.get(Dataset, conexion_archivos_etl)
+        malo = Dataset(conexion_id=base.conexion_id, nombre="con espacio y punto.",
+                       tabla_origen="ventas.csv")
+        s.add(malo)
+        s.commit()
+        malo_id = malo.id
+
+    try:
+        r = cliente.get("/api/transformaciones/origenes", headers=cab_admin)
+        assert r.status_code == 200, r.text
+        cuerpo = r.json()
+
+        # El bueno sigue en la lista: es lo que se perdia antes.
+        nombres = {d["nombre"]: d for d in cuerpo["datasets"]}
+        assert base.nombre in nombres
+        assert nombres[base.nombre]["usable"] is True
+
+        # Y el malo aparece marcado, con su aviso.
+        assert nombres["con espacio y punto."]["usable"] is False
+        assert any("con espacio y punto." in a for a in cuerpo["avisos"])
+    finally:
+        with CrearSesion() as s:
+            s.delete(s.get(Dataset, malo_id))
+            s.commit()

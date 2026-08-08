@@ -137,6 +137,20 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **El panel de orígenes del ETL se quedaba vacío y callado.** `GET
+  /api/transformaciones/origenes` calculaba todo en una sola expresión: si
+  `ruta_datos_dataset` lanzaba por **un** nombre con un carácter que no sirve para
+  nombrar un origen, la petición contestaba 500 y la pantalla mostraba el panel
+  vacío sin decir nada. Con mil sesenta y cinco datasets, uno raro dejaba sin poder
+  transformar nada.
+
+  Ahora cada bloque se calcula por separado, lo que no se puede usar sale marcado y
+  con su motivo en `avisos`, y la pantalla distingue las tres situaciones que antes
+  se veían igual: *leyendo*, *no se pudo leer* y *todavía no hay nada*.
+
+  De paso, la comprobación de «¿tiene datos?» se hace una vez por dataset y no dos
+  —recorre directorios, y con mil sesenta y cinco se nota—.
+
 - **Una prueba armaba JSON pegando una ruta con una f-string** y en Windows eso
   produce JSON inválido: `C:\Users` lleva un `\U` que no es un escape válido.
   En Linux colaba porque las rutas no tienen barras invertidas. Lo encontró el
