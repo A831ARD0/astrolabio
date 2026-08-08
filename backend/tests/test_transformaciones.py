@@ -498,3 +498,42 @@ def test_un_dataset_con_nombre_raro_no_tumba_la_lista_de_origenes(
         with CrearSesion() as s:
             s.delete(s.get(Dataset, malo_id))
             s.commit()
+
+
+def test_el_motor_analitico_se_crea_si_no_existe(tmp_path, monkeypatch):
+    """
+    En una instalacion nueva ese archivo no existe, y no puede crearse solo.
+
+    `duckdb_solo_lectura` es True por omision —y debe serlo: la API no escribe en
+    el motor, escribe Parquet—, pero en solo lectura DuckDB no crea el archivo que
+    le falta. El resultado era «Cannot open database ... in read-only mode:
+    database does not exist» en el ETL, en los tableros y en el modelo, con una
+    instalacion que por lo demas estaba bien.
+    """
+    import duckdb
+
+    from app.analitico import asegurar_base
+    from app.config import config
+
+    ruta = tmp_path / "sin_crear" / "analitico.duckdb"
+    monkeypatch.setattr(config(), "ruta_duckdb", str(ruta))
+    assert not ruta.exists()
+
+    # Antes de crearla, abrirla en solo lectura falla: es el error del usuario.
+    with pytest.raises(duckdb.Error):
+        duckdb.connect(str(ruta), read_only=True)
+
+    assert asegurar_base() is True
+    assert ruta.exists()
+
+    # Y ahora sí se puede leer, con cero tablas, que es la verdad.
+    con = duckdb.connect(str(ruta), read_only=True)
+    try:
+        assert con.execute(
+            "SELECT COUNT(*) FROM duckdb_tables() WHERE NOT internal"
+        ).fetchone()[0] == 0
+    finally:
+        con.close()
+
+    # Llamarla otra vez no toca nada: no debe borrar una base que ya tiene datos.
+    assert asegurar_base() is False

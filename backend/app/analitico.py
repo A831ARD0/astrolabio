@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +21,33 @@ from app.politicas import CapaPoliticas, ContextoUsuario
 from semantic.engine import Compilador, Consulta, Modelo, MotorAsociativo
 
 _local = threading.local()
+
+
+def asegurar_base() -> bool:
+    """
+    Crea el archivo del motor analitico si no existe. Devuelve si hizo falta.
+
+    Hace falta porque `duckdb_solo_lectura` es True por omision —y debe serlo: la
+    API no escribe en el motor, escribe Parquet—, y **en solo lectura DuckDB no
+    crea el archivo que le falta**. En una instalacion nueva que nunca sembro los
+    datos de demostracion, ese archivo no existe nunca, y entonces cualquier
+    lectura falla con:
+
+        IO Error: Cannot open database "...analitico.duckdb" in read-only mode:
+        database does not exist
+
+    Eso dejaba sin tablas del motor al ETL, a los tableros y al modelo, en una
+    instalacion que por lo demas estaba bien. Una base vacia es un archivo de unos
+    pocos kilobytes y `duckdb_tables()` sobre ella devuelve cero filas, que es la
+    verdad: todavia no hay tablas.
+    """
+    ruta = Path(config().ruta_duckdb)
+    if ruta.exists():
+        return False
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    # Abrir para escribir y cerrar: con eso queda creada y vacia.
+    duckdb.connect(str(ruta)).close()
+    return True
 
 
 def conexion() -> duckdb.DuckDBPyConnection:

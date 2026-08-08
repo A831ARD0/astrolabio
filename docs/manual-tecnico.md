@@ -644,6 +644,12 @@ cd ../frontend && npm ci && npm run build
 # reiniciar el servicio
 ```
 
+El **motor analítico** (`datos/analitico.duckdb`) se crea vacío en el primer
+arranque si no existe. Se abre en solo lectura —la API no escribe en él, escribe
+Parquet— y en solo lectura DuckDB no puede crear el archivo que le falta, así que
+crearlo al arrancar es lo que evita un «database does not exist» en el ETL, los
+tableros y el modelo de una instalación por lo demás correcta.
+
 Las migraciones del esquema **se aplican al arrancar**. Son aditivas e idempotentes:
 agregan columnas y tablas, nunca borran. Aun así, **respalda antes**.
 

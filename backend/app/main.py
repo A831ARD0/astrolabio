@@ -86,6 +86,15 @@ def arranque() -> None:
                 "=" * 66, config().correo_admin, temporal, "=" * 66,
             )
 
+    # El motor analitico se abre en SOLO LECTURA, y en solo lectura DuckDB no
+    # crea el archivo que le falta. En una instalacion nueva que nunca sembro la
+    # demo ese archivo no existe, y entonces el ETL, los tableros y el modelo
+    # fallan con «database does not exist» aunque todo lo demas este bien.
+    from app.analitico import asegurar_base
+
+    if asegurar_base():
+        log.info("Motor analitico creado vacio en %s", config().ruta_duckdb)
+
     # Lo que quedo a medias en el reinicio anterior. Si no se cierra, la pantalla
     # de tareas ensena 'corriendo' para siempre algo que nadie va a terminar.
     trabajos.limpiar_interrumpidos()

@@ -137,6 +137,18 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **En una instalación nueva, el motor analítico no existía y nada podía leerlo.**
+  `duckdb_solo_lectura` es `True` por omisión —y debe serlo, la API no escribe en el
+  motor, escribe Parquet— pero **en solo lectura DuckDB no crea el archivo que le
+  falta**. Si nunca se sembraron los datos de demostración, ese archivo no existía
+  nunca, y el ETL, los tableros y el modelo fallaban con:
+
+      IO Error: Cannot open database "...analitico.duckdb" in read-only mode:
+      database does not exist
+
+  Ahora el arranque lo crea vacío si falta. `duckdb_tables()` sobre una base vacía
+  devuelve cero filas, que es la verdad: todavía no hay tablas en el motor.
+
 - **El panel de orígenes del ETL se quedaba vacío y callado.** `GET
   /api/transformaciones/origenes` calculaba todo en una sola expresión: si
   `ruta_datos_dataset` lanzaba por **un** nombre con un carácter que no sirve para
