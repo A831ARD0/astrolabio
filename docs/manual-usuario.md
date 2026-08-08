@@ -547,10 +547,34 @@ maestro trae las cuarenta sucursales y después llama al proyecto que las transf
 En la pantalla de *Flujos*, los proyectos salen en su propia lista y solo se pueden
 encadenar — editarlos se hace aquí, donde sus pasos son secciones.
 
+### Encontrar algo entre mil orígenes
+
+Los orígenes están agrupados y **cada grupo se pliega** pulsando su título, con su
+contador al lado. Lo que no uses se quita de en medio una vez y se queda quitado — se
+recuerda por pantalla y por navegador.
+
+Arriba hay un **buscador** que no se desplaza. Escribe trozos, en el orden que sea:
+
+```
+oriente presu     →  SUC_ORIENTE__presupuesto
+orcamento         →  SUC_SUR__Orçamento_Produtos
+```
+
+No hace falta acertar los acentos, las mayúsculas ni los guiones bajos. La cabecera te
+dice cuántos coinciden («23 de 1,065»), y si un grupo estaba plegado **se abre solo**
+mientras haya resultados dentro; al limpiar la búsqueda vuelve a plegarse.
+
+El mismo buscador está en *Proyectos*, y ahí un proyecto aparece si coincide su nombre
+**o el de una de sus secciones**: buscar `hechos_venta` te lleva al proyecto que la
+tiene sin abrirlos uno por uno.
+
+> Si buscas algo y no aparece, acuérdate de que aquí solo está **lo que ya se trajo**.
+> Una tabla de tu MySQL o de Pervasive no aparece hasta que existe como dataset.
+
 ### El panel de la izquierda
 
 Con cuarenta sucursales, el nombre de un dataset es el de la conexión más el de
-la tabla —`MGSALINAC1__Orcamento_Produtos`— y no cabe. **Arrastra el borde
+la tabla —`SUC_SUR__Orcamento_Produtos`— y no cabe. **Arrastra el borde
 derecho del panel** para ensancharlo; doble clic lo devuelve a su ancho normal.
 El ancho se recuerda por pantalla.
 

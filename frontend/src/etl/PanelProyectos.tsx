@@ -33,6 +33,7 @@ import {
   type Proyecto,
 } from '../api/proyectos'
 import { Seccion } from '../comunes/Panel'
+import { coincide } from '../comunes/buscar'
 
 export function PanelProyectos({
   transformaciones,
@@ -59,9 +60,20 @@ export function PanelProyectos({
   // secciones, todos abiertos es la misma lista plana de la que veníamos huyendo.
   const [abierto, setAbierto] = useState<number | null>(null)
   const [nuevo, setNuevo] = useState('')
+  const [busca, setBusca] = useState('')
   const [ultimoLanzado, setUltimoLanzado] = useState<string | null>(null)
 
   const porId = new Map(transformaciones.map((t) => [t.id, t]))
+
+  // Un proyecto sale si coincide su nombre O el de alguna de sus secciones: con
+  // dieciocho secciones dentro, buscar «hechos_venta» tiene que llevar al proyecto
+  // que la tiene, no obligar a abrirlos uno por uno.
+  const buscando = busca.trim() !== ''
+  const listaProyectos = (proyectos.data ?? []).filter(
+    (p) => !buscando || coincide(p.nombre, busca)
+      || p.secciones.some((s) => coincide(s.nombre, busca)))
+  const listaSueltas = (sueltas.data?.transformaciones ?? []).filter(
+    (t) => !buscando || coincide(t.nombre, busca))
 
   function lanzar(p: Proyecto, desde?: number) {
     ejecutar.mutate({ id: p.id, desde }, {
@@ -87,8 +99,23 @@ export function PanelProyectos({
 
   return (
     <>
-      <Seccion titulo="Proyectos" clave="etl-proyectos"
-               extra={proyectos.data?.length ?? 0}>
+      <Seccion
+        titulo="Proyectos"
+        clave="etl-proyectos"
+        extra={buscando
+          ? `${listaProyectos.length} de ${proyectos.data?.length ?? 0}`
+          : (proyectos.data?.length ?? 0)}
+        fijo={
+          <div className="fijo">
+            <input
+              type="search"
+              placeholder="Buscar proyecto o sección…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+        }
+      >
         <>
           {proyectos.isError && (
             <div className="error-caja chico" style={{ marginBottom: 8 }}>
@@ -108,14 +135,14 @@ export function PanelProyectos({
             </div>
           )}
 
-          {proyectos.data?.length === 0 && (
+          {(proyectos.data?.length ?? 0) === 0 && (
             <div className="chico tenue" style={{ padding: '2px 8px 6px' }}>
               Un proyecto agrupa transformaciones que corren en orden, con un solo
               horario. Es el equivalente a un script con secciones.
             </div>
           )}
 
-          {proyectos.data?.map((p) => {
+          {listaProyectos.map((p) => {
             const desplegado = abierto === p.id
             return (
               <div key={p.id} style={{ marginBottom: 2 }}>
@@ -229,7 +256,7 @@ export function PanelProyectos({
                                 el final del renglón y solo aparece al pasar por
                                 encima. En línea ocupaban ochenta píxeles de un panel
                                 de doscientos treinta y dejaban los nombres en «bo…»
-                                y «v…» — y con nombres como MGSALINAC1__Orcamento
+                                y «v…» — y con nombres como SUC_SUR__Orcamento
                                 _Produtos, un nombre truncado no distingue nada. */}
                             <span className="acciones-seccion">
                               <span
@@ -331,14 +358,17 @@ export function PanelProyectos({
       </Seccion>
 
       <Seccion titulo="Sin proyecto" clave="etl-sueltas"
-               extra={sueltas.data?.transformaciones.length ?? 0}>
+               extra={buscando
+                 ? `${listaSueltas.length} de `
+                   + `${sueltas.data?.transformaciones.length ?? 0}`
+                 : (sueltas.data?.transformaciones.length ?? 0)}>
         <>
           {/* No se migran solas a un proyecto de una sección cada una: eso
               convertiría doscientas transformaciones en doscientos proyectos y el
               desorden sería el mismo con otro nombre. Se mueven cuando alguien
               decide dónde van. */}
           <div className="lista">
-            {sueltas.data?.transformaciones.map((s) => {
+            {listaSueltas.map((s) => {
               const t = porId.get(s.id)
               return (
                 <button
@@ -368,7 +398,7 @@ export function PanelProyectos({
               )
             })}
           </div>
-          {abierto === null && (sueltas.data?.transformaciones.length ?? 0) > 0 && (
+          {abierto === null && listaSueltas.length > 0 && (
             <div className="chico tenue" style={{ padding: '6px 8px 0' }}>
               Despliega un proyecto arriba para poder meter alguna en él.
             </div>

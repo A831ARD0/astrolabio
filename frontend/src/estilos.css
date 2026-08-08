@@ -1348,3 +1348,22 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 /* Dentro de la capa ya no hace falta el aparecer-al-pasar de cada uno: la capa
    entera es la que aparece. */
 .lista button .acciones-seccion .agregar { opacity: 1; margin-left: 0; }
+
+/* Un grupo dentro de una seccion: el segundo nivel de «Origenes disponibles». Los
+   subtitulos eran texto suelto, y con mil sesenta y cinco datasets eso obliga a
+   atravesar la lista entera con la rueda para llegar al siguiente. Plegable, cada
+   uno se quita de en medio una vez y se queda quitado. */
+.grupo > header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px 3px;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  user-select: none;
+}
+.grupo > header:hover { color: var(--texto-suave); }
+.grupo > header .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grupo > header .cuenta { margin-left: auto; font-variant-numeric: tabular-nums; }
+.grupo > header .plegar { flex: 0 0 9px; font-size: 9px; }

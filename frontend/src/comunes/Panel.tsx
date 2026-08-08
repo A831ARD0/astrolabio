@@ -1,9 +1,9 @@
 /**
  * El panel lateral: se ensancha arrastrando y sus secciones se pliegan.
  *
- * Nace de un nombre: `MGSALINAC1__Orcamento_Produtos`. Con cuarenta sucursales,
+ * Nace de un nombre: `SUC_SUR__Orcamento_Produtos`. Con cuarenta sucursales,
  * el nombre de un dataset es el de la conexión más el de la tabla, y en 232
- * píxeles no cabe ni la mitad — se lee «MGSALINAC1__Orcament…», que no distingue
+ * píxeles no cabe ni la mitad — se lee «SUC_SUR__Orcament…», que no distingue
  * `Orcamento` de `Orcamento_Produtos`. Ensanchar es la única forma de trabajar.
  *
  * El ancho se recuerda por panel y por pantalla: quien ensancha la lista de
@@ -159,5 +159,55 @@ export function Seccion({
         </>
       )}
     </section>
+  )
+}
+
+
+/**
+ * Un grupo dentro de una sección: el segundo nivel.
+ *
+ * Los subtítulos de «Orígenes disponibles» eran texto suelto, y con mil sesenta y
+ * cinco datasets eso significa que para llegar a «Resultados de otras» hay que
+ * atravesar la lista entera con la rueda del ratón. Plegables, cada uno se quita de
+ * en medio una vez y se queda quitado.
+ *
+ * `forzarAbierto` abre el grupo aunque estuviera plegado, **sin olvidar que lo
+ * estaba**: se usa al buscar. Un grupo plegado que esconde el único resultado de una
+ * búsqueda se lee como «no hay nada», que es lo contrario de lo que pasa.
+ */
+export function Grupo({
+  titulo,
+  cuenta,
+  clave,
+  forzarAbierto = false,
+  children,
+}: {
+  titulo: string
+  /** Cuántos hay. Va a la derecha, y es la mitad de para qué sirve plegarlo. */
+  cuenta?: React.ReactNode
+  clave: string
+  forzarAbierto?: boolean
+  children: React.ReactNode
+}) {
+  const [plegado, setPlegado] = useState(
+    () => localStorage.getItem(`astrolabio.grupo.${clave}`) === '1',
+  )
+  const abierto = forzarAbierto || !plegado
+
+  function alternar() {
+    const v = !plegado
+    setPlegado(v)
+    localStorage.setItem(`astrolabio.grupo.${clave}`, v ? '1' : '0')
+  }
+
+  return (
+    <div className="grupo">
+      <header onClick={alternar} title={abierto ? 'Plegar' : 'Abrir'}>
+        <span className="plegar" aria-hidden="true">{abierto ? '▾' : '▸'}</span>
+        <span className="nom">{titulo}</span>
+        {cuenta !== undefined && <span className="cuenta">{cuenta}</span>}
+      </header>
+      {abierto && children}
+    </div>
   )
 }

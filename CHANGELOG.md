@@ -7,6 +7,31 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Buscador y grupos plegables en el panel del ETL.** «Orígenes disponibles» era una
+  lista plana con subtítulos de texto suelto: con mil sesenta y cinco datasets, llegar
+  a «Resultados de otras» pedía atravesarla entera con la rueda del ratón, y encontrar
+  algo concreto era imposible.
+
+  Ahora cada bloque es un **grupo plegable con su contador**, y cada uno se recuerda
+  plegado —se quita de en medio una vez y se queda quitado—. Arriba hay un **buscador
+  que no se desplaza**, y la cabecera dice «23 de 1,065» mientras se busca.
+
+  La búsqueda perdona lo que la gente escribe de verdad: sin acentos (`orcamento`
+  encuentra `Orçamento`), sin distinguir mayúsculas, y **por trozos en cualquier
+  orden** — `oriente presu` encuentra `SUC_ORIENTE__presupuesto` sin tener que acertar
+  los guiones bajos. Un grupo plegado que tenga resultados **se abre solo mientras se
+  busca**, y vuelve a plegarse al limpiar: un grupo cerrado escondiendo el único
+  resultado se lee como «no hay nada», que es lo contrario de lo que pasa.
+
+  El mismo buscador está en «Proyectos», y ahí un proyecto sale si coincide su nombre
+  **o el de alguna de sus secciones**: buscar `hechos_venta` lleva al proyecto que la
+  tiene en vez de obligar a abrirlos uno por uno.
+
+  Dos cambios de orden que vienen con esto: **las secciones del proyecto que se está
+  editando van primero** —son las que se encadenan— y **las tablas del motor van al
+  final**, porque en una instalación con datos de verdad son las de demostración del
+  prototipo y tenerlas arriba obliga a pasar por delante de ellas cada vez.
+
 - **El nombre de una transformación ya se puede cambiar.** Estaba bloqueado con razón
   —el nombre es también el directorio del Parquet y el nombre con el que otras la
   leen— pero bloquearlo era correcto e inservible: dos catálogos que vienen de dos

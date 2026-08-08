@@ -35,10 +35,11 @@ import {
   useTransformaciones,
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
-import { PanelLateral, Seccion } from '../comunes/Panel'
+import { Grupo, PanelLateral, Seccion } from '../comunes/Panel'
 import { PanelProyectos } from '../etl/PanelProyectos'
 import { columnasAntesDe } from '../etl/columnas'
 import { Velo } from '../comunes/Velo'
+import { coincide } from '../comunes/buscar'
 
 const TIPOS: TipoPaso[] = [
   'filtrar', 'columnas', 'derivar', 'agrupar', 'unir', 'apilar', 'renombrar',
@@ -76,6 +77,7 @@ export function Etl() {
   // El nombre con el que está guardada, para saber si el del cuadro es otro. No se
   // deduce de `d.nombre` porque ese es justo el que se está editando.
   const [nombreGuardado, setNombreGuardado] = useState<string | null>(null)
+  const [busca, setBusca] = useState('')
 
   const disponibles = useOrigenesDisponibles(proyectoId)
   const renombrar = useRenombrarTransformacion()
@@ -138,8 +140,23 @@ export function Etl() {
   // se ofrece: leerse a sí misma no tiene final.
   const resultados = (disponibles.data?.transformaciones ?? [])
     .filter((t) => t.nombre !== d.nombre)
-  const seccionesDelProyecto = resultados.filter((t) => t.seccion !== null)
-  const otrosResultados = resultados.filter((t) => t.seccion === null)
+
+  const buscando = busca.trim() !== ''
+  const filtra = <T,>(xs: T[], nombre: (x: T) => string) =>
+    buscando ? xs.filter((x) => coincide(nombre(x), busca)) : xs
+
+  const secciones = filtra(resultados.filter((t) => t.seccion !== null), (t) => t.nombre)
+  const otros = filtra(resultados.filter((t) => t.seccion === null), (t) => t.nombre)
+  const datasets = filtra(disponibles.data?.datasets ?? [], (t) => t.nombre)
+  const tablas = filtra(disponibles.data?.tablas ?? [], (t) => t.nombre)
+  const enVarias = filtra(disponibles.data?.en_varias_conexiones ?? [], (t) => t.tabla)
+
+  const totalOrigenes = (disponibles.data?.datasets.length ?? 0)
+    + (disponibles.data?.tablas.length ?? 0)
+    + (disponibles.data?.en_varias_conexiones.length ?? 0)
+    + resultados.length
+  const cuantosCoinciden = secciones.length + otros.length + datasets.length
+    + tablas.length + enVarias.length
 
   const pasoUnir = abierto !== null ? d.pasos[abierto] : undefined
   const origenDerecha =
@@ -192,8 +209,31 @@ export function Etl() {
         />
 
         {/* `principal`: la lista larga se lleva el espacio que sobre, y el boton
-            de «+ Nueva transformación» de arriba se queda a la vista. */}
-        <Seccion titulo="Orígenes disponibles" principal clave="etl-origenes">
+            de «+ Nueva transformación» de arriba se queda a la vista.
+
+            Cada bloque es un grupo PLEGABLE y hay un buscador arriba, que no se
+            desplaza. Con mil sesenta y cinco datasets, una lista plana de
+            subtítulos sueltos obliga a atravesarla entera con la rueda del ratón
+            para llegar a «Resultados de otras». */}
+        <Seccion
+          titulo="Orígenes disponibles"
+          principal
+          clave="etl-origenes"
+          extra={busca.trim()
+            ? `${cuantosCoinciden.toLocaleString('es-MX')} de `
+              + totalOrigenes.toLocaleString('es-MX')
+            : totalOrigenes.toLocaleString('es-MX')}
+          fijo={
+            <div className="fijo">
+              <input
+                type="search"
+                placeholder="Buscar un origen…"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+          }
+        >
           <>
             {/* Un panel vacío y callado es lo peor que puede pasar aquí: no se
                 distingue «no hay nada cargado» de «no pude leerlo». Antes esta
@@ -214,37 +254,53 @@ export function Etl() {
                 {a}
               </div>
             ))}
-            {disponibles.data
-             && disponibles.data.tablas.length === 0
-             && disponibles.data.datasets.length === 0
-             && disponibles.data.transformaciones.length === 0 && (
+            {disponibles.data && totalOrigenes === 0 && (
               <div className="chico tenue" style={{ padding: '4px 8px' }}>
                 No hay nada que usar como origen todavía. Trae una tabla desde
                 Conexiones y cárgala; aquí aparecerá.
               </div>
             )}
-
-            {(disponibles.data?.tablas.length ?? 0) > 0 && (
-              <div className="chico tenue" style={{ padding: '0 8px 4px' }}>
-                Tablas del motor
+            {/* Buscar y no encontrar tiene que decirse. Si no, con todos los grupos
+                vacíos la pantalla parece la de una instalación sin datos. */}
+            {disponibles.data && totalOrigenes > 0 && busca.trim()
+             && cuantosCoinciden === 0 && (
+              <div className="chico tenue" style={{ padding: '4px 8px' }}>
+                Nada coincide con «{busca.trim()}». Ojo: aquí solo está lo que ya se
+                trajo — una tabla del origen no aparece hasta que es un dataset.
               </div>
             )}
-            <div className="lista">
-              {disponibles.data?.tablas.map((t) => (
-                <button key={t.nombre} onClick={() => agregarOrigen('tabla', t.nombre)}>
-                  <span className="nom mono">{t.nombre}</span>
-                  <span className="dcha">{t.filas.toLocaleString('es-MX')}</span>
-                </button>
-              ))}
-            </div>
 
-            {(disponibles.data?.datasets.length ?? 0) > 0 && (
-              <>
-                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
-                  Datos cargados
-                </div>
+            {/* Las secciones de ESTE proyecto van primero: son las que se encadenan
+                mientras se arma el proyecto, y con su número se ve que la 5 lee de la
+                4. Las intermedias solo aparecen aquí, dentro de su proyecto. */}
+            {secciones.length > 0 && (
+              <Grupo titulo="Secciones de este proyecto" clave="etl-g-secciones"
+                     cuenta={secciones.length} forzarAbierto={buscando}>
                 <div className="lista">
-                  {disponibles.data?.datasets.map((t) => (
+                  {secciones.map((t) => (
+                    <button
+                      key={t.nombre}
+                      disabled={!t.tiene_datos}
+                      title={t.tiene_datos
+                        ? `Sección ${t.seccion}`
+                        : 'Todavía no se ha ejecutado: córrela una vez y aquí '
+                          + 'aparecerá con sus datos'}
+                      onClick={() => agregarOrigen('dataset', t.nombre)}
+                    >
+                      <span className="orden-seccion">{t.seccion}</span>
+                      <span className="nom mono">{t.nombre}</span>
+                      {t.intermedia && <span className="dcha">int</span>}
+                    </button>
+                  ))}
+                </div>
+              </Grupo>
+            )}
+
+            {datasets.length > 0 && (
+              <Grupo titulo="Datos cargados" clave="etl-g-datasets"
+                     cuenta={datasets.length} forzarAbierto={buscando}>
+                <div className="lista">
+                  {datasets.map((t) => (
                     <button
                       key={t.nombre}
                       disabled={!t.tiene_datos || !t.usable}
@@ -260,20 +316,19 @@ export function Etl() {
                     </button>
                   ))}
                 </div>
-              </>
+              </Grupo>
             )}
 
-            {(disponibles.data?.en_varias_conexiones.length ?? 0) > 0 && (
-              <>
-                {/* Una sola entrada por tabla en vez de cuarenta datasets: es
-                    lo que en el script de Qlik era un bucle sobre las
-                    sucursales. Cada parte llega con las etiquetas de su
-                    conexión, así que se sabe de dónde vino cada fila. */}
-                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
-                  La misma tabla en varias conexiones
-                </div>
+            {enVarias.length > 0 && (
+              <Grupo titulo="La misma tabla en varias conexiones"
+                     clave="etl-g-varias" cuenta={enVarias.length}
+                     forzarAbierto={buscando}>
+                {/* Una sola entrada por tabla en vez de cuarenta datasets: es lo que
+                    en el script de Qlik era un bucle sobre las sucursales. Cada parte
+                    llega con las etiquetas de su conexión, así que se sabe de dónde
+                    vino cada fila. */}
                 <div className="lista">
-                  {disponibles.data?.en_varias_conexiones.map((t) => {
+                  {enVarias.map((t) => {
                     const listo = t.cargados === t.conexiones
                     return (
                       <button
@@ -293,44 +348,14 @@ export function Etl() {
                     )
                   })}
                 </div>
-              </>
+              </Grupo>
             )}
 
-            {/* Las secciones de ESTE proyecto van primero y con su número. Es lo
-                que permite encadenar en orden sin adivinar: la 5 lee de la 4, y se
-                ve. Las intermedias solo aparecen aquí, dentro de su proyecto. */}
-            {(seccionesDelProyecto.length > 0) && (
-              <>
-                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
-                  Secciones de este proyecto
-                </div>
+            {otros.length > 0 && (
+              <Grupo titulo="Resultados de otras" clave="etl-g-otras"
+                     cuenta={otros.length} forzarAbierto={buscando}>
                 <div className="lista">
-                  {seccionesDelProyecto.map((t) => (
-                    <button
-                      key={t.nombre}
-                      disabled={!t.tiene_datos}
-                      title={t.tiene_datos
-                        ? `Sección ${t.seccion}`
-                        : 'Todavía no se ha ejecutado: córrela una vez y aquí '
-                          + 'aparecerá con sus datos'}
-                      onClick={() => agregarOrigen('dataset', t.nombre)}
-                    >
-                      <span className="orden-seccion">{t.seccion}</span>
-                      <span className="nom mono">{t.nombre}</span>
-                      {t.intermedia && <span className="dcha">int</span>}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {otrosResultados.length > 0 && (
-              <>
-                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
-                  Resultados de otras
-                </div>
-                <div className="lista">
-                  {otrosResultados.map((t) => (
+                  {otros.map((t) => (
                     <button
                       key={t.nombre}
                       disabled={!t.tiene_datos}
@@ -340,13 +365,29 @@ export function Etl() {
                       onClick={() => agregarOrigen('dataset', t.nombre)}
                     >
                       <span className="nom mono">{t.nombre}</span>
-                      {t.proyecto && (
-                        <span className="dcha">{t.proyecto}</span>
-                      )}
+                      {t.proyecto && <span className="dcha">{t.proyecto}</span>}
                     </button>
                   ))}
                 </div>
-              </>
+              </Grupo>
+            )}
+
+            {/* Las tablas del motor van al final: en una instalación con datos de
+                verdad son las de demostración del prototipo, y tenerlas arriba
+                obliga a pasar por delante de ellas cada vez. */}
+            {tablas.length > 0 && (
+              <Grupo titulo="Tablas del motor" clave="etl-g-motor"
+                     cuenta={tablas.length} forzarAbierto={buscando}>
+                <div className="lista">
+                  {tablas.map((t) => (
+                    <button key={t.nombre}
+                            onClick={() => agregarOrigen('tabla', t.nombre)}>
+                      <span className="nom mono">{t.nombre}</span>
+                      <span className="dcha">{t.filas.toLocaleString('es-MX')}</span>
+                    </button>
+                  ))}
+                </div>
+              </Grupo>
             )}
           </>
         </Seccion>
