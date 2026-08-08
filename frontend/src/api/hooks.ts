@@ -20,6 +20,7 @@ import type {
   ResultadoPrueba,
   Rutas,
   TablaCatalogo,
+  TablaResumen,
   Usuario,
   VersionResumen,
 } from './tipos'
@@ -89,9 +90,24 @@ export function useYaml(id: number, version?: number) {
 export function useTablas() {
   return useQuery({
     queryKey: claves.tablas,
-    queryFn: () => api.get<{ tablas: { nombre: string; filas: number }[] }>(
-      '/catalogo/tablas',
-    ),
+    queryFn: () => api.get<{ tablas: TablaResumen[] }>('/catalogo/tablas'),
+  })
+}
+
+/**
+ * Crear un modelo. Lleva su primera entidad dentro: un modelo sin ninguna no se
+ * puede guardar, así que pedir el nombre y la primera tabla en el mismo paso es lo
+ * único que no deja a medias.
+ */
+export function useCrearModelo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: {
+      nombre: string
+      descripcion?: string | null
+      definicion: Partial<Definicion>
+    }) => api.post<ModeloResumen>('/modelos', v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: claves.modelos }),
   })
 }
 

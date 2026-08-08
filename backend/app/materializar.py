@@ -11,8 +11,9 @@ en el directorio de datasets. Tres consecuencias, y las tres se querían:
   leer con cualquier herramienta. No queda encerrado.
 - Ejecutar una transformación mientras alguien consulta no bloquea la base.
 
-Lo que produce se registra como una **vista temporal** en la conexión de consultas,
-así que el modelo semántico puede apuntar a ella como si fuera una tabla.
+Lo que produce se puede usar como si fuera una tabla: `analitico.registrar_vistas`
+le pone una **vista temporal** encima en la conexión de consultas, y así el modelo
+semántico lo alcanza por su nombre.
 """
 
 from __future__ import annotations

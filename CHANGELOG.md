@@ -7,6 +7,35 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Ya se puede modelar sobre lo que uno cargó y transformó.** Faltaba la mitad del
+  camino y no se veía: el modelo semántico solo sabe nombrar tablas, y una carga o el
+  resultado de una transformación no son una tabla del motor —son un directorio de
+  Parquet—. La transformación corría, escribía sus archivos, y el lienzo del modelo
+  **no los encontraba**. Solo se podía modelar sobre los datos de demostración que
+  trae el archivo analítico, que es un producto que se puede mirar y no usar.
+
+  Ahora el catálogo ofrece las tres procedencias —**tablas del motor**, **datos
+  cargados** y **resultados de transformaciones**— agrupadas en el desplegable, y a
+  las dos últimas se les pone una **vista temporal** encima al consultarlas. Vista
+  temporal y no una tabla dentro del motor a propósito: el archivo analítico se abre
+  en solo lectura, y esa garantía —nada de lo que pase por el ETL puede modificar lo
+  que un tablero está leyendo— no se toca. De regalo, la vista apunta a un glob que
+  se resuelve en cada consulta, así que **una carga nueva se ve sin reiniciar nada**.
+
+  Tres reglas que hacían falta decidir: una **tabla del motor gana** sobre un Parquet
+  del mismo nombre —es lo que ya estaban leyendo los tableros—; un Parquet **no
+  declara clave primaria**, así que se sugiere por convención y la marca la persona,
+  que es quien sabe; y las secciones **intermedias no se ofrecen**, porque son
+  andamiaje y con dieciocho por sucursal el desplegable se vuelve inservible por
+  volumen.
+
+- **Crear un modelo, desde la pantalla.** No había botón: el único camino real era el
+  sembrador de la demostración o escribir el YAML a mano y mandarlo por la API.
+  **Modelo → + Nuevo modelo** pide el nombre y **la primera tabla en el mismo paso**,
+  porque un modelo sin entidades no se puede guardar y un «crear» que lo dejara vacío
+  prometería algo que el servidor va a rechazar. La API acepta ahora una
+  `definicion` además del `yaml`, para que la interfaz no tenga que saber serializar.
+
 - **Buscador y grupos plegables en el panel del ETL.** «Orígenes disponibles» era una
   lista plana con subtítulos de texto suelto: con mil sesenta y cinco datasets, llegar
   a «Resultados de otras» pedía atravesarla entera con la rueda del ratón, y encontrar

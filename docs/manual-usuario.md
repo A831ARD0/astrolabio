@@ -590,6 +590,32 @@ le da su alto a la que sí.
 El modelo dice qué es cada tabla (dimensión o hecho), cómo se relacionan y qué
 métricas existen. Se dibuja arrastrando de un campo a otro.
 
+### Crear uno
+
+**Modelo → + Nuevo modelo.** Se pide el nombre y **la primera tabla**, en el mismo
+paso: un modelo sin ninguna entidad no se puede guardar, así que un «crear» que lo
+dejara vacío estaría prometiendo algo que no se cumple. Lo demás —más tablas, las
+relaciones, las métricas— se arma en el lienzo.
+
+En el desplegable de tablas sale **todo lo que se puede modelar**, en tres grupos:
+
+| Grupo | Qué es |
+|---|---|
+| **Tablas del motor** | Las que viven dentro del archivo analítico |
+| **Datos cargados** | Las tablas que trajiste de tus orígenes |
+| **Resultados de transformaciones** | Lo que produjeron tus transformaciones |
+
+Los dos últimos grupos son Parquet, no tablas, y aun así se usan igual: se les pone
+una vista encima al consultarlos. Dos consecuencias prácticas: **un Parquet no
+declara clave primaria**, así que hay que marcar cuál es en la lista de columnas —o
+dejarla sin clave, y el diagnóstico avisará de que falta el grano—; y **los datos
+frescos se ven solos**, sin reiniciar nada, porque la vista se resuelve en cada
+consulta.
+
+Si un resultado tuyo se llama igual que una tabla del motor, **gana la del motor**:
+es lo que ya estaban leyendo los tableros. Las secciones marcadas como
+**intermedias** no aparecen aquí; son andamiaje de una transformación.
+
 **Las métricas se definen una vez.** «Utilidad» es una fórmula que vive en el
 modelo, no algo que cada quien reescribe en su tablero. Es lo que hace que dos
 personas no tengan dos utilidades distintas.

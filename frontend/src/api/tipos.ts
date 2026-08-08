@@ -99,8 +99,22 @@ export interface ColumnaCatalogo {
   rol_sugerido: RolCampo
 }
 
+/**
+ * De dónde sale una tabla: del archivo analítico, de una carga, o de una
+ * transformación. Para el modelo son lo mismo —un nombre con columnas—; para quien
+ * lo arma, no.
+ */
+export type OrigenTabla = 'motor' | 'carga' | 'resultado'
+
+export interface TablaResumen {
+  nombre: string
+  filas: number
+  origen: OrigenTabla
+}
+
 export interface TablaCatalogo {
   nombre: string
+  origen: OrigenTabla
   clave_primaria: string | null
   columnas: ColumnaCatalogo[]
 }

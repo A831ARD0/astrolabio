@@ -4,12 +4,18 @@ Acceso al motor analitico (DuckDB) y el UNICO camino para ejecutar consultas.
 Todo lo que quiera leer datos pasa por `ejecutar_consulta`. No existe una via
 alterna que se salte la capa de politicas: es lo que hace verificable que la
 seguridad por fila se aplica siempre.
+
+Aqui viven tambien las **vistas de Parquet**: una carga o el resultado de una
+transformacion es un directorio de archivos, no una tabla del motor, y el modelo
+semantico solo sabe nombrar tablas. `registrar_vistas` cierra ese hueco creando
+una vista temporal por nombre, en la conexion de consultas, apuntando al Parquet.
 """
 
 from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
@@ -63,6 +69,81 @@ def conexion() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def tablas_del_motor(con: duckdb.DuckDBPyConnection | None = None) -> set[str]:
+    """Las tablas que existen de verdad dentro del archivo del motor."""
+    con = con or conexion()
+    return {n for (n,) in con.execute(
+        "SELECT table_name FROM duckdb_tables() WHERE NOT internal").fetchall()}
+
+
+def registrar_vistas(nombres: Iterable[str]) -> list[str]:
+    """
+    Deja utilizables como tabla los datasets y resultados que viven en Parquet.
+
+    Sin esto, el modelo semantico solo alcanza lo que hay dentro de
+    `analitico.duckdb` —los datos de demostracion— y todo lo que el usuario carga
+    y transforma queda invisible para el: la transformacion corre, escribe su
+    Parquet, y el lienzo del modelo no la encuentra.
+
+    Tres decisiones:
+
+    - **Vista temporal**, no una tabla dentro del motor. El motor se abre en solo
+      lectura a proposito (ver `materializar`), y una vista temporal vive en el
+      catalogo temporal de la conexion, asi que no lo contradice: el archivo no se
+      toca. De paso, el glob se resuelve en cada consulta, asi que una carga nueva
+      se ve sin volver a registrar nada.
+    - **Una tabla real siempre gana** sobre un Parquet del mismo nombre. Es la
+      unica regla que hace predecible una colision, y es la que menos sorprende:
+      lo que ya consultaban los tableros sigue significando lo mismo.
+    - **Solo se recuerda lo que se logro.** Un nombre sin datos todavia no se
+      apunta como hecho, para que se reintente cuando su primera carga termine —
+      la conexion vive lo que vive el hilo, y eso es mucho mas que una carga.
+
+    Devuelve los nombres que quedaron registrados en esta llamada.
+    """
+    from app.materializar import ErrorTransformacion, ruta_datos_dataset
+
+    con = conexion()
+    hechas = getattr(_local, "vistas", None)
+    if hechas is None:
+        hechas = _local.vistas = set()
+
+    faltan = [n for n in dict.fromkeys(nombres) if n not in hechas]
+    if not faltan:
+        return []
+
+    reales = tablas_del_motor(con)
+    nuevas = []
+    for nombre in faltan:
+        if nombre in reales:
+            hechas.add(nombre)          # no se le pone una vista encima
+            continue
+        try:
+            ruta = ruta_datos_dataset(nombre)
+        except ErrorTransformacion:
+            continue                    # no es un nombre de dataset; que falle al consultar
+        if ruta is None:
+            continue                    # todavia no tiene datos: se reintenta luego
+        # La ruta no se puede pasar como parametro: una vista no admite parametros
+        # ligados, se guarda su texto. El nombre ya viene validado por
+        # `ruta_datos_dataset` y las comillas se escapan igual.
+        con.execute(f'CREATE OR REPLACE TEMP VIEW {_cita_ident(nombre)} AS '
+                    f"SELECT * FROM read_parquet('{ruta.replace(chr(39), chr(39) * 2)}', "
+                    f'hive_partitioning=true)')
+        hechas.add(nombre)
+        nuevas.append(nombre)
+    return nuevas
+
+
+def _cita_ident(x: str) -> str:
+    return '"' + x.replace('"', '""') + '"'
+
+
+def preparar(modelo: Modelo) -> None:
+    """Registra las vistas que necesitan las entidades de este modelo."""
+    registrar_vistas(e.tabla for e in modelo.entidades.values())
+
+
 @dataclass
 class Resultado:
     columnas: list[str]
@@ -75,6 +156,7 @@ class Resultado:
 def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
                       ctx: ContextoUsuario) -> Resultado:
     """Compila y ejecuta. Siempre pasa por la capa de politicas."""
+    preparar(modelo)
     capa = CapaPoliticas(modelo, modelo.politicas)
     predicados = capa.resolver(ctx)               # <- el gancho, sin excepcion
 
@@ -100,6 +182,7 @@ def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
     puede ver una sucursal, esa sucursal no debe aparecer ni como 'excluida' en
     un panel de filtros — su existencia misma es informacion.
     """
+    preparar(modelo)
     capa = CapaPoliticas(modelo, modelo.politicas)
     predicados = capa.resolver(ctx)
 

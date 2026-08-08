@@ -14,7 +14,7 @@ from typing import Literal
 import yaml
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from app.analitico import ejecutar_consulta, estados_asociativos
@@ -40,9 +40,32 @@ router = APIRouter(prefix="/api/modelos", tags=["modelos"])
 # --------------------------------------------------------------------------- #
 
 class CrearModelo(BaseModel):
+    """
+    Un modelo nuevo, de dos maneras.
+
+    `yaml` es el camino de quien ya tiene el texto —una migracion, un respaldo, un
+    modelo escrito a mano—. `definicion` es el de la interfaz, que no deberia tener
+    que saber serializar YAML para crear algo. Uno de los dos, no los dos: si
+    llegaran ambos habria que decidir cual manda, y esa decision no la puede tomar
+    el servidor sin adivinar.
+    """
+
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = None
-    yaml: str
+    yaml: str | None = None
+    definicion: Definicion | None = None
+
+    @model_validator(mode="after")
+    def uno_de_los_dos(self):
+        if (self.yaml is None) == (self.definicion is None):
+            raise ValueError("manda 'yaml' o 'definicion', exactamente uno")
+        return self
+
+    def texto(self) -> str:
+        if self.definicion is not None:
+            return self.definicion.a_yaml()
+        assert self.yaml is not None
+        return self.yaml
 
 
 class NuevaVersion(BaseModel):
@@ -159,7 +182,13 @@ def listar(sesion: SesionDep, _: UsuarioDep):
 @router.post("", response_model=ModeloSalida, status_code=201)
 def crear(cuerpo: CrearModelo, sesion: SesionDep,
           actor: Usuario = Depends(exigir_rol(Rol.editor))):
-    _cargar_semantico(cuerpo.yaml)      # valida antes de guardar
+    if cuerpo.definicion is not None:
+        errores = cuerpo.definicion.revisar_referencias()
+        if errores:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                {"errores": errores})
+    texto = cuerpo.texto()
+    _cargar_semantico(texto)            # valida antes de guardar
 
     if sesion.scalar(select(func.count()).select_from(ModeloDB)
                      .where(ModeloDB.nombre == cuerpo.nombre)):
@@ -168,7 +197,7 @@ def crear(cuerpo: CrearModelo, sesion: SesionDep,
     modelo = ModeloDB(nombre=cuerpo.nombre, descripcion=cuerpo.descripcion)
     sesion.add(modelo)
     sesion.flush()
-    sesion.add(VersionModelo(modelo_id=modelo.id, version=1, yaml=cuerpo.yaml,
+    sesion.add(VersionModelo(modelo_id=modelo.id, version=1, yaml=texto,
                              notas="Version inicial", creado_por=actor.id))
     registrar(sesion, accion="modelo_creado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="modelo", objeto_id=modelo.id,

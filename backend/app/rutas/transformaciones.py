@@ -470,8 +470,12 @@ def _catalogo_de_origenes(sesion: SesionDep,
     try:
         from app.rutas.catalogo import tablas as tablas_catalogo
 
-        for t in tablas_catalogo(actor)["tablas"]:
-            catalogo[t["nombre"]] = "tabla"
+        for t in tablas_catalogo(sesion, actor)["tablas"]:
+            # Solo las del motor entran como "tabla": las cargas y los resultados
+            # ya se apuntaron arriba como "dataset", que es como se leen —por su
+            # Parquet— cuando una transformación los usa.
+            if t["origen"] == "motor":
+                catalogo[t["nombre"]] = "tabla"
     except Exception:
         log.exception("No se pudieron listar las tablas del motor para el catalogo")
     return catalogo
