@@ -7,6 +7,32 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **El nombre de una transformación ya se puede cambiar.** Estaba bloqueado con razón
+  —el nombre es también el directorio del Parquet y el nombre con el que otras la
+  leen— pero bloquearlo era correcto e inservible: dos catálogos que vienen de dos
+  sistemas distintos necesitan llamarse distinto, y descubrirlo después de armar la
+  transformación obligaba a rehacerla.
+
+  Ahora se renombra de verdad: se **mueve el directorio Parquet** y se **reescriben
+  los orígenes** de las transformaciones que la leen. Lo que se toca se dice después,
+  con nombres: renombrar algo que otras cuatro cosas leen sin que la pantalla diga
+  cuáles es pedir que se confíe a ciegas.
+
+  Tres cosas que no hace, y por qué:
+
+  - **No toca las versiones del modelo**, que son instantáneas inmutables a
+    propósito. Si alguna nombra la tabla, el renombrado **se detiene antes de mover
+    nada** y dice qué modelo es. Un tablero anclado a una versión no puede cambiar de
+    significado porque alguien renombró algo.
+  - **No cambia el alias** de un origen, solo su referencia. El alias es el nombre con
+    el que la consulta la llama por dentro; cambiarlo rompería el SQL escrito a mano.
+  - **No va dentro de «Guardar».** Guardar cambia qué calcula; renombrar mueve datos
+    en disco y reescribe definiciones ajenas. Eso no puede colarse en un guardado que
+    alguien pulsó para cambiar un filtro, así que tiene su propio botón.
+
+  Un nombre ya usado por otra transformación o por un dataset se rechaza —los dos
+  escribirían en el mismo sitio— y también uno que no sirva como nombre de carpeta.
+
 - **Proyectos con secciones en el ETL.** Un proyecto agrupa transformaciones que
   corren en orden, con un solo horario. Es el equivalente a un script con secciones:
   el panel de la izquierda deja de ser una lista plana y pasa a ser

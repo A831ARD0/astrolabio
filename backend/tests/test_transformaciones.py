@@ -293,11 +293,16 @@ def test_el_nombre_no_puede_chocar_con_un_dataset(cliente, cab_admin,
     assert "dataset" in r.json()["detail"]
 
 
-def test_cambiar_el_nombre_se_rechaza(cliente, cab_admin, transformacion):
+def test_guardar_no_renombra(cliente, cab_admin, transformacion):
+    """
+    Renombrar mueve el Parquet y reescribe los origenes de quien la lee. Eso no puede
+    colarse dentro de un «Guardar» que alguien pulso para cambiar un filtro: va por su
+    propia ruta, que ademas dice que toco. Ver tests/test_renombrar.py.
+    """
     r = cliente.put(f"/api/transformaciones/{transformacion}", headers=cab_admin,
                     json={"definicion": _def("otro_nombre")})
     assert r.status_code == 400
-    assert "huérfano" in r.json()["detail"]
+    assert "Renombrar" in r.json()["detail"]
 
 
 def test_borrar_no_borra_los_datos_por_defecto(cliente, cab_admin):

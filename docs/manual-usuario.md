@@ -448,6 +448,28 @@ Si algo no se puede representar (funciones de ventana, `HAVING`, subconsultas,
 CTEs…), **se dice cuál y por qué**, y no se convierte. Una conversión aproximada es
 peor que ninguna: seguirías editando unos pasos que dicen otra cosa.
 
+### Cambiar el nombre
+
+El nombre no es solo una etiqueta: es la **carpeta en disco** donde vive el resultado
+y el nombre con el que **otras transformaciones lo leen**. Aun así se puede cambiar.
+
+Escribe el nombre nuevo en el cuadro de arriba y aparece un botón **Renombrar**. Al
+pulsarlo se mueven los datos y se arreglan solas las transformaciones que la leían;
+después la pantalla te dice exactamente qué se tocó.
+
+Lo que no se toca, a propósito:
+
+- **Las versiones del modelo.** Son instantáneas que no se reescriben, para que un
+  tablero publicado no cambie de significado porque alguien renombró algo. Si alguna
+  nombra esa tabla, **no se renombra** y se te dice qué modelo es. La salida es sacar
+  esa entidad del modelo, o crear otra transformación con el nombre nuevo.
+- **El alias de los orígenes.** Es el nombre con el que tu consulta o tu paso de unir
+  la llaman por dentro; cambiarlo rompería el SQL que escribiste.
+
+Un nombre que ya use otra transformación o un dataset se rechaza: los dos escribirían
+en el mismo sitio. Y renombrar **no** lo hace el botón *Guardar* — guardar cambia qué
+calcula, renombrar mueve archivos, y son dos cosas distintas.
+
 ### Proyectos y secciones
 
 Una transformación sola está bien para una cosa suelta. Cuando son dieciocho que van

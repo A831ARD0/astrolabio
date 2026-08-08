@@ -28,7 +28,8 @@ from app.modelos_db import (
     Dataset, Rol, Transformacion as TransformacionDB, Usuario, iso,
 )
 from app.transformar import (
-    ErrorEjecucion, ejecutar as ejecutar_transformacion, linaje as _linaje,
+    ErrorEjecucion, ErrorRenombrar, ejecutar as ejecutar_transformacion,
+    linaje as _linaje, renombrar as _renombrar,
 )
 from semantic.transformacion import (
     ErrorTransformacion, Transformacion, compilar,
@@ -58,6 +59,10 @@ class Guardar(BaseModel):
 
 class DesdeSql(BaseModel):
     sql: str = Field(min_length=1)
+
+
+class Renombrar(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
 
 
 class Salida(BaseModel):
@@ -331,10 +336,15 @@ def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
     t = _obtener(sesion, id_)
     d = cuerpo.definicion
     if d.nombre != t.nombre:
+        # Guardar no renombra. Renombrar mueve el Parquet y reescribe los orígenes de
+        # las que la leen, y eso no puede colarse dentro de un «Guardar» que alguien
+        # pulsó para cambiar un filtro: va por su propia ruta, que además dice qué
+        # tocó. Para eso está POST /{id}/renombrar.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Cambiar el nombre dejaría huérfano el resultado ya materializado y "
-            "cualquier modelo que apunte a él. Crea otra transformación.")
+            f"Este guardado cambiaría el nombre de '{t.nombre}' a '{d.nombre}'. "
+            f"Renombrar mueve los datos en disco y arregla a quien la lee, así que "
+            f"se pide aparte: usa el botón «Renombrar».")
     _cadena_ciclica(sesion, d.nombre, d)
     _compila_o_falla(sesion, d)
 
@@ -398,6 +408,27 @@ def ejecutar(id_: int, sesion: SesionDep,
     except ErrorEjecucion as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"La transformación falló: {e}")
+
+
+@router.post("/{id_}/renombrar")
+def renombrar(id_: int, cuerpo: Renombrar, sesion: SesionDep,
+              actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Cambia el nombre, y con él lo que dependía de ese nombre.
+
+    Mueve el directorio Parquet y reescribe los orígenes de las transformaciones que
+    la leen; **no toca las versiones del modelo**, que son inmutables a propósito, y
+    si alguna la nombra se para en vez de romper un tablero publicado.
+
+    Devuelve qué tocó. No es un detalle: renombrar algo que otras cuatro cosas leen y
+    que la pantalla no diga cuáles es pedirle a alguien que confíe a ciegas.
+    """
+    t = _obtener(sesion, id_)
+    try:
+        r = _renombrar(sesion, t, cuerpo.nombre, Actor(id=actor.id, email=actor.email))
+    except ErrorRenombrar as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    return r
 
 
 @router.get("/{id_}/historial")

@@ -31,6 +31,7 @@ import {
   useGuardarTransformacion,
   useOrigenesDisponibles,
   usePrevisualizar,
+  useRenombrarTransformacion,
   useTransformaciones,
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
@@ -72,13 +73,20 @@ export function Etl() {
   const [proyectoId, setProyectoId] = useState<number | null>(null)
   const [proyectoNombre, setProyectoNombre] = useState<string | null>(null)
   const [ordenSeccion, setOrdenSeccion] = useState<number | null>(null)
+  // El nombre con el que está guardada, para saber si el del cuadro es otro. No se
+  // deduce de `d.nombre` porque ese es justo el que se está editando.
+  const [nombreGuardado, setNombreGuardado] = useState<string | null>(null)
 
   const disponibles = useOrigenesDisponibles(proyectoId)
+  const renombrar = useRenombrarTransformacion()
+  const renombrable = id !== null && nombreGuardado !== null
+    && d.nombre.trim() !== '' && d.nombre !== nombreGuardado
 
   function cargar(t: TransformacionResumen) {
     setId(t.id)
     setD(t.definicion)
     setModoSql(!!t.definicion.sql)
+    setNombreGuardado(t.nombre)
     setIntermedia(t.intermedia)
     setProyectoId(t.proyecto_id)
     setProyectoNombre(t.proyecto)
@@ -91,6 +99,7 @@ export function Etl() {
     setId(null)
     setD(VACIA)
     setModoSql(false)
+    setNombreGuardado(null)
     setIntermedia(false)
     setProyectoId(destino)
     setProyectoNombre(null)
@@ -346,18 +355,48 @@ export function Etl() {
       {/* ------------------------------------------------------- centro */}
       <div className="centro">
         <div className="barra-editor">
+          {/* El nombre ya se puede cambiar. No es un campo cualquiera —también es la
+              carpeta del Parquet y el nombre con el que otras la leen— así que
+              cambiarlo no lo hace «Guardar»: aparece un botón «Renombrar» aparte, y
+              lo que se toca se dice después. */}
           <input
             type="text"
             className="mono"
             placeholder="nombre_del_resultado"
             value={d.nombre}
-            disabled={id !== null}
-            title={id !== null ? 'El nombre no se puede cambiar después de crearla' : ''}
+            title="También es el nombre de la carpeta en disco: letras, dígitos y
+                   guion bajo."
             onChange={(e) =>
               setD({ ...d, nombre: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') })
             }
             style={{ maxWidth: 230 }}
           />
+          {renombrable && (
+            <button
+              className="btn chico"
+              disabled={renombrar.isPending}
+              title={`Cambia el nombre de «${nombreGuardado}» a «${d.nombre}»: mueve `
+                     + 'los datos en disco y arregla los orígenes de las que la leen.'}
+              onClick={() => {
+                if (!confirm(
+                  `¿Renombrar «${nombreGuardado}» a «${d.nombre}»?\n\n`
+                  + 'Se mueven sus datos en disco y se arreglan las '
+                  + 'transformaciones que la leen. Las versiones del modelo no se '
+                  + 'tocan: si alguna la nombra, no se renombra y se dice cuál.')) {
+                  return
+                }
+                renombrar.mutate({ id: id!, nombre: d.nombre }, {
+                  onSuccess: (r) => { if (r.cambiado) setNombreGuardado(r.nombre) },
+                  // El nombre vuelve al guardado: dejarlo escrito con el nuevo
+                  // haría que el siguiente «Guardar» se rechazara sin que se
+                  // entienda por qué.
+                  onError: () => setD((x) => ({ ...x, nombre: nombreGuardado! })),
+                })
+              }}
+            >
+              {renombrar.isPending ? 'Renombrando…' : 'Renombrar'}
+            </button>
+          )}
           <div className="pestanas">
             <button className={!modoSql ? 'activo' : ''} onClick={() => setModoSql(false)}>
               Pasos
@@ -414,6 +453,7 @@ export function Etl() {
                   {
                     onSuccess: (t) => {
                       setId(t.id)
+                      setNombreGuardado(t.nombre)
                       setProyectoId(t.proyecto_id)
                       setProyectoNombre(t.proyecto)
                       setOrdenSeccion(t.orden)
@@ -443,6 +483,29 @@ export function Etl() {
         {ejecutar.isError && (
           <div className="error-caja" style={{ margin: '10px 12px 0' }}>
             {(ejecutar.error as Error).message}
+          </div>
+        )}
+        {renombrar.isError && (
+          <div className="error-caja" style={{ margin: '10px 12px 0' }}>
+            {(renombrar.error as Error).message}
+          </div>
+        )}
+        {/* Qué se tocó. Renombrar algo que otras cuatro cosas leen y que la pantalla
+            no diga cuáles es pedirle a alguien que confíe a ciegas. */}
+        {renombrar.isSuccess && renombrar.data.cambiado && (
+          <div className="aviso-caja" style={{ margin: '10px 12px 0' }}>
+            Se llamaba «{renombrar.data.antes}» y ahora es «{renombrar.data.nombre}».
+            {renombrar.data.datos_movidos
+              ? ' Sus datos se movieron con ella.'
+              : ' Todavía no tenía datos en disco.'}
+            {renombrar.data.dependientes?.length
+              ? ` Se arreglaron los orígenes de: `
+                + `${renombrar.data.dependientes.join(', ')}.`
+              : ' Ninguna otra transformación la leía.'}
+            {renombrar.data.flujos_tocados
+              ? ` Y la etiqueta del paso en ${renombrar.data.flujos_tocados} `
+                + `flujo(s) o proyecto(s).`
+              : ''}
           </div>
         )}
         {ejecutar.isSuccess && (

@@ -205,6 +205,35 @@ export function useGuardarTransformacion() {
   })
 }
 
+/**
+ * Renombrar. Mueve el Parquet y arregla los orígenes de quien la lee.
+ *
+ * Va aparte de `useGuardarTransformacion` porque es otra operación: guardar cambia
+ * qué calcula, renombrar mueve datos en disco y reescribe definiciones ajenas. Eso no
+ * puede colarse dentro de un «Guardar» que alguien pulsó para cambiar un filtro.
+ */
+export function useRenombrarTransformacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, nombre }: { id: number; nombre: string }) =>
+      api.post<{
+        cambiado: boolean
+        nombre: string
+        antes?: string
+        datos_movidos?: boolean
+        /** Las transformaciones que la leen y a las que se les arregló el origen. */
+        dependientes?: string[]
+        flujos_tocados?: number
+      }>(`/transformaciones/${id}/renombrar`, { nombre }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: clave.lista })
+      qc.invalidateQueries({ queryKey: ['transformaciones', 'origenes'] })
+      qc.invalidateQueries({ queryKey: ['proyectos'] })
+      qc.invalidateQueries({ queryKey: ['flujos'] })
+    },
+  })
+}
+
 export function useEjecutarTransformacion() {
   const qc = useQueryClient()
   return useMutation({
