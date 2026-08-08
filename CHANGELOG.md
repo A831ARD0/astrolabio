@@ -27,10 +27,9 @@ versionado es [semántico](https://semver.org/lang/es/).
   **o el de alguna de sus secciones**: buscar `hechos_venta` lleva al proyecto que la
   tiene en vez de obligar a abrirlos uno por uno.
 
-  Dos cambios de orden que vienen con esto: **las secciones del proyecto que se está
-  editando van primero** —son las que se encadenan— y **las tablas del motor van al
-  final**, porque en una instalación con datos de verdad son las de demostración del
-  prototipo y tenerlas arriba obliga a pasar por delante de ellas cada vez.
+  El orden de los grupos **no cambia**: quien ya sabe dónde está cada cosa no tiene
+  por qué volver a aprenderlo, y para quitarse un grupo de en medio ya está el
+  plegado.
 
 - **El nombre de una transformación ya se puede cambiar.** Estaba bloqueado con razón
   —el nombre es también el directorio del Parquet y el nombre con el que otras la

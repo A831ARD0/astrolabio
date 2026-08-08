@@ -270,26 +270,15 @@ export function Etl() {
               </div>
             )}
 
-            {/* Las secciones de ESTE proyecto van primero: son las que se encadenan
-                mientras se arma el proyecto, y con su número se ve que la 5 lee de la
-                4. Las intermedias solo aparecen aquí, dentro de su proyecto. */}
-            {secciones.length > 0 && (
-              <Grupo titulo="Secciones de este proyecto" clave="etl-g-secciones"
-                     cuenta={secciones.length} forzarAbierto={buscando}>
+            {tablas.length > 0 && (
+              <Grupo titulo="Tablas del motor" clave="etl-g-motor"
+                     cuenta={tablas.length} forzarAbierto={buscando}>
                 <div className="lista">
-                  {secciones.map((t) => (
-                    <button
-                      key={t.nombre}
-                      disabled={!t.tiene_datos}
-                      title={t.tiene_datos
-                        ? `Sección ${t.seccion}`
-                        : 'Todavía no se ha ejecutado: córrela una vez y aquí '
-                          + 'aparecerá con sus datos'}
-                      onClick={() => agregarOrigen('dataset', t.nombre)}
-                    >
-                      <span className="orden-seccion">{t.seccion}</span>
+                  {tablas.map((t) => (
+                    <button key={t.nombre}
+                            onClick={() => agregarOrigen('tabla', t.nombre)}>
                       <span className="nom mono">{t.nombre}</span>
-                      {t.intermedia && <span className="dcha">int</span>}
+                      <span className="dcha">{t.filas.toLocaleString('es-MX')}</span>
                     </button>
                   ))}
                 </div>
@@ -351,6 +340,32 @@ export function Etl() {
               </Grupo>
             )}
 
+            {/* Las secciones de ESTE proyecto, con su número: es lo que permite
+                encadenar en orden sin adivinar —la 5 lee de la 4, y se ve—. Las
+                intermedias solo aparecen aquí, dentro de su proyecto. */}
+            {secciones.length > 0 && (
+              <Grupo titulo="Secciones de este proyecto" clave="etl-g-secciones"
+                     cuenta={secciones.length} forzarAbierto={buscando}>
+                <div className="lista">
+                  {secciones.map((t) => (
+                    <button
+                      key={t.nombre}
+                      disabled={!t.tiene_datos}
+                      title={t.tiene_datos
+                        ? `Sección ${t.seccion}`
+                        : 'Todavía no se ha ejecutado: córrela una vez y aquí '
+                          + 'aparecerá con sus datos'}
+                      onClick={() => agregarOrigen('dataset', t.nombre)}
+                    >
+                      <span className="orden-seccion">{t.seccion}</span>
+                      <span className="nom mono">{t.nombre}</span>
+                      {t.intermedia && <span className="dcha">int</span>}
+                    </button>
+                  ))}
+                </div>
+              </Grupo>
+            )}
+
             {otros.length > 0 && (
               <Grupo titulo="Resultados de otras" clave="etl-g-otras"
                      cuenta={otros.length} forzarAbierto={buscando}>
@@ -366,24 +381,6 @@ export function Etl() {
                     >
                       <span className="nom mono">{t.nombre}</span>
                       {t.proyecto && <span className="dcha">{t.proyecto}</span>}
-                    </button>
-                  ))}
-                </div>
-              </Grupo>
-            )}
-
-            {/* Las tablas del motor van al final: en una instalación con datos de
-                verdad son las de demostración del prototipo, y tenerlas arriba
-                obliga a pasar por delante de ellas cada vez. */}
-            {tablas.length > 0 && (
-              <Grupo titulo="Tablas del motor" clave="etl-g-motor"
-                     cuenta={tablas.length} forzarAbierto={buscando}>
-                <div className="lista">
-                  {tablas.map((t) => (
-                    <button key={t.nombre}
-                            onClick={() => agregarOrigen('tabla', t.nombre)}>
-                      <span className="nom mono">{t.nombre}</span>
-                      <span className="dcha">{t.filas.toLocaleString('es-MX')}</span>
                     </button>
                   ))}
                 </div>
