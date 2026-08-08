@@ -99,6 +99,12 @@ export interface TransformacionResumen {
   ultima_ejecucion: string | null
   ultimo_estado: string | null
   tiene_datos: boolean
+  /** Andamiaje: su resultado existe para otra sección, no para graficarlo. */
+  intermedia: boolean
+  proyecto_id: number | null
+  proyecto: string | null
+  /** Su número de sección dentro del proyecto, 1..n. */
+  orden: number | null
 }
 
 export interface Previa {
@@ -118,7 +124,8 @@ export interface Conversion {
 
 const clave = {
   lista: ['transformaciones'] as const,
-  origenes: ['transformaciones', 'origenes'] as const,
+  origenes: (proyecto: number | null) =>
+    ['transformaciones', 'origenes', proyecto] as const,
   columnas: (tipo: string, ref: string) =>
     ['transformaciones', 'columnas', tipo, ref] as const,
   historial: (id: number) => ['transformaciones', id, 'historial'] as const,
@@ -131,21 +138,30 @@ export function useTransformaciones() {
   })
 }
 
-export function useOrigenesDisponibles() {
+/**
+ * Lo que se puede usar como entrada.
+ *
+ * `proyecto` es el proyecto que se está editando, y cambia una cosa: las secciones
+ * marcadas como **intermedias** solo se ofrecen dentro de su propio proyecto. Un
+ * mapeo de códigos es andamiaje del proyecto que lo armó; con dieciocho secciones
+ * por sucursal, ofrecerlas a todo el mundo hace la lista inservible por volumen.
+ */
+export function useOrigenesDisponibles(proyecto: number | null = null) {
   return useQuery({
-    queryKey: clave.origenes,
+    queryKey: clave.origenes(proyecto),
     queryFn: () =>
       api.get<{
         tablas: { nombre: string; filas: number }[]
         datasets: { nombre: string; filas: number; tiene_datos: boolean
                     usable: boolean }[]
         transformaciones: { nombre: string; filas: number; tiene_datos: boolean
-                            usable: boolean }[]
+                            usable: boolean; intermedia: boolean
+                            proyecto: string | null; seccion: number | null }[]
         /** La misma tabla del origen traída por varias conexiones. */
         en_varias_conexiones: { tabla: string; conexiones: number; cargados: number }[]
         /** Lo que no se pudo leer, y por qué. Un bloque roto no tumba los demás. */
         avisos: string[]
-      }>('/transformaciones/origenes'),
+      }>(`/transformaciones/origenes${proyecto ? `?proyecto_id=${proyecto}` : ''}`),
   })
 }
 
@@ -170,11 +186,22 @@ export function usePrevisualizar() {
 export function useGuardarTransformacion() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, definicion }: { id: number | null; definicion: DefinicionTransformacion }) =>
+    mutationFn: ({ id, definicion, intermedia = false, proyecto_id = null }: {
+      id: number | null
+      definicion: DefinicionTransformacion
+      intermedia?: boolean
+      /** Solo al crear: nace ya dentro del proyecto, al final. */
+      proyecto_id?: number | null
+    }) =>
       id === null
-        ? api.post<TransformacionResumen>('/transformaciones', { definicion })
-        : api.put<TransformacionResumen>(`/transformaciones/${id}`, { definicion }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: clave.lista }),
+        ? api.post<TransformacionResumen>('/transformaciones',
+                                          { definicion, intermedia, proyecto_id })
+        : api.put<TransformacionResumen>(`/transformaciones/${id}`,
+                                         { definicion, intermedia }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: clave.lista })
+      qc.invalidateQueries({ queryKey: ['proyectos'] })
+    },
   })
 }
 
@@ -190,7 +217,8 @@ export function useEjecutarTransformacion() {
       }>(`/transformaciones/${id}/ejecutar`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: clave.lista })
-      qc.invalidateQueries({ queryKey: clave.origenes })
+      qc.invalidateQueries({ queryKey: ['transformaciones', 'origenes'] })
+      qc.invalidateQueries({ queryKey: ['proyectos'] })
     },
   })
 }

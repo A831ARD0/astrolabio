@@ -35,6 +35,13 @@ export interface Flujo {
   progreso: string | null
   /** Los flujos que llaman a este. Vacío si nadie lo llama. */
   llamado_por: string[]
+  /**
+   * Este «flujo» es en realidad un proyecto: un grupo ordenado de
+   * transformaciones, que se edita en el ETL. Comparte tabla y ejecución con los
+   * flujos, así que sale en la cola y en Tareas como todo lo demás — pero no en
+   * la lista de flujos, donde no se puede editar.
+   */
+  es_proyecto: boolean
   /** Problemas de orden deducidos del linaje. Se recalculan al leer. */
   avisos: string[]
 }
@@ -44,7 +51,9 @@ export interface ResultadoPaso {
   tipo: string
   nombre: string
   /** `cancelado`: alguien detuvo el flujo antes de llegar a este paso. */
+  /** `no_pedido`: la corrida era un tramo y este paso quedó fuera de él. */
   estado: 'exito' | 'error' | 'omitido' | 'corriendo' | 'cancelado' | 'saltado'
+        | 'no_pedido'
   /** Cuántos intentos hicieron falta. Solo viene si hubo más de uno. */
   intentos?: number
   filas?: number
@@ -66,6 +75,13 @@ export interface EjecucionFlujo {
   total: number | null
   /** Si esta corrida la disparó otro flujo, cuál. */
   llamado_por?: string | null
+  /**
+   * Si fue un tramo, desde qué paso. Null cuando corrió completa.
+   *
+   * Va a la vista: tres pasos en verde de treinta y cinco se leen como «todo al
+   * día» si nadie dice que los otros treinta y dos no se pidieron.
+   */
+  desde_paso?: number | null
   /** La corrida que esta continúa, y la que continuó a esta. */
   reanuda_a: number | null
   reanudada_por: number | null
@@ -106,7 +122,13 @@ export function useDisponiblesFlujo() {
     queryKey: clave.disponibles,
     queryFn: () =>
       api.get<{
-        flujos: { id: number; nombre: string; pasos: number; cron_propio: string | null }[]
+        /**
+         * Los flujos que se pueden encadenar, y también los proyectos: el caso útil
+         * es un maestro que trae las cuarenta sucursales y luego llama al proyecto
+         * que las transforma. Van marcados para que se sepa qué se está poniendo.
+         */
+        flujos: { id: number; nombre: string; pasos: number
+                  cron_propio: string | null; es_proyecto: boolean }[]
         cargas: { id: number; nombre: string; tabla: string; cron_propio: string | null }[]
         transformaciones: { id: number; nombre: string; lee_de: Record<string, string[]> }[]
       }>('/flujos/disponibles'),

@@ -51,6 +51,8 @@ interface Paso {
 interface Tarea {
   clave: string
   tipo: 'flujo' | 'carga'
+  /** Solo para los flujos: si en realidad es un proyecto con secciones. */
+  esProyecto?: boolean
   nombre: string
   /** De dónde sale, para poder buscarlo: la conexión, o los nombres de los pasos. */
   contexto: string
@@ -131,6 +133,10 @@ function deFlujo(f: Flujo): Tarea {
         : p.tipo === 'flujo' ? 'flujo' : 'transformar',
       nombre: p.nombre ?? `#${p.id}`,
     })),
+    // Un proyecto es un flujo restringido a transformaciones. Aqui sale igual
+    // —tiene horario y corre de madrugada— pero dicho por su nombre: quien mira
+    // esta pantalla tiene que poder ir al sitio donde de verdad se edita.
+    esProyecto: f.es_proyecto,
     cron: f.cron,
     activa: f.programacion_activa,
     zona: f.zona_horaria,
@@ -140,7 +146,7 @@ function deFlujo(f: Flujo): Tarea {
     // solo estorba.
     detalle: f.progreso ?? f.ultimo_mensaje ?? (duracion(f.ultima_ms) || null),
     proxima: f.proxima_corrida,
-    destino: `/flujos?flujo=${f.id}`,
+    destino: f.es_proyecto ? '/etl' : `/flujos?flujo=${f.id}`,
     flujoId: f.id,
     tambienEn: null,
     llamadoPor: f.llamado_por,
@@ -389,7 +395,11 @@ export function Tareas() {
                     </td>
                     <td>
                       <strong>{t.nombre}</strong>{' '}
-                      <span className="etiqueta dim">{t.tipo}</span>
+                      {/* «proyecto» y no «flujo» aunque por dentro sea lo mismo:
+                          quien lee esta pantalla necesita saber dónde se edita. */}
+                      <span className="etiqueta dim">
+                        {t.esProyecto ? 'proyecto' : t.tipo}
+                      </span>
                       {t.tambienEn && (
                         <div className="chico aviso-texto">
                           también corre dentro de «{t.tambienEn}»
@@ -403,7 +413,10 @@ export function Tareas() {
                     </td>
                     <td className="chico suave">
                       {t.tipo === 'flujo'
-                        ? `${t.pasos.length} paso${t.pasos.length === 1 ? '' : 's'}`
+                        ? t.esProyecto
+                          ? `${t.pasos.length} `
+                            + `secci${t.pasos.length === 1 ? 'ón' : 'ones'}`
+                          : `${t.pasos.length} paso${t.pasos.length === 1 ? '' : 's'}`
                         : t.contexto}
                     </td>
                     <td className="chico">{horario(t)}</td>

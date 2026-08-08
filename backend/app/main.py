@@ -14,7 +14,7 @@ from app.esquema import actualizar as actualizar_esquema
 from app.modelos_db import Rol, Usuario
 from app.rutas import (
     auth, avisos, catalogo, conexiones, dashboards, flujos, gobierno, modelos,
-    transformaciones,
+    proyectos, transformaciones,
 )
 from app.seguridad import hashear
 
@@ -59,6 +59,7 @@ app.include_router(dashboards.router)
 app.include_router(flujos.router)
 app.include_router(gobierno.router)
 app.include_router(modelos.router)
+app.include_router(proyectos.router)
 app.include_router(transformaciones.router)
 
 

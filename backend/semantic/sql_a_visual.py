@@ -76,7 +76,7 @@ def desde_sql(sql: str, conocidos: dict[str, str] | None = None) -> Conversion:
     resultado de otra transformacion—, `tabla_en_conexiones` para una tabla que
     llegó de varias conexiones a la vez.
 
-    Sin ese mapa no se puede saber de donde sacar `FROM cat_conexiones`, y lo que
+    Sin ese mapa no se puede saber de donde sacar `FROM cat_zonas`, y lo que
     se hacia era suponer que toda tabla nombrada era del motor analitico. Cuando no
     lo era, la consulta fallaba con un «Catalog Error: Table with name ... does not
     exist» de DuckDB que culpaba a la tabla y no explicaba nada.

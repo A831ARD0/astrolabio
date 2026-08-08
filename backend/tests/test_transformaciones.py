@@ -570,7 +570,7 @@ def test_pegar_sql_con_una_tabla_del_motor_la_deja_como_tabla(cliente, cab_admin
 
 def test_pegar_sql_que_nombra_algo_inexistente_lo_dice_en_claro(cliente, cab_admin):
     """
-    El caso que le paso a quien uso esto: `SELECT * FROM cat_conexiones`, una tabla
+    El caso que le paso a quien uso esto: `SELECT * FROM cat_zonas`, una tabla
     que vive en la base de la que salieron los datos y no aqui.
 
     Lo que salia era un «Catalog Error ... Did you mean
@@ -609,10 +609,10 @@ def test_en_modo_sql_una_tabla_sin_origen_da_un_error_util(cliente, cab_admin):
             "nombre": "sql_sin_origen",
             "origenes": [{"nombre": "v", "tipo": "tabla", "referencia": "fact_venta"}],
             "pasos": [],
-            "sql": "SELECT * FROM cat_conexiones",
+            "sql": "SELECT * FROM cat_zonas",
         }})
     assert r.status_code == 422, r.text
     detalle = str(r.json()["detail"])
-    assert "cat_conexiones" in detalle
+    assert "cat_zonas" in detalle
     assert "no está entre los orígenes" in detalle
     assert "Orígenes de esta transformación: v" in detalle

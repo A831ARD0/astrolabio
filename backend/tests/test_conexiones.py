@@ -601,21 +601,21 @@ def test_la_auditoria_registra_el_cambio_sin_el_secreto(cliente, cab_admin,
 def test_el_nombre_se_arma_de_la_conexion_y_la_tabla():
     from app.rutas.conexiones import nombre_sugerido
 
-    assert nombre_sugerido("VW_MATRIZ", None, "cat_conexiones") == \
-        "VW_MATRIZ__cat_conexiones"
+    assert nombre_sugerido("SUC_CENTRAL", None, "cat_zonas") == \
+        "SUC_CENTRAL__cat_zonas"
     # El esquema entra solo cuando distingue: en MySQL es la base y suele ser el
     # mismo para toda la conexion, asi que meterlo siempre alargaria los cuarenta
     # nombres sin separar nada.
-    assert nombre_sugerido("VW", "VW", "ventas") == "VW__ventas"
-    assert nombre_sugerido("VW", "contab", "ventas") == "VW__contab__ventas"
+    assert nombre_sugerido("SUC", "SUC", "ventas") == "SUC__ventas"
+    assert nombre_sugerido("SUC", "contab", "ventas") == "SUC__contab__ventas"
 
 
 def test_el_nombre_sirve_como_carpeta():
     """Tambien es la ruta del Parquet: nada de espacios, acentos ni separadores."""
     from app.rutas.conexiones import nombre_sugerido
 
-    sucio = nombre_sugerido("VW Matriz / Oaxaca", None, "cat.conexiones")
-    assert sucio == "VW_Matriz_Oaxaca__cat_conexiones"
+    sucio = nombre_sugerido("Suc Central / Norte", None, "cat.zonas")
+    assert sucio == "Suc_Central_Norte__cat_zonas"
     assert not (set(sucio) & set(' <>:"/\\|?*.'))
 
 

@@ -1313,3 +1313,38 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   padding-top: 6px;
   border-top: 1px solid var(--borde);
 }
+
+/* El numero de seccion dentro de un proyecto. Es el paso en el que corre, asi que
+   se lee como un ordinal y no como un adorno: sin el, «desde aqui» no dice desde
+   donde. Ancho fijo para que los nombres queden alineados — una lista de dieciocho
+   renglones donde el texto baila es ilegible. */
+.lista button .orden-seccion {
+  flex: 0 0 16px;
+  font-size: 10px;
+  text-align: right;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las acciones de una seccion: ejecutar desde aqui, subir, bajar, sacar. Flotan
+   sobre el final del renglon en vez de ir en linea, y aparecen al pasar por encima.
+   En linea se llevaban ochenta pixeles de un panel de doscientos treinta y dejaban
+   los nombres en «bo…» — que en una lista de dieciocho secciones no distingue nada. */
+.lista button:has(.acciones-seccion) { position: relative; }
+.lista button .acciones-seccion {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 1px 2px;
+  border-radius: 5px;
+  background: var(--fondo-alto);
+  opacity: 0;
+  pointer-events: none;
+}
+.lista button:hover .acciones-seccion { opacity: 1; pointer-events: auto; }
+/* Dentro de la capa ya no hace falta el aparecer-al-pasar de cada uno: la capa
+   entera es la que aparece. */
+.lista button .acciones-seccion .agregar { opacity: 1; margin-left: 0; }

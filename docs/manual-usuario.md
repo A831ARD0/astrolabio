@@ -171,7 +171,7 @@ pantalla te dice qué haría hoy: *«El mes en curso y el anterior: del 2026-07-
 **Transformar → Pegar SQL.** Se puede escribir SQL normal contra lo que ya tienes:
 
 ```sql
-SELECT * FROM VW_MATRIZ__ventas WHERE anio = 2026
+SELECT * FROM SUC_CENTRAL__ventas WHERE anio = 2026
 ```
 
 El nombre que pongas en el `FROM` se busca entre **lo que existe aquí**: las tablas
@@ -373,7 +373,7 @@ juntas, nada dice de cuál venía cada fila — y ese dato no está en el origen
 porque allá cada base es «la base».
 
 Una etiqueta es una **constante de la conexión** que sale como **columna** al leer
-cualquiera de sus datasets: `id_sucursal = 3` en VW_MATRIZ, `= 5` en PTO. Es el
+cualquiera de sus datasets: `id_sucursal = 3` en una, `= 5` en otra. Es el
 equivalente exacto de la variable por sucursal de un script de Qlik.
 
 Se editan **todas juntas**, en una tabla de conexiones × etiquetas: ir una por una
@@ -447,6 +447,83 @@ inflado, y aquí se ve antes de publicar nada.
 Si algo no se puede representar (funciones de ventana, `HAVING`, subconsultas,
 CTEs…), **se dice cuál y por qué**, y no se convierte. Una conversión aproximada es
 peor que ninguna: seguirías editando unos pasos que dicen otra cosa.
+
+### Proyectos y secciones
+
+Una transformación sola está bien para una cosa suelta. Cuando son dieciocho que van
+juntas —limpiar series, armar el calendario, calcular los hechos de venta, los de
+servicio— tenerlas sueltas en una lista plana no dice qué va con qué, y con cuarenta
+sucursales deja de ser manejable.
+
+Para eso está el **proyecto**: un grupo de transformaciones que corren en orden, con
+un solo horario. Es lo mismo que un script con secciones.
+
+```
+▾ PROYECTOS                              1
+  ▾ TRANSFORMADOR_VENTAS              4    ▶
+      éxito  tramo desde 3   8/8/2026, 6:04 a.m.
+      1 ● series                    int
+      2 ● calendario                int
+      3 ● hechos_venta          469,985
+      4 ● hechos_servicio       128,400
+    + Sección      Borrar proyecto
+▾ SIN PROYECTO                           2
+```
+
+- **Crear uno**: escribe el nombre abajo de la lista y pulsa *Crear*. Nace vacío.
+- **Meterle transformaciones**: despliega el proyecto y pulsa el `+` de cualquiera de
+  las de *Sin proyecto*. O pulsa *+ Sección* para crear una nueva ya dentro.
+- **Ordenarlas**: con `↑` y `↓`. **El número que se ve es el paso en el que corre.**
+- **Sacar una**: la `✕` la deja suelta. **No la borra** y no toca sus datos: sacar
+  algo de una carpeta no es tirarlo.
+
+El punto de color de cada sección dice cómo salió la última vez, así que de un golpe
+se ve cuál de las dieciocho es la que rompe.
+
+Borrar el proyecto borra el orden y el horario. **Las secciones quedan sueltas, con
+sus datos**: pueden estar alimentando un tablero.
+
+Lo que ya tenías no cambia. Las transformaciones de antes siguen donde estaban, ahora
+bajo *Sin proyecto*, y se mueven cuando tú decidas dónde van.
+
+#### Ejecutar solo una parte
+
+El `▶` del proyecto corre las secciones en orden, de la primera a la última.
+
+El `▶` de una **sección** corre **de ahí al final**. Es lo que se usa a diario:
+cuando estás afinando la sección 12 de dieciocho, rehacer las once anteriores son
+veinte minutos de espera por nada.
+
+Las secciones anteriores quedan anotadas como **«no se pidió»** —que no es lo mismo
+que «salió bien» ni que «se omitió por un fallo»— y la corrida se marca **«tramo
+desde 3»**. Esa marca importa: sin ella, dos secciones en verde de dieciocho se leen
+como *el proyecto está al día*, y no lo está. Los datos de las que no se pidieron son
+de antes.
+
+Por lo mismo, un tramo que sale bien no manda el correo de «ya se arregló»: lo que
+fallaba puede ser justo lo que no se pidió.
+
+#### Secciones intermedias
+
+Marca **intermedia** una sección que es andamiaje: un mapeo de códigos, la tabla de
+series, un calendario auxiliar. Su resultado se sigue calculando y guardando —es lo
+que permite ejecutarla sola y ver sus filas— pero **solo se ofrece como origen dentro
+de su propio proyecto**, y no aparece en las listas de datos ni se puede usar en un
+modelo.
+
+Con dieciocho secciones por sucursal, sin esta marca el catálogo se llena de tablas
+de andamiaje que nadie va a graficar.
+
+#### Un proyecto dentro de un flujo
+
+Por dentro, un proyecto **es** un flujo al que solo se le pueden poner
+transformaciones. De ahí que tenga horario propio, salga en *Tareas* y se detenga con
+el mismo botón que todo lo demás.
+
+Y de ahí también que un flujo pueda llamarlo como un paso, que es el caso útil: el
+maestro trae las cuarenta sucursales y después llama al proyecto que las transforma.
+En la pantalla de *Flujos*, los proyectos salen en su propia lista y solo se pueden
+encadenar — editarlos se hace aquí, donde sus pasos son secciones.
 
 ### El panel de la izquierda
 

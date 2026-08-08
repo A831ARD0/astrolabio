@@ -56,6 +56,6 @@ def test_los_nombres_del_destino_siguen_siendo_estrictos():
     # `valida_ident` es para lo que generamos nosotros -el nombre del dataset-,
     # y ahi si conviene la regla dura: son nombres que elegimos y que acaban en
     # rutas de disco y en el catalogo del motor.
-    assert valida_ident("vw_matriz__ventas") == "vw_matriz__ventas"
+    assert valida_ident("suc_central__ventas") == "suc_central__ventas"
     with pytest.raises(ErrorConector):
         valida_ident("NF Header")

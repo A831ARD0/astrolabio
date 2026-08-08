@@ -181,9 +181,14 @@ def _ejecutar_flujo(sesion, t: Trabajo) -> None:
     try:
         # `parar` se consulta entre pasos. Se pasa como funcion y no como valor
         # porque el valor cambia mientras el flujo corre: es justo el punto.
+        # Un tramo: correr de la seccion N hacia el final. Lo pide la pantalla del
+        # ETL —«ejecutar desde aqui»— y pasa por la cola como todo lo demas, para
+        # que se pueda detener igual y salga en la misma lista.
+        desde = t.opciones.get("desde_paso")
         r = ejecutar_flujo(sesion, f, actor, parar=lambda: t.parar,
                            saltar=saltar,
-                           reanuda_a=int(reanuda_a) if reanuda_a else None)
+                           reanuda_a=int(reanuda_a) if reanuda_a else None,
+                           desde_paso=int(desde) if desde else None)
         sesion.commit()
         log.info("Flujo '%s' completo: %d pasos en %s ms",
                  f.nombre, len(r["pasos"]), r["ms"])

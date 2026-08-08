@@ -209,6 +209,14 @@ class Transformacion(Base):
     # Linaje: de qué lee. Se guarda al ejecutar, no al guardar la definición, para
     # que refleje lo que de verdad se leyó.
     lee_de: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # Andamiaje: un resultado que existe para que otra sección lo use, no para que
+    # nadie lo grafique. Un mapeo de códigos, una tabla de series, un calendario
+    # auxiliar. Sigue materializándose —es lo que permite ejecutar una sección
+    # sola y ver sus filas— pero no se ofrece como origen fuera de su proyecto ni
+    # aparece en las listas de datos. Con dieciocho secciones por sucursal, sin
+    # esta marca el catálogo se vuelve inservible por volumen.
+    intermedia: Mapped[bool] = mapped_column(Boolean, default=False)
     filas: Mapped[int] = mapped_column(Integer, default=0)
     bytes_parquet: Mapped[int] = mapped_column(Integer, default=0)
     ultima_ejecucion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -261,8 +269,19 @@ class Flujo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(120), unique=True)
     descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # [{"tipo": "carga"|"transformacion", "id": n, "nombre": "..."}]
+    # [{"tipo": "carga"|"transformacion"|"flujo", "id": n, "nombre": "..."}]
     pasos: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Un PROYECTO es este mismo flujo restringido a transformaciones: lo que en
+    # Qlik es un script con secciones. Sus pasos son sus secciones, en orden.
+    #
+    # Comparte tabla con los flujos a propósito. Un proyecto es literalmente «un
+    # grupo de transformaciones que corren en orden, con un horario», que es la
+    # definición de un flujo; darle su propio motor significaría mantener dos
+    # copias de los reintentos, la cancelación cooperativa, la reanudación y el
+    # historial por paso, y que una de las dos se quedara atrás. Lo que cambia es
+    # el vocabulario de la pantalla y qué pasos se admiten, no la ejecución.
+    es_proyecto: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Al fallar, por defecto se DETIENE. Seguir recalculando sobre datos que no se
     # cargaron produce un número que parece fresco y no lo es.

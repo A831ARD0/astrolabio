@@ -10,6 +10,11 @@
  *    puede leer exactamente qué se va a ejecutar, y copiarlo.
  * 3. **Pegar SQL es de primera clase.** Quien ya tiene su consulta no debería
  *    rearmarla; y si se puede, se convierte a pasos para poder seguir editándola.
+ * 4. **Las transformaciones viven en proyectos, con secciones.** Es lo que en el
+ *    editor de carga de Qlik son las secciones de un script: una lista ordenada que
+ *    se puede correr entera o desde una sección hacia el final. Sin eso, dieciocho
+ *    transformaciones sueltas más un flujo que las ordena es correcto pieza por
+ *    pieza e inmanejable en conjunto.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -30,6 +35,7 @@ import {
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
 import { PanelLateral, Seccion } from '../comunes/Panel'
+import { PanelProyectos } from '../etl/PanelProyectos'
 import { columnasAntesDe } from '../etl/columnas'
 import { Velo } from '../comunes/Velo'
 
@@ -48,7 +54,6 @@ const VACIA: DefinicionTransformacion = {
 
 export function Etl() {
   const lista = useTransformaciones()
-  const disponibles = useOrigenesDisponibles()
   const previa = usePrevisualizar()
   const guardar = useGuardarTransformacion()
   const ejecutar = useEjecutarTransformacion()
@@ -60,19 +65,36 @@ export function Etl() {
   const [modoSql, setModoSql] = useState(false)
   const [pegarSql, setPegarSql] = useState(false)
   const [sqlPegado, setSqlPegado] = useState('')
+  const [intermedia, setIntermedia] = useState(false)
+  // El proyecto en cuyo contexto se está editando. Para una sección guardada es el
+  // suyo; para una nueva, el que se pulsó al crearla. Manda en una sola cosa: qué
+  // intermedias se ofrecen como origen.
+  const [proyectoId, setProyectoId] = useState<number | null>(null)
+  const [proyectoNombre, setProyectoNombre] = useState<string | null>(null)
+  const [ordenSeccion, setOrdenSeccion] = useState<number | null>(null)
+
+  const disponibles = useOrigenesDisponibles(proyectoId)
 
   function cargar(t: TransformacionResumen) {
     setId(t.id)
     setD(t.definicion)
     setModoSql(!!t.definicion.sql)
+    setIntermedia(t.intermedia)
+    setProyectoId(t.proyecto_id)
+    setProyectoNombre(t.proyecto)
+    setOrdenSeccion(t.orden)
     setAbierto(null)
     previa.reset()
   }
 
-  function nueva() {
+  function nueva(destino: number | null = null) {
     setId(null)
     setD(VACIA)
     setModoSql(false)
+    setIntermedia(false)
+    setProyectoId(destino)
+    setProyectoNombre(null)
+    setOrdenSeccion(null)
     setAbierto(null)
     previa.reset()
   }
@@ -101,6 +123,14 @@ export function Etl() {
   const columnasFinales = previa.data?.columnas?.length
     ? previa.data.columnas
     : columnasAntesDe(columnas, d.pasos, d.pasos.length)
+
+  // Los resultados de otras transformaciones, partidos en dos: las secciones de
+  // este proyecto —que es lo que se va a encadenar— y todo lo demás. La propia no
+  // se ofrece: leerse a sí misma no tiene final.
+  const resultados = (disponibles.data?.transformaciones ?? [])
+    .filter((t) => t.nombre !== d.nombre)
+  const seccionesDelProyecto = resultados.filter((t) => t.seccion !== null)
+  const otrosResultados = resultados.filter((t) => t.seccion === null)
 
   const pasoUnir = abierto !== null ? d.pasos[abierto] : undefined
   const origenDerecha =
@@ -145,34 +175,12 @@ export function Etl() {
     <div className="editor">
       {/* --------------------------------------------------- izquierda */}
       <PanelLateral clave="etl">
-        <Seccion titulo="Transformaciones" clave="etl-lista"
-                 extra={lista.data?.length ?? 0}>
-          <>
-            <div className="lista">
-              {lista.data?.map((t) => (
-                <button
-                  key={t.id}
-                  className={id === t.id ? 'sel' : ''}
-                  onClick={() => cargar(t)}
-                  title={t.descripcion ?? undefined}
-                >
-                  <span
-                    className={`punto ${t.tiene_datos ? 'dimension' : ''}`}
-                    style={t.tiene_datos ? undefined : { background: 'var(--borde-fuerte)' }}
-                  />
-                  <span className="nom">{t.nombre}</span>
-                  <span className="dcha">
-                    {t.filas ? t.filas.toLocaleString('es-MX') : '—'}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button className="btn chico" style={{ marginTop: 8, width: '100%' }}
-                    onClick={nueva}>
-              + Nueva transformación
-            </button>
-          </>
-        </Seccion>
+        <PanelProyectos
+          transformaciones={lista.data ?? []}
+          seleccionada={id}
+          alAbrir={cargar}
+          alNueva={nueva}
+        />
 
         {/* `principal`: la lista larga se lleva el espacio que sobre, y el boton
             de «+ Nueva transformación» de arriba se queda a la vista. */}
@@ -279,24 +287,55 @@ export function Etl() {
               </>
             )}
 
-            {(disponibles.data?.transformaciones.length ?? 0) > 0 && (
+            {/* Las secciones de ESTE proyecto van primero y con su número. Es lo
+                que permite encadenar en orden sin adivinar: la 5 lee de la 4, y se
+                ve. Las intermedias solo aparecen aquí, dentro de su proyecto. */}
+            {(seccionesDelProyecto.length > 0) && (
+              <>
+                <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
+                  Secciones de este proyecto
+                </div>
+                <div className="lista">
+                  {seccionesDelProyecto.map((t) => (
+                    <button
+                      key={t.nombre}
+                      disabled={!t.tiene_datos}
+                      title={t.tiene_datos
+                        ? `Sección ${t.seccion}`
+                        : 'Todavía no se ha ejecutado: córrela una vez y aquí '
+                          + 'aparecerá con sus datos'}
+                      onClick={() => agregarOrigen('dataset', t.nombre)}
+                    >
+                      <span className="orden-seccion">{t.seccion}</span>
+                      <span className="nom mono">{t.nombre}</span>
+                      {t.intermedia && <span className="dcha">int</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {otrosResultados.length > 0 && (
               <>
                 <div className="chico tenue" style={{ padding: '8px 8px 4px' }}>
                   Resultados de otras
                 </div>
                 <div className="lista">
-                  {disponibles.data?.transformaciones
-                    .filter((t) => t.nombre !== d.nombre)
-                    .map((t) => (
-                      <button
-                        key={t.nombre}
-                        disabled={!t.tiene_datos}
-                        title={t.tiene_datos ? undefined : 'Todavía no se ha ejecutado'}
-                        onClick={() => agregarOrigen('dataset', t.nombre)}
-                      >
-                        <span className="nom mono">{t.nombre}</span>
-                      </button>
-                    ))}
+                  {otrosResultados.map((t) => (
+                    <button
+                      key={t.nombre}
+                      disabled={!t.tiene_datos}
+                      title={t.proyecto
+                        ? `Sección de «${t.proyecto}»`
+                        : t.tiene_datos ? undefined : 'Todavía no se ha ejecutado'}
+                      onClick={() => agregarOrigen('dataset', t.nombre)}
+                    >
+                      <span className="nom mono">{t.nombre}</span>
+                      {t.proyecto && (
+                        <span className="dcha">{t.proyecto}</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </>
             )}
@@ -328,6 +367,32 @@ export function Etl() {
             </button>
           </div>
 
+          {/* Dónde está esto que se está editando. Perder el hilo entre doscientas
+              transformaciones era la queja de fondo: si la pantalla no lo dice, hay
+              que ir a buscarlo al panel. */}
+          {proyectoNombre && ordenSeccion !== null && (
+            <span className="chico tenue" style={{ whiteSpace: 'nowrap' }}>
+              Sección {ordenSeccion} de «{proyectoNombre}»
+            </span>
+          )}
+          {id === null && proyectoId !== null && (
+            <span className="chico tenue" style={{ whiteSpace: 'nowrap' }}>
+              Se creará como última sección del proyecto
+            </span>
+          )}
+
+          <label className="chico tenue"
+                 title="Su resultado es andamiaje de este proyecto: se sigue
+                        materializando —para poder ejecutarla sola y ver sus filas—
+                        pero no se ofrece como origen fuera ni sale en las listas de
+                        datos."
+                 style={{ display: 'flex', alignItems: 'center', gap: 4,
+                          whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={intermedia}
+                   onChange={(e) => setIntermedia(e.target.checked)} />
+            intermedia
+          </label>
+
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, minWidth: 0 }}>
             <button className="btn" onClick={() => setPegarSql(true)}>
               Pegar SQL
@@ -337,8 +402,23 @@ export function Etl() {
               disabled={!d.nombre.trim() || d.origenes.length === 0 || guardar.isPending}
               onClick={() =>
                 guardar.mutate(
-                  { id, definicion: { ...d, sql: modoSql ? (d.sql ?? '') : null } },
-                  { onSuccess: (t) => setId(t.id) },
+                  {
+                    id,
+                    definicion: { ...d, sql: modoSql ? (d.sql ?? '') : null },
+                    intermedia,
+                    // Solo al crear: nace ya dentro del proyecto, al final. Crearla
+                    // y luego tener que ir a otra pantalla a meterla es el paso de
+                    // más que esto venía a quitar.
+                    proyecto_id: id === null ? proyectoId : null,
+                  },
+                  {
+                    onSuccess: (t) => {
+                      setId(t.id)
+                      setProyectoId(t.proyecto_id)
+                      setProyectoNombre(t.proyecto)
+                      setOrdenSeccion(t.orden)
+                    },
+                  },
                 )
               }
             >

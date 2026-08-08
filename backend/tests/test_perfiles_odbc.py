@@ -82,9 +82,9 @@ def test_el_perfil_dsn_arma_la_cadena_del_dsn():
     cadena ya traen todo dentro. Pedirles plantilla los hacia contestar "Perfil
     ODBC desconocido" para un perfil que si existe y sale en el desplegable.
     """
-    c = crear("odbc", {"perfil": "dsn", "dsn": "VW_MATRIZ", "user": "admin"})
+    c = crear("odbc", {"perfil": "dsn", "dsn": "SUC_CENTRAL", "user": "admin"})
     cadena = c._cadena()
-    assert "DSN=VW_MATRIZ" in cadena
+    assert "DSN=SUC_CENTRAL" in cadena
     assert "UID=admin" in cadena
     assert "desconocido" not in cadena
 
@@ -111,7 +111,7 @@ def test_todos_los_perfiles_libres_se_pueden_armar():
 
 def test_la_pista_explica_el_choque_de_32_contra_64():
     from app.conectores.odbc import _pista_dsn
-    pista = _pista_dsn({"dsn": "VW_MATRIZ"}, "[IM014] [Microsoft][Administrador de "
+    pista = _pista_dsn({"dsn": "SUC_CENTRAL"}, "[IM014] [Microsoft][Administrador de "
                        "controladores ODBC] La arquitectura del DSN especificado "
                        "no coincide entre el controlador y la aplicacion.")
     assert "32" in pista and "64" in pista

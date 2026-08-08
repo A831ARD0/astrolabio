@@ -7,6 +7,76 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Proyectos con secciones en el ETL.** Un proyecto agrupa transformaciones que
+  corren en orden, con un solo horario. Es el equivalente a un script con secciones:
+  el panel de la izquierda deja de ser una lista plana y pasa a ser
+  `PROYECTO ▸ 1 series, 2 calendario, 3 hechos_venta…`, y el número de cada sección
+  es el paso en el que corre.
+
+  El problema no era de potencia sino de volumen. Un script de dieciocho secciones se
+  convertía en dieciocho transformaciones sueltas más un flujo que las ordenaba:
+  correcto pieza por pieza e inmanejable en conjunto — la lista no dice qué va con
+  qué, y para probar una hay que ir a otra pantalla. Con cuarenta sucursales deja de
+  escalar.
+
+  **Un proyecto es un flujo restringido a transformaciones**, no un objeto nuevo con
+  motor propio: comparte la tabla `flujo` y el ejecutor, y por eso hereda los
+  reintentos, la cancelación entre pasos, la reanudación por identidad, el historial
+  paso a paso y los avisos por correo. Un segundo motor «igual pero para proyectos»
+  acabaría siendo el que se queda atrás. Consecuencias buscadas: el proyecto sale en
+  Tareas, se detiene con el mismo botón, y un flujo puede llamarlo como paso —el
+  maestro trae las cuarenta sucursales y después llama al proyecto que las
+  transforma.
+
+  Lo que ya existe no cambia: una transformación sin proyecto sigue funcionando y
+  sigue apareciendo, ahora bajo **Sin proyecto**. No se migran solas a un proyecto de
+  una sección cada una; eso convertiría doscientas transformaciones en doscientos
+  proyectos y el desorden sería el mismo con otro nombre.
+
+- **Ejecutar un tramo: de una sección al final** (`desde_paso`). Cuando la sección 12
+  de dieciocho es la que se está afinando, rehacer las once anteriores son veinte
+  minutos de espera por nada.
+
+  Los pasos anteriores quedan anotados como **`no se pidió`** —ni `exito`, ni
+  `omitido` por un fallo: son tres cosas distintas y el historial tiene que poder
+  decir cuál fue—, y la corrida se marca **«tramo desde N»** en el panel y en el
+  historial del flujo. Sin esa marca, tres pasos en verde de treinta y cinco se leen
+  como «todo al día», que es justo la pantalla con la que se decide sobre un número
+  que no se recalculó. Por lo mismo, un tramo que sale bien **no dispara el correo de
+  «flujo recuperado»**: los pasos que fallaban pueden ser justo los que no se
+  pidieron.
+
+  Sirve igual para el maestro de las treinta y ocho extracciones, no solo para los
+  proyectos.
+
+- **Secciones intermedias.** Una sección se puede marcar como andamiaje —un mapeo de
+  códigos, una tabla de series, un calendario auxiliar—. Se sigue materializando, que
+  es lo que permite ejecutarla sola y ver sus filas, pero **solo se ofrece como
+  origen dentro de su propio proyecto** y no ensucia las listas de datos. Con
+  dieciocho secciones por sucursal, sin esta marca el catálogo se vuelve inservible
+  por volumen.
+
+### Corregido
+
+- **Una tabla de MySQL que el catálogo no describe ya se puede traer.** El selector
+  listaba `FACTURAS_PR`, en cualquier cliente SQL se consultaba sin problema, y
+  Astrolabio contestaba «La tabla 'ventas_origen.FACTURAS_PR' no existe» — mandando a
+  buscar un error de escritura que no existía.
+
+  La causa: se concluía «no existe» de que `information_schema.columns` viniera
+  vacío, y eso no es lo que significa. Esa vista filtra por privilegios columna a
+  columna y además se queda vacía para una vista que MySQL no puede expandir (su
+  definidor perdió permiso, o una tabla de debajo cambió de nombre). En los dos casos
+  la tabla está ahí y **se puede leer**.
+
+  Ahora se le pregunta al servidor por la vía que no miente: si hay fila en
+  `information_schema.tables`, se pide la forma con un `SELECT … LIMIT 0` y se leen
+  las columnas del cursor. Sin clave primaria, así que la carga será completa en vez
+  de incremental — que es lo correcto con una tabla de la que no se puede saber más.
+  Si tampoco se puede leer, el mensaje dice qué pasó y lo que contestó el servidor,
+  en vez de culpar al nombre. Y cuando de verdad no hay fila, se nombra la otra causa
+  frecuente: sin permiso de lectura, para Astrolabio no existe.
+
 - **Encadenar flujos: un flujo puede ser el paso de otro.** Con el `+` de la lista
   de flujos se pone uno entero como paso del que se está editando, y así uno
   empieza cuando el anterior termina.
@@ -138,8 +208,8 @@ versionado es [semántico](https://semver.org/lang/es/).
 ### Arreglado
 
 - **Pegar SQL suponía que toda tabla nombrada era del motor analítico.** `FROM
-  cat_conexiones` creaba un origen de tipo `tabla` sin comprobar que existiera, y la
-  consulta moría con un `Catalog Error: Table with name cat_conexiones does not
+  cat_zonas` creaba un origen de tipo `tabla` sin comprobar que existiera, y la
+  consulta moría con un `Catalog Error: Table with name cat_zonas does not
   exist! Did you mean "information_schema.constraint_column_usage"?` — que culpa a
   la tabla y no dice lo único útil.
 

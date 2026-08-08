@@ -27,6 +27,26 @@ from app.conectores.base import (
 from app.conectores.base import cita_origen as _ident_duck
 
 
+def _nombre_de_tipo(codigo) -> str:
+    """
+    El codigo de tipo de `cursor.description` como nombre legible.
+
+    Solo se usa en el camino de emergencia —cuando `information_schema` no dio las
+    columnas—, y solo para mostrarlo: lo que decide el tipo real del Parquet es
+    DuckDB al copiar. Un codigo desconocido se devuelve tal cual en vez de
+    inventarse un tipo.
+    """
+    try:
+        from pymysql.constants import FIELD_TYPE
+
+        for nombre, valor in vars(FIELD_TYPE).items():
+            if valor == codigo and not nombre.startswith("_"):
+                return nombre.lower()
+    except Exception:
+        pass
+    return str(codigo)
+
+
 def _ident(nombre: str) -> str:
     """
     Comillas de MySQL — para el SQL que ejecuta pymysql.
@@ -153,13 +173,33 @@ class ConectorMySQL(Conector):
                               nulable=(nul == "YES"), es_clave=(k == "PRI"))
                 for n, t, nul, k in cur.fetchall()
             ]
-            if not columnas:
-                raise ErrorConector(f"La tabla '{esquema}.{tabla}' no existe")
 
             cur.execute("""SELECT table_type FROM information_schema.tables
                            WHERE table_schema=%s AND table_name=%s""", (esquema, tabla))
             fila = cur.fetchone()
             es_vista = bool(fila and fila[0] == "VIEW")
+
+            if not columnas:
+                # `information_schema.columns` VACIO NO SIGNIFICA QUE NO EXISTA.
+                #
+                # Decir «no existe» de una tabla que el propio selector acaba de
+                # listar —y que en cualquier cliente SQL se consulta sin problema—
+                # manda a buscar un error de escritura que no hay. `columns` filtra
+                # por privilegios columna a columna y ademas se queda vacia para una
+                # vista que MySQL no puede expandir (definer sin permisos, o una
+                # tabla de debajo renombrada). En los dos casos la tabla esta ahi y
+                # se puede LEER.
+                #
+                # Asi que se pregunta por el unico camino que no miente: pedirle la
+                # forma al servidor. Un LIMIT 0 no trae filas y devuelve la
+                # descripcion del cursor, que son las columnas de verdad.
+                if fila is None:
+                    raise ErrorConector(
+                        f"En '{esquema}' no hay ninguna tabla ni vista llamada "
+                        f"'{tabla}'. Comprueba el esquema —arriba a la izquierda— y "
+                        f"que el usuario de esta conexión tenga permiso de lectura "
+                        f"sobre ella: sin permiso, para Astrolabio no existe.")
+                columnas = self._columnas_a_ciegas(cur, esquema, tabla, es_vista)
 
             # Conteo real: el estimado de information_schema se desvia mucho en
             # InnoDB, y para decidir carga incremental hace falta el numero real.
@@ -170,6 +210,43 @@ class ConectorMySQL(Conector):
                                es_vista=es_vista, columnas=columnas)
         finally:
             con.close()
+
+    def _columnas_a_ciegas(self, cur, esquema: str, tabla: str,
+                           es_vista: bool) -> list[ColumnaOrigen]:
+        """
+        Las columnas leidas del cursor, cuando `information_schema` no las da.
+
+        Es menos informacion que la del catalogo —no se sabe cual es la clave
+        primaria— y eso no importa aqui: sin clave, la carga es completa en vez de
+        incremental, que es exactamente lo que hay que hacer con una tabla de la que
+        no se puede saber mas. Lo que se gana es que la tabla se puede traer.
+        """
+        try:
+            cur.execute(f"SELECT * FROM {_ident(esquema)}.{_ident(tabla)} LIMIT 0")
+        except Exception as e:
+            que = "La vista" if es_vista else "La tabla"
+            raise ErrorConector(
+                f"{que} '{esquema}.{tabla}' está en el catálogo pero no se puede "
+                f"leer con el usuario de esta conexión: {e}"
+                + (". Una vista deja de poder leerse si su definidor pierde permiso "
+                   "o si alguna tabla de las que usa cambió de nombre."
+                   if es_vista else
+                   ". Suele ser permiso de lectura que le falta al usuario.")) from e
+
+        # `cursor.description`: (nombre, tipo, ..., null_ok) — el codigo de tipo es
+        # numerico, asi que se traduce a algo que se pueda leer en la pantalla.
+        salida: list[ColumnaOrigen] = []
+        for d in cur.description or []:
+            salida.append(ColumnaOrigen(
+                nombre=d[0], tipo_origen=_nombre_de_tipo(d[1]),
+                nulable=bool(d[6]) if len(d) > 6 and d[6] is not None else True,
+                es_clave=False,
+            ))
+        if not salida:
+            raise ErrorConector(
+                f"'{esquema}.{tabla}' no devolvió ninguna columna. No hay nada que "
+                f"traer de ahí.")
+        return salida
 
     def muestra(self, tabla: str, esquema: str | None = None,
                 limite: int = 50,

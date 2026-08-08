@@ -5,7 +5,7 @@
  * dos listas: arriba las conexiones, abajo una tabla plana con todos los datasets
  * del sistema. Con tres conexiones se leía bien; con cuarenta sucursales trayendo
  * varias tablas cada una son cientos de renglones donde el nombre de la tabla se
- * repite —`cat_conexiones` existe en las cuarenta, en bases distintas— y la única
+ * repite —`cat_zonas` existe en las cuarenta, en bases distintas— y la única
  * forma de saber de cuál era cada uno es leerse el nombre entero.
  *
  * Aquí cada conexión es una tarjeta que se abre, con lo suyo dentro y un resumen
@@ -13,7 +13,7 @@
  * Eso último es lo que se busca al entrar por la mañana.
  *
  * El buscador mira **conexión y tabla a la vez**, y abre solas las tarjetas que
- * tengan algo que coincida: buscar `cat_conexiones` con cuarenta sucursales debe
+ * tengan algo que coincida: buscar `cat_zonas` con cuarenta sucursales debe
  * enseñar las cuarenta filas sin tener que abrirlas una por una.
  */
 

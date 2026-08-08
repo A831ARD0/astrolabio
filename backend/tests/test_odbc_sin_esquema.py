@@ -1,7 +1,7 @@
 """
 Origenes ODBC que no tienen esquemas.
 
-El Pervasive de TotalDealer es el caso: el DSN ya apunta a los datos, no hay
+El Pervasive del sistema de origen es el caso: el DSN ya apunta a los datos, no hay
 catalogo ni esquema que elegir, y `SQLTables` devuelve las tablas con esos dos
 campos vacios. El explorador pedia las tablas sin esquema —porque no hay
 ninguno que ofrecer— y el conector respondia «Hace falta indicar el esquema o
@@ -54,7 +54,7 @@ class _Conexion:
 
 def _conector(filas, motor="", **cfg):
     con = _Conexion(filas, motor)
-    c = ConectorODBC({"perfil": "dsn", "dsn": "VW_MATRIZ", **cfg})
+    c = ConectorODBC({"perfil": "dsn", "dsn": "SUC_CENTRAL", **cfg})
     c._abrir = lambda: con        # type: ignore[method-assign]
     return c, con
 
@@ -80,17 +80,17 @@ def test_cada_tabla_se_queda_con_el_esquema_que_declare_el_driver():
 def test_al_listar_sin_filtro_se_quitan_los_catalogos_del_motor():
     c, _ = _conector([_Fila("mysql", None, "user"),
                       _Fila("information_schema", None, "TABLES"),
-                      _Fila("bonn", None, "clientes")],
+                      _Fila("negocio", None, "clientes")],
                      motor="MySQL")
     assert [t.nombre for t in c.listar_tablas()] == ["clientes"]
 
 
 def test_con_base_indicada_se_sigue_filtrando_por_ella():
-    c, con = _conector([_Fila("bonn", None, "clientes")],
-                       motor="MySQL", database="bonn")
+    c, con = _conector([_Fila("negocio", None, "clientes")],
+                       motor="MySQL", database="negocio")
     tablas = c.listar_tablas()
-    assert con.cursor_.pedido == {"catalog": "bonn"}
-    assert tablas[0].esquema == "bonn"
+    assert con.cursor_.pedido == {"catalog": "negocio"}
+    assert tablas[0].esquema == "negocio"
 
 
 def test_no_se_cuelan_las_tablas_de_sistema_del_driver():

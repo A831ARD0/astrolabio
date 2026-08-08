@@ -113,8 +113,31 @@ def _profundidad(sesion: Session, flujo_id: int, nivel: int = 0) -> int:
     return hondo
 
 
+def secciones_tomadas(sesion: Session,
+                      excepto: int | None = None) -> dict[int, str]:
+    """
+    Qué transformación es ya sección de qué proyecto.
+
+    Una transformación en dos proyectos no es un error de ejecución —correría dos
+    veces y ya— pero sí rompe lo único que el proyecto tiene que garantizar: que
+    mirando el panel de la izquierda se sepa dónde vive cada cosa. Con dos casas
+    posibles, el orden que se ve deja de ser el orden que corre.
+    """
+    tomadas: dict[int, str] = {}
+    for p in sesion.scalars(select(Flujo).where(Flujo.es_proyecto.is_(True))):
+        if excepto is not None and p.id == excepto:
+            continue
+        for paso in p.pasos or []:
+            try:
+                tomadas[int(paso["id"])] = p.nombre
+            except (TypeError, ValueError, KeyError):
+                pass
+    return tomadas
+
+
 def revisar_pasos(sesion: Session, pasos: list[dict],
-                  flujo_id: int | None = None) -> list[str]:
+                  flujo_id: int | None = None,
+                  es_proyecto: bool = False) -> list[str]:
     """
     Errores que impiden guardar el flujo: pasos mal formados o que apuntan a algo
     que no existe.
@@ -122,10 +145,35 @@ def revisar_pasos(sesion: Session, pasos: list[dict],
     `flujo_id` es el flujo que se está guardando —None si es nuevo—. Hace falta
     para el paso de tipo `flujo`: sin saber quién soy no se puede ver si me estoy
     llamando a mí mismo.
+
+    `es_proyecto` restringe los pasos a transformaciones. Un proyecto es el script
+    con secciones: mezclarle una extracción o otro proyecto lo convertiría otra vez
+    en un flujo, y entonces el panel de secciones tendría que explicar por qué la
+    sección 3 no es una sección.
     """
     errores: list[str] = []
     if not pasos:
-        return ["El flujo no tiene ningún paso."]
+        # Un proyecto vacío es un estado normal: se crea y luego se le agregan
+        # secciones. Un flujo vacío no: se guarda algo que no hace nada y que a las
+        # seis de la mañana parece que corrió.
+        return [] if es_proyecto else ["El flujo no tiene ningún paso."]
+
+    if es_proyecto:
+        ajenas = secciones_tomadas(sesion, excepto=flujo_id)
+        for i, p in enumerate(pasos, start=1):
+            if p.get("tipo") != "transformacion":
+                errores.append(
+                    f"Sección {i}: un proyecto solo lleva transformaciones. "
+                    f"'{p.get('tipo')}' va en un flujo, no aquí.")
+                continue
+            try:
+                dueno = ajenas.get(int(p.get("id")))
+            except (TypeError, ValueError):
+                continue
+            if dueno:
+                errores.append(
+                    f"Sección {i}: '{p.get('nombre') or p.get('id')}' ya es "
+                    f"sección de «{dueno}». Sácala de ahí primero.")
 
     vistos: set[tuple[str, int]] = set()
     for i, p in enumerate(pasos, start=1):
@@ -446,6 +494,7 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
              parar: Callable[[], bool] | None = None,
              saltar: set[tuple[str, int]] | None = None,
              reanuda_a: int | None = None,
+             desde_paso: int | None = None,
              _desde: datetime | None = None,
              _cadena: frozenset[int] = frozenset(),
              _llamado_por: str | None = None) -> dict[str, Any]:
@@ -464,12 +513,25 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     un paso de tipo `flujo` no vuelva a uno de ellos. Al guardar ya se comprueba,
     pero entre guardar y correr pueden pasar semanas y dos ediciones; esto es lo
     que impide que un ciclo llegue a la madrugada.
+
+    `desde_paso` corre solo de ahí hacia el final. Es lo que en el editor de carga
+    de Qlik se hace ejecutando una sección: cuando la número 12 de dieciocho es la
+    que se está afinando, volver a correr las once anteriores son veinte minutos de
+    espera por nada. Los anteriores quedan anotados como `no_pedido` —ni éxito, ni
+    omitidos por un fallo— y la corrida se marca como tramo, para que nadie lea un
+    tramo verde como «el proyecto entero está al día».
     """
     cadena = frozenset(_cadena) | {flujo.id}
     total = len(flujo.pasos or [])
+    if desde_paso is not None and not 1 <= desde_paso <= max(total, 1):
+        raise ErrorFlujo(
+            f"No se puede empezar en el paso {desde_paso}: "
+            f"{'el flujo no tiene pasos' if not total else f'solo hay {total}'}.")
     # Va en cada version del detalle, no solo en la primera: `_apuntar` lo
     # reescribe entero en cada paso.
-    contexto = {"llamado_por": _llamado_por} if _llamado_por else {}
+    contexto: dict[str, Any] = {"llamado_por": _llamado_por} if _llamado_por else {}
+    if desde_paso is not None and desde_paso > 1:
+        contexto["desde_paso"] = desde_paso
     ejec = FlujoEjecucion(flujo_id=flujo.id, estado=EstadoCarga.corriendo,
                           origen=actor.origen, iniciado_por=actor.id,
                           reanuda_a_id=reanuda_a,
@@ -534,6 +596,15 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     detenido = False
     for i, paso in enumerate(flujo.pasos or [], start=1):
         nombre = paso.get("nombre") or _nombre_de(sesion, paso) or "?"
+
+        if desde_paso is not None and i < desde_paso:
+            # No se pidió. Se anota igual: un hueco en el historial se lee como
+            # «corrió y no hizo nada», y aquí la verdad es «no se le pidió que
+            # corriera», que para depurar es lo contrario.
+            resultados.append({"paso": i, **_sena(paso), "nombre": nombre,
+                               "estado": "no_pedido"})
+            _apuntar()
+            continue
 
         clave = _clave(paso)
         if (saltar and clave is not None and clave in saltar
@@ -670,8 +741,10 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
     hechos = sum(1 for r in resultados
                  if r.get("estado") in ("exito", "saltado"))
     saltados = sum(1 for r in resultados if r.get("estado") == "saltado")
+    # Con un tramo, «3 de 35» seria mentir por el otro lado: no se pidieron 35.
+    pedidos = total - (desde_paso - 1 if desde_paso else 0)
     if detenido and not fallo:
-        cancelado = (f"Detenido a peticion: {hechos} de {total} paso(s) listos"
+        cancelado = (f"Detenido a peticion: {hechos} de {pedidos} paso(s) listos"
                      + (f" ({saltados} venian de la corrida anterior)"
                         if saltados else "")
                      + ". Los demas no se intentaron.")
@@ -692,7 +765,9 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
               usuario_id=actor.id, email=actor.email, objeto_tipo="flujo",
               objeto_id=flujo.id,
               detalle={"nombre": flujo.nombre, "disparo": actor.origen,
-                       "pasos": len(resultados), "ms": ms, "error": fallo})
+                       "pasos": len(resultados), "ms": ms, "error": fallo,
+                       **({"desde_paso": desde_paso} if contexto.get("desde_paso")
+                          else {})})
 
     # El aviso del flujo no reemplaza el de cada carga: son dos preguntas
     # distintas —"salio bien la noche" y "cual paso la arruino"— y quien atiende
@@ -705,12 +780,17 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
         # nada. Un correo de alarma por algo que acaba de hacer quien opera es la
         # forma de que esos correos se dejen de leer.
         pass
-    elif venia_fallando:
+    elif venia_fallando and not contexto.get("desde_paso"):
+        # Un tramo que sale bien no prueba que el flujo se arreglo: los pasos que
+        # fallaban pueden ser justo los que no se pidieron. Decir «recuperado» ahi
+        # es peor que no decir nada, porque cierra el asunto en la cabeza de quien
+        # lo lee.
         avisos.por_flujo_recuperado(sesion, flujo, len(resultados), actor.origen)
 
     resumen = {
         "estado": "error" if fallo else "cancelado" if cancelado else "exito",
         "ms": ms, "pasos": resultados, "mensaje": fallo or cancelado,
+        **({"desde_paso": desde_paso} if contexto.get("desde_paso") else {}),
     }
     if fallo:
         # Confirmar antes de lanzar: si no, el rollback se lleva el historial del

@@ -156,6 +156,9 @@ export function Flujos() {
   const cargas = filtra(todasCargas, 'carga')
   const trans = filtra(todasTrans, 'transformacion')
 
+  const flujosEditables = (lista.data ?? []).filter((x) => !x.es_proyecto)
+  const proyectos = (lista.data ?? []).filter((x) => x.es_proyecto)
+
   /** Qué aviso corresponde a qué paso, para pintarlo donde ocurre. */
   const avisoDe = (paso: PasoFlujo, i: number) =>
     avisos.find((a) => a.startsWith(`Paso ${i + 1} (${paso.nombre}`))
@@ -173,11 +176,15 @@ export function Flujos() {
       {dialogo}
       {/* --------------------------------------------------- izquierda */}
       <PanelLateral clave="flujos">
+        {/* Los proyectos comparten tabla y ejecución con los flujos, pero no se
+            editan aquí: sus pasos son secciones y se ordenan en el ETL. Salir en
+            esta lista invitaría a editarlos por un camino que no valida lo suyo.
+            En Tareas sí se ven, que es donde importa que tienen horario. */}
         <Seccion titulo="Flujos" clave="flujos-lista"
-                 extra={lista.data?.length ?? 0}>
+                 extra={flujosEditables.length}>
           <>
             <div className="lista">
-              {lista.data?.map((x) => {
+              {flujosEditables.map((x) => {
                 const dentro = puestas.has(`flujo-${x.id}`)
                 return (
                   <button key={x.id} className={id === x.id ? 'sel' : ''}
@@ -224,6 +231,40 @@ export function Flujos() {
             </button>
           </>
         </Seccion>
+
+        {/* Los proyectos se editan en el ETL, pero sí se encadenan desde aquí: el
+            caso útil es un maestro que trae las cuarenta sucursales y después llama
+            al proyecto que las transforma. Solo se ofrece la acción de encadenar —
+            pulsar el nombre no abre nada, porque aquí no hay nada que abrir. */}
+        {proyectos.length > 0 && (
+          <Seccion titulo="Proyectos" clave="flujos-proyectos"
+                   extra={proyectos.length}>
+            <div className="lista">
+              {proyectos.map((x) => {
+                const dentro = puestas.has(`flujo-${x.id}`)
+                return (
+                  <button
+                    key={x.id}
+                    className={dentro ? 'puesta' : ''}
+                    title={dentro
+                      ? 'Ya es un paso de este flujo'
+                      : `Encadenar: correr «${x.nombre}» —sus ${x.pasos.length} `
+                        + 'secciones— como un paso de este flujo'}
+                    onClick={() => {
+                      if (!dentro) {
+                        agregar({ tipo: 'flujo', id: x.id, nombre: x.nombre })
+                      }
+                    }}
+                  >
+                    <span className="marca">{dentro ? '✓' : ''}</span>
+                    <span className="nom">{x.nombre}</span>
+                    <span className="dcha">{x.pasos.length} secciones</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Seccion>
+        )}
 
         {/* `principal`: es la lista larga, la que se lleva el espacio que sobra.
             Las otras dos se quedan arriba y abajo, con sus botones a la vista. */}
@@ -462,7 +503,9 @@ export function Flujos() {
                                   ? 'detenido'
                                   : r.estado === 'saltado'
                                     ? 'ya estaba'
-                                    : 'omitido'}
+                                    : r.estado === 'no_pedido'
+                                      ? 'no se pidió'
+                                      : 'omitido'}
                         </span>
                       )}
 
@@ -648,6 +691,17 @@ export function Flujos() {
                         >
                           {e.estado === 'cancelado' ? 'detenido' : e.estado}
                         </span>{' '}
+                        {/* Un tramo. Sin decirlo, tres pasos en verde de treinta y
+                            cinco se leen como «todo al día», que es justo la clase
+                            de pantalla con la que se decide sobre un número que no
+                            se recalculó. */}
+                        {e.desde_paso && (
+                          <span className="etiqueta aviso"
+                                title={`Solo corrió del paso ${e.desde_paso} al `
+                                       + 'final. Los anteriores no se pidieron.'}>
+                            tramo desde {e.desde_paso}
+                          </span>
+                        )}{' '}
                         {e.reanuda_a && (
                           <span className="etiqueta dim"
                                 title={`Continúa la corrida #${e.reanuda_a}`}>
@@ -665,7 +719,9 @@ export function Flujos() {
                           {e.pasos.map((p) => (
                             <tr key={p.paso}>
                               <td className="mono">{p.nombre}</td>
-                              <td className="chico">{p.estado}</td>
+                              <td className="chico">
+                                {p.estado === 'no_pedido' ? 'no se pidió' : p.estado}
+                              </td>
                               <td className="num chico">
                                 {p.filas !== undefined
                                   ? p.filas.toLocaleString('es-MX')

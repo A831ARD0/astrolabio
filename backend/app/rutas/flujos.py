@@ -80,6 +80,11 @@ class Salida(BaseModel):
     # dice «a mano» de un flujo que en realidad lo llama el maestro cada noche.
     llamado_por: list[str]
     avisos: list[str]
+    # Un proyecto es este mismo flujo restringido a transformaciones. Se devuelve
+    # marcado y no escondido: la pantalla de flujos lo saca de su lista —se edita en
+    # el ETL— pero la de tareas tiene que seguir viéndolo, porque tiene horario y
+    # corre de madrugada como todo lo demás.
+    es_proyecto: bool
 
 
 # --------------------------------------------------------------------------- #
@@ -111,6 +116,7 @@ def _salida(sesion: SesionDep, f: Flujo,
         # cambio en otra parte (una transformación que ahora lee de otro dataset),
         # no solo al guardar el flujo.
         avisos=revisar_orden(sesion, f.pasos or []),
+        es_proyecto=bool(f.es_proyecto),
     )
 
 
@@ -133,12 +139,13 @@ def _obtener(sesion: SesionDep, id_: int) -> Flujo:
 
 
 def _validar(sesion: SesionDep, cuerpo: Guardar,
-             flujo_id: int | None = None) -> list[dict]:
+             flujo_id: int | None = None,
+             es_proyecto: bool = False) -> list[dict]:
     if cuerpo.al_fallar not in ("detener", "continuar"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "al_fallar debe ser 'detener' o 'continuar'")
     pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
-    errores = revisar_pasos(sesion, pasos, flujo_id)
+    errores = revisar_pasos(sesion, pasos, flujo_id, es_proyecto=es_proyecto)
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"errores": errores})
@@ -174,7 +181,11 @@ def disponibles(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor)))
         # peleandose por el mismo origen.
         "flujos": [
             {"id": f.id, "nombre": f.nombre, "pasos": len(f.pasos or []),
-             "cron_propio": f.cron if f.programacion_activa else None}
+             "cron_propio": f.cron if f.programacion_activa else None,
+             # Un proyecto también se puede poner como paso, y es justo el caso
+             # útil: el maestro trae las cuarenta sucursales y luego llama al
+             # proyecto que las transforma. Va marcado para que se sepa qué es.
+             "es_proyecto": bool(f.es_proyecto)}
             for f in sesion.scalars(select(Flujo).order_by(Flujo.nombre))
         ],
         "cargas": [
@@ -235,7 +246,7 @@ def crear(cuerpo: Guardar, sesion: SesionDep,
 def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
                actor: Usuario = Depends(exigir_rol(Rol.editor))):
     f = _obtener(sesion, id_)
-    pasos = _validar(sesion, cuerpo, id_)
+    pasos = _validar(sesion, cuerpo, id_, es_proyecto=bool(f.es_proyecto))
     f.nombre = cuerpo.nombre
     f.descripcion = cuerpo.descripcion
     f.pasos = pasos
@@ -250,9 +261,16 @@ def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
 
 @router.post("/{id_}/ejecutar", status_code=status.HTTP_202_ACCEPTED)
 def ejecutar(id_: int, sesion: SesionDep, a_la_par: bool = False,
+             desde_paso: int | None = None,
              actor: Usuario = Depends(exigir_rol(Rol.editor))):
     """
     Lanza el flujo en segundo plano y contesta enseguida.
+
+    `desde_paso` corre solo de ahí al final. Es lo que en el ETL se pulsa como
+    «ejecutar desde aquí»: cuando la sección 12 de dieciocho es la que se está
+    afinando, rehacer las once anteriores son veinte minutos por nada. Lo anterior
+    queda anotado como no pedido y la corrida se marca como tramo, para que un
+    tramo verde no se lea como «todo al día».
 
     No lo corre dentro de la petición a propósito. Veintiocho tablas por el
     puente tardan minutos: el proxy corta con un 502 aunque el servidor siga
@@ -264,20 +282,30 @@ def ejecutar(id_: int, sesion: SesionDep, a_la_par: bool = False,
     todo de golpe. `a_la_par=true` arranca ya, y lo decide quien opera.
     """
     f = _obtener(sesion, id_)
+    total = len(f.pasos or [])
+    if desde_paso is not None and not 1 <= desde_paso <= max(total, 1):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"No se puede empezar en el paso {desde_paso}: "
+            f"{'no tiene pasos' if not total else f'solo hay {total}'}.")
+
     ocupado = trabajos.hay_algo_corriendo()
     try:
         t = trabajos.encolar("flujo", f.id, f.nombre,
                              Actor(id=actor.id, email=actor.email),
-                             a_la_par=a_la_par)
+                             a_la_par=a_la_par,
+                             opciones=({"desde_paso": desde_paso}
+                                       if desde_paso and desde_paso > 1 else None))
     except trabajos.YaEnMarcha as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
     registrar(sesion, accion="flujo_lanzado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="flujo", objeto_id=f.id,
-              detalle={"nombre": f.nombre, "a_la_par": a_la_par})
+              detalle={"nombre": f.nombre, "a_la_par": a_la_par,
+                       **({"desde_paso": desde_paso} if desde_paso else {})})
     return {
         "trabajo_id": t.id,
         "estado": t.estado,
-        "pasos": len(f.pasos or []),
+        "pasos": total - ((desde_paso or 1) - 1),
         # Qué había corriendo cuando se lanzó: es lo que la pantalla necesita
         # para decir "espera turno detrás de X" sin volver a preguntar.
         "esperando_a": ocupado.nombre if ocupado and not a_la_par else None,
@@ -404,6 +432,9 @@ def historial(id_: int, sesion: SesionDep,
             "mensaje": e.mensaje, "pasos": (e.detalle or {}).get("pasos", []),
             "total": (e.detalle or {}).get("total"),
             "llamado_por": (e.detalle or {}).get("llamado_por"),
+            # Un tramo. Sin esto, una corrida verde de tres pasos de treinta y
+            # cinco se lee como si el flujo entero estuviera al día.
+            "desde_paso": (e.detalle or {}).get("desde_paso"),
             "cuando": iso(e.creado_en),
             "reanuda_a": e.reanuda_a_id,
             "reanudada_por": e.reanudada_por_id,

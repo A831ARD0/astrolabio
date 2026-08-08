@@ -46,6 +46,14 @@ router = APIRouter(prefix="/api/transformaciones", tags=["transformaciones"])
 
 class Guardar(BaseModel):
     definicion: Transformacion
+    # Andamiaje: el resultado existe para que otra sección lo use, no para
+    # graficarlo. Va aquí y no dentro de `definicion` porque no cambia en nada lo
+    # que se compila — es una decisión sobre dónde se ofrece, no sobre qué calcula.
+    intermedia: bool = False
+    # A qué proyecto se agrega al crearla. Solo se usa en el POST: mover una
+    # sección de proyecto se hace por las rutas de proyectos, que es donde está la
+    # comprobación de que no acabe en dos.
+    proyecto_id: int | None = None
 
 
 class DesdeSql(BaseModel):
@@ -63,14 +71,39 @@ class Salida(BaseModel):
     ultima_ejecucion: str | None
     ultimo_estado: str | None
     tiene_datos: bool
+    intermedia: bool
+    # De qué proyecto es sección, y en qué posición. La pantalla lo necesita para
+    # poder decir «sección 12 de 18 de TRANSFORMADOR_VENTAS» sin pedir la lista de
+    # proyectos aparte.
+    proyecto_id: int | None = None
+    proyecto: str | None = None
+    orden: int | None = None
 
 
 # --------------------------------------------------------------------------- #
 # Utilidades
 # --------------------------------------------------------------------------- #
 
-def _salida(t: TransformacionDB) -> Salida:
+def _donde_vive(sesion: SesionDep) -> dict[int, tuple[int, str, int]]:
+    """id de transformación -> (id del proyecto, nombre, posición 1..n)."""
+    from app.modelos_db import Flujo
+
+    mapa: dict[int, tuple[int, str, int]] = {}
+    for p in sesion.scalars(select(Flujo).where(Flujo.es_proyecto.is_(True))):
+        for i, paso in enumerate(p.pasos or [], start=1):
+            try:
+                mapa[int(paso["id"])] = (p.id, p.nombre, i)
+            except (TypeError, ValueError, KeyError):
+                pass
+    return mapa
+
+
+def _salida(t: TransformacionDB,
+            vive: dict[int, tuple[int, str, int]] | None = None) -> Salida:
     ultima = t.ejecuciones[0] if t.ejecuciones else None
+    # `vive` se calcula una vez para toda la lista; suelto, cada transformación
+    # volvería a recorrer todos los proyectos.
+    casa = (vive or {}).get(t.id)
     return Salida(
         id=t.id, nombre=t.nombre, descripcion=t.descripcion,
         definicion=t.definicion, lee_de=t.lee_de or {},
@@ -78,6 +111,10 @@ def _salida(t: TransformacionDB) -> Salida:
         ultima_ejecucion=iso(t.ultima_ejecucion),
         ultimo_estado=ultima.estado.value if ultima else None,
         tiene_datos=ruta_datos_dataset(t.nombre) is not None,
+        intermedia=bool(t.intermedia),
+        proyecto_id=casa[0] if casa else None,
+        proyecto=casa[1] if casa else None,
+        orden=casa[2] if casa else None,
     )
 
 
@@ -136,12 +173,13 @@ def _cadena_ciclica(sesion: SesionDep, nombre: str, definicion: Transformacion) 
 
 @router.get("", response_model=list[Salida])
 def listar(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.editor))):
-    return [_salida(t) for t in sesion.scalars(
+    vive = _donde_vive(sesion)
+    return [_salida(t, vive) for t in sesion.scalars(
         select(TransformacionDB).order_by(TransformacionDB.nombre))]
 
 
 @router.get("/origenes")
-def origenes_disponibles(sesion: SesionDep,
+def origenes_disponibles(sesion: SesionDep, proyecto_id: int | None = None,
                          _: Usuario = Depends(exigir_rol(Rol.editor))):
     """
     Todo lo que se puede usar como entrada: tablas del motor, datasets cargados y
@@ -155,6 +193,13 @@ def origenes_disponibles(sesion: SesionDep,
     nombre raro dejaba sin poder transformar nada.
 
     Lo que no se puede usar se dice: sale en `avisos` y el origen queda marcado.
+
+    `proyecto_id` es el proyecto que se está editando. Cambia una sola cosa, y es la
+    que hace usable la lista con dieciocho secciones por sucursal: las secciones
+    marcadas como **intermedias** solo se ofrecen dentro de su propio proyecto. Un
+    mapeo de códigos o una tabla de series es andamiaje del proyecto que lo armó;
+    fuera de ahí solo estorba. Las de este proyecto llegan marcadas con su número de
+    sección, para que se puedan encadenar en orden sin adivinar.
     """
     from app.rutas.catalogo import tablas as tablas_catalogo
 
@@ -191,11 +236,19 @@ def origenes_disponibles(sesion: SesionDep,
          "usable": listos[d.nombre] is not None}
         for d in orden
     ]
+    vive = _donde_vive(sesion)
     trans = []
     for t in sesion.scalars(select(TransformacionDB).order_by(TransformacionDB.nombre)):
+        casa = vive.get(t.id)
+        mio = casa is not None and proyecto_id is not None and casa[0] == proyecto_id
+        if t.intermedia and not mio:
+            continue                  # andamiaje de otro proyecto: no es de nadie más
         hay = con_datos(t.nombre)
         trans.append({"nombre": t.nombre, "filas": t.filas,
-                      "tiene_datos": hay is True, "usable": hay is not None})
+                      "tiene_datos": hay is True, "usable": hay is not None,
+                      "intermedia": bool(t.intermedia),
+                      "proyecto": casa[1] if casa else None,
+                      "seccion": casa[2] if mio else None})
 
     # La misma tabla del origen traida por varias conexiones. Es lo que permite
     # decir «Funcionarios de todas las sucursales» en vez de enumerar cuarenta
@@ -251,14 +304,25 @@ def crear(cuerpo: Guardar, sesion: SesionDep,
     t = TransformacionDB(
         nombre=d.nombre, descripcion=d.descripcion,
         definicion=d.model_dump(mode="json"), lee_de=_linaje(sesion, d),
-        creado_por=actor.id)
+        intermedia=cuerpo.intermedia, creado_por=actor.id)
     sesion.add(t)
     sesion.flush()
+
+    if cuerpo.proyecto_id is not None:
+        # Nace ya dentro del proyecto, al final. Crear la sección y luego tener que
+        # ir a otra pantalla a meterla es exactamente el paso de más que este
+        # cambio venía a quitar.
+        from app.rutas.proyectos import agregar as agregar_seccion
+
+        agregar_seccion(cuerpo.proyecto_id, t.id, sesion, actor)
+
     registrar(sesion, accion="transformacion_creada", usuario_id=actor.id,
               email=actor.email, objeto_tipo="transformacion", objeto_id=t.id,
               detalle={"nombre": t.nombre, "pasos": len(d.pasos),
-                       "modo": "sql" if d.es_sql else "visual"})
-    return _salida(t)
+                       "modo": "sql" if d.es_sql else "visual",
+                       "intermedia": cuerpo.intermedia,
+                       "proyecto_id": cuerpo.proyecto_id})
+    return _salida(t, _donde_vive(sesion))
 
 
 @router.put("/{id_}", response_model=Salida)
@@ -277,10 +341,12 @@ def actualizar(id_: int, cuerpo: Guardar, sesion: SesionDep,
     t.descripcion = d.descripcion
     t.definicion = d.model_dump(mode="json")
     t.lee_de = _linaje(sesion, d)
+    t.intermedia = cuerpo.intermedia
     registrar(sesion, accion="transformacion_actualizada", usuario_id=actor.id,
               email=actor.email, objeto_tipo="transformacion", objeto_id=t.id,
-              detalle={"nombre": t.nombre, "pasos": len(d.pasos)})
-    return _salida(t)
+              detalle={"nombre": t.nombre, "pasos": len(d.pasos),
+                       "intermedia": cuerpo.intermedia})
+    return _salida(t, _donde_vive(sesion))
 
 
 def _compila_o_falla(sesion: SesionDep, d: Transformacion) -> None:
@@ -350,7 +416,7 @@ def _catalogo_de_origenes(sesion: SesionDep,
     """
     Nombre -> tipo de todo lo que se puede usar como origen.
 
-    Es lo que permite que una consulta pegada diga `FROM cat_conexiones` sin que
+    Es lo que permite que una consulta pegada diga `FROM cat_zonas` sin que
     nadie tenga que saber si detrás hay una tabla del motor, un Parquet o el
     resultado de otra transformación. Antes se suponía que todo era una tabla del
     motor, y cuando no lo era la consulta moría con un «Catalog Error» de DuckDB.
@@ -412,6 +478,20 @@ def borrar(id_: int, sesion: SesionDep, borrar_datos: bool = False,
     """
     t = _obtener(sesion, id_)
     nombre = t.nombre
+
+    # Sacarla del proyecto que la lista como sección. Sin esto el proyecto queda con
+    # un paso que apunta a nada: la pantalla lo diría como huérfana, pero al guardar
+    # cualquier otro cambio la validación lo rechazaría y no habría forma de
+    # arreglarlo desde ahí.
+    from app.modelos_db import Flujo
+
+    salio_de = None
+    for p in sesion.scalars(select(Flujo).where(Flujo.es_proyecto.is_(True))):
+        quedan = [x for x in (p.pasos or []) if str(x.get("id")) != str(id_)]
+        if len(quedan) != len(p.pasos or []):
+            p.pasos = quedan
+            salio_de = p.nombre
+
     sesion.delete(t)
 
     borrados = False
@@ -427,4 +507,5 @@ def borrar(id_: int, sesion: SesionDep, borrar_datos: bool = False,
 
     registrar(sesion, accion="transformacion_borrada", usuario_id=actor.id,
               email=actor.email, objeto_tipo="transformacion", objeto_id=id_,
-              detalle={"nombre": nombre, "datos_borrados": borrados})
+              detalle={"nombre": nombre, "datos_borrados": borrados,
+                       **({"salio_de": salio_de} if salio_de else {})})
