@@ -137,6 +137,19 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **En «Elegir columnas» solo se podía marcar una.** Los cuadros de cada paso se
+  dibujaban con las columnas que devolvía la vista previa, que son las de la
+  **salida** de la cadena completa. Al marcar la primera, la salida pasaba a tener
+  una sola columna y el propio paso se quedaba con un solo cuadro: imposible marcar
+  la segunda. Cualquier paso colocado después de un «Agrupar y resumir» tenía el
+  mismo problema.
+
+  Ahora cada paso ofrece las columnas que le **entran**: las del origen después de
+  los pasos anteriores, simuladas en el navegador para no ir al servidor por cada
+  clic. La simulación es conservadora: cuando un paso puede traer columnas que desde
+  la interfaz no se conocen —unir sin decir cuáles traer, apilar— no quita ninguna.
+  Para la salida real sigue mandando la vista previa, que la calcula el compilador.
+
 - **En una instalación nueva, el motor analítico no existía y nada podía leerlo.**
   `duckdb_solo_lectura` es `True` por omisión —y debe serlo, la API no escribe en el
   motor, escribe Parquet— pero **en solo lectura DuckDB no crea el archivo que le

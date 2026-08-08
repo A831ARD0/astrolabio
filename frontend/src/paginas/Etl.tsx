@@ -30,6 +30,7 @@ import {
 } from '../api/etl'
 import { PasoEditor } from '../etl/PasoEditor'
 import { PanelLateral, Seccion } from '../comunes/Panel'
+import { columnasAntesDe } from '../etl/columnas'
 import { Velo } from '../comunes/Velo'
 
 const TIPOS: TipoPaso[] = [
@@ -84,11 +85,22 @@ export function Etl() {
     [columnasPrincipal.data],
   )
 
-  // Si un paso ya cambió las columnas, las de la vista previa son más fieles que
-  // las del origen: un paso de agrupar deja columnas que el origen no tenía.
-  const columnasVigentes = previa.data?.columnas?.length
+  /**
+   * Las columnas que le ENTRAN a cada paso.
+   *
+   * Antes aquí había una sola lista —las columnas que devolvía la vista previa— y
+   * se le pasaba a todos los pasos por igual. Como la vista previa devuelve la
+   * salida de la cadena completa, marcar `Id_Sucursal` en «Elegir columnas» dejaba
+   * ese mismo paso con un único cuadro: imposible marcar la segunda. Cualquier
+   * paso colocado después de un «Agrupar y resumir» tenía el mismo problema.
+   */
+  const columnasDePaso = (i: number) => columnasAntesDe(columnas, d.pasos, i)
+
+  // Para el paso que se va a AGREGAR al final manda la vista previa: la calcula el
+  // compilador de verdad, así que donde discrepe de la simulación, tiene razón.
+  const columnasFinales = previa.data?.columnas?.length
     ? previa.data.columnas
-    : columnas
+    : columnasAntesDe(columnas, d.pasos, d.pasos.length)
 
   const pasoUnir = abierto !== null ? d.pasos[abierto] : undefined
   const origenDerecha =
@@ -442,7 +454,7 @@ export function Etl() {
                     <div className="paso-detalle">
                       <PasoEditor
                         paso={p}
-                        columnas={columnasVigentes}
+                        columnas={columnasDePaso(i)}
                         origenes={d.origenes.slice(1)}
                         columnasDerecha={(columnasDerecha.data?.columnas ?? []).map(
                           (c) => c.nombre,
@@ -461,7 +473,7 @@ export function Etl() {
                     className="btn chico"
                     disabled={d.origenes.length === 0}
                     onClick={() => {
-                      setD({ ...d, pasos: [...d.pasos, nuevoPaso(t, columnasVigentes)] })
+                      setD({ ...d, pasos: [...d.pasos, nuevoPaso(t, columnasFinales)] })
                       setAbierto(d.pasos.length)
                     }}
                   >
