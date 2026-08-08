@@ -69,7 +69,20 @@ class Conversion:
         return not self.no_representable and bool(self.origenes)
 
 
-def desde_sql(sql: str) -> Conversion:
+def desde_sql(sql: str, conocidos: dict[str, str] | None = None) -> Conversion:
+    """
+    `conocidos` mapea el nombre de cada origen que EXISTE a su tipo: `tabla` para
+    las del motor analitico, `dataset` para lo traido a Parquet —y para el
+    resultado de otra transformacion—, `tabla_en_conexiones` para una tabla que
+    llegó de varias conexiones a la vez.
+
+    Sin ese mapa no se puede saber de donde sacar `FROM cat_conexiones`, y lo que
+    se hacia era suponer que toda tabla nombrada era del motor analitico. Cuando no
+    lo era, la consulta fallaba con un «Catalog Error: Table with name ... does not
+    exist» de DuckDB que culpaba a la tabla y no explicaba nada.
+
+    Lo construye la capa que tiene acceso a la base; aqui no se sabe de discos.
+    """
     texto = (sql or "").strip().rstrip(";")
     if not texto:
         raise ErrorTransformacion("No hay ninguna consulta que convertir.")
@@ -102,7 +115,7 @@ def desde_sql(sql: str) -> Conversion:
     desde = _arg(arbol, "from")
     if desde is None:
         raise ErrorTransformacion("La consulta no tiene FROM.")
-    principal = _origen_de(desde.this, c)
+    principal = _origen_de(desde.this, c, conocidos)
     if principal is None:
         return c
     c.origenes.append(principal)
@@ -110,7 +123,7 @@ def desde_sql(sql: str) -> Conversion:
     joins = _arg(arbol, "joins") or []
     pasos_join: list[Paso] = []
     for j in joins:
-        origen = _origen_de(j.this, c)
+        origen = _origen_de(j.this, c, conocidos)
         if origen is None:
             return c
         c.origenes.append(origen)
@@ -196,14 +209,39 @@ def desde_sql(sql: str) -> Conversion:
 # Piezas
 # --------------------------------------------------------------------------- #
 
-def _origen_de(nodo: exp.Expression, c: Conversion) -> Origen | None:
+def _parecidos(nombre: str, conocidos: dict[str, str]) -> list[str]:
+    """Los nombres que se parecen, para poder sugerir en vez de solo negar."""
+    from difflib import get_close_matches
+
+    return get_close_matches(nombre, list(conocidos), n=3, cutoff=0.6)
+
+
+def _origen_de(nodo: exp.Expression, c: Conversion,
+               conocidos: dict[str, str] | None) -> Origen | None:
     if not isinstance(nodo, exp.Table):
         c.no_representable.append(
             "Uno de los orígenes no es una tabla simple (puede ser una subconsulta). "
             "Los pasos visuales parten siempre de tablas.")
         return None
     nombre = nodo.alias_or_name
-    return Origen(nombre=nombre, tipo="tabla", referencia=nodo.name)
+    ref = nodo.name
+
+    if conocidos is None:
+        # Sin catalogo no hay nada que resolver; se supone lo de siempre.
+        return Origen(nombre=nombre, tipo="tabla", referencia=ref)
+
+    tipo = conocidos.get(ref)
+    if tipo is None:
+        sugerencias = _parecidos(ref, conocidos)
+        pista = (f" ¿Quisiste decir {', '.join(sugerencias)}?" if sugerencias
+                 else " Míralo en «Orígenes disponibles», a la izquierda.")
+        c.no_representable.append(
+            f"No hay ningún origen llamado '{ref}'. Puede ser una tabla del motor, "
+            f"un dataset ya cargado o el resultado de otra transformación —pero "
+            f"tiene que existir aquí, no en la base de la que salieron los datos."
+            f"{pista}")
+        return None
+    return Origen(nombre=nombre, tipo=tipo, referencia=ref)
 
 
 def _paso_join(j: exp.Join, izquierda: str, derecha: str,

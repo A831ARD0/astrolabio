@@ -343,6 +343,24 @@ def _compilar_sql(t: Transformacion, resolver: dict[str, str]) -> Compilada:
                 f"El SQL contiene una sentencia que no se permite aquí "
                 f"({prohibido.__name__.upper()}).")
 
+    # Lo que la consulta nombra en sus FROM/JOIN tiene que estar entre los
+    # origenes. Si no, DuckDB contesta «Catalog Error: Table with name X does not
+    # exist! Did you mean "information_schema.constraint_column_usage"?», que
+    # culpa a la tabla y no dice lo unico util: que falta agregarla como origen.
+    alias = {o.nombre for o in t.origenes}
+    propias = {c.alias_or_name for c in arbol.find_all(exp.CTE)}
+    faltan = sorted(
+        n.name for n in arbol.find_all(exp.Table)
+        if n.name and n.name not in alias and n.name not in propias
+    )
+    if faltan:
+        disponibles = ", ".join(sorted(alias)) or "ninguno"
+        raise ErrorTransformacion(
+            f"La consulta lee de {', '.join(repr(f) for f in faltan)}, que no está "
+            f"entre los orígenes de esta transformación. Agrégalo desde «Orígenes "
+            f"disponibles», a la izquierda, y volverá a funcionar. "
+            f"Orígenes de esta transformación: {disponibles}.")
+
     ctes = ",\n     ".join(
         f"{_ident(o.nombre)} AS (SELECT * FROM {resolver[o.nombre]})"
         for o in t.origenes

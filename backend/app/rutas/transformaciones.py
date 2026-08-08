@@ -345,8 +345,43 @@ def historial(id_: int, sesion: SesionDep,
     ]}
 
 
+def _catalogo_de_origenes(sesion: SesionDep,
+                          actor: Usuario) -> dict[str, str]:
+    """
+    Nombre -> tipo de todo lo que se puede usar como origen.
+
+    Es lo que permite que una consulta pegada diga `FROM cat_conexiones` sin que
+    nadie tenga que saber si detrás hay una tabla del motor, un Parquet o el
+    resultado de otra transformación. Antes se suponía que todo era una tabla del
+    motor, y cuando no lo era la consulta moría con un «Catalog Error» de DuckDB.
+    """
+    catalogo: dict[str, str] = {}
+
+    # Se llenan en orden inverso a la preferencia: lo mas especifico gana.
+    por_tabla: dict[str, int] = {}
+    for d in sesion.scalars(select(Dataset)):
+        por_tabla[d.tabla_origen or ""] = por_tabla.get(d.tabla_origen or "", 0) + 1
+    for tabla, cuantas in por_tabla.items():
+        if tabla and cuantas > 1:
+            catalogo[tabla] = "tabla_en_conexiones"
+
+    for t in sesion.scalars(select(TransformacionDB)):
+        catalogo[t.nombre] = "dataset"
+    for d in sesion.scalars(select(Dataset)):
+        catalogo[d.nombre] = "dataset"
+
+    try:
+        from app.rutas.catalogo import tablas as tablas_catalogo
+
+        for t in tablas_catalogo(actor)["tablas"]:
+            catalogo[t["nombre"]] = "tabla"
+    except Exception:
+        log.exception("No se pudieron listar las tablas del motor para el catalogo")
+    return catalogo
+
+
 @router.post("/desde-sql")
-def convertir_desde_sql(cuerpo: DesdeSql,
+def convertir_desde_sql(cuerpo: DesdeSql, sesion: SesionDep,
                         _: Usuario = Depends(exigir_rol(Rol.editor))):
     """
     Intenta reconstruir los pasos visuales de una consulta escrita a mano.
@@ -356,7 +391,7 @@ def convertir_desde_sql(cuerpo: DesdeSql,
     convertir: el usuario creería que ya está y la cifra cambiaría en silencio.
     """
     try:
-        r = desde_sql(cuerpo.sql)
+        r = desde_sql(cuerpo.sql, _catalogo_de_origenes(sesion, _))
     except ErrorTransformacion as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
     return {

@@ -137,6 +137,21 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **Pegar SQL suponía que toda tabla nombrada era del motor analítico.** `FROM
+  cat_conexiones` creaba un origen de tipo `tabla` sin comprobar que existiera, y la
+  consulta moría con un `Catalog Error: Table with name cat_conexiones does not
+  exist! Did you mean "information_schema.constraint_column_usage"?` — que culpa a
+  la tabla y no dice lo único útil.
+
+  Ahora el nombre se resuelve contra lo que hay: tabla del motor, dataset ya
+  cargado, resultado de otra transformación, o una tabla que llegó de varias
+  conexiones. Así `SELECT * FROM MI_SUCURSAL__ventas` funciona sin que nadie sepa
+  que detrás hay Parquet. Si el nombre no existe se dice en claro, con la sugerencia
+  más parecida, y **no se crea un origen roto** que falle más adelante.
+
+  En modo SQL, una tabla que no esté entre los orígenes da el mismo mensaje útil en
+  vez de dejar que DuckDB conteste por su cuenta.
+
 - **En «Elegir columnas» solo se podía marcar una.** Los cuadros de cada paso se
   dibujaban con las columnas que devolvía la vista previa, que son las de la
   **salida** de la cadena completa. Al marcar la primera, la salida pasaba a tener

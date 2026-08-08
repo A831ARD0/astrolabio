@@ -537,3 +537,82 @@ def test_el_motor_analitico_se_crea_si_no_existe(tmp_path, monkeypatch):
 
     # Llamarla otra vez no toca nada: no debe borrar una base que ya tiene datos.
     assert asegurar_base() is False
+
+
+# --------------------------------------------------------------------------- #
+# Pegar SQL que nombra algo que existe —o que no
+# --------------------------------------------------------------------------- #
+
+def test_pegar_sql_resuelve_un_dataset_como_dataset(cliente, cab_admin,
+                                                    conexion_archivos_etl):
+    """
+    Escribir `FROM ventas_csv_etl` tiene que funcionar sin que nadie sepa que
+    detras hay Parquet y no una tabla del motor.
+
+    Antes se suponia que toda tabla nombrada era del motor analitico, y la
+    consulta moria con «Catalog Error: Table with name ... does not exist!».
+    """
+    r = cliente.post("/api/transformaciones/desde-sql", headers=cab_admin,
+                     json={"sql": "SELECT * FROM ventas_csv_etl"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["convertible"] is True, d["no_representable"]
+    assert d["origenes"] == [{"nombre": "ventas_csv_etl", "tipo": "dataset",
+                              "referencia": "ventas_csv_etl"}]
+
+
+def test_pegar_sql_con_una_tabla_del_motor_la_deja_como_tabla(cliente, cab_admin):
+    r = cliente.post("/api/transformaciones/desde-sql", headers=cab_admin,
+                     json={"sql": "SELECT * FROM fact_venta"})
+    assert r.status_code == 200, r.text
+    assert r.json()["origenes"][0]["tipo"] == "tabla"
+
+
+def test_pegar_sql_que_nombra_algo_inexistente_lo_dice_en_claro(cliente, cab_admin):
+    """
+    El caso que le paso a quien uso esto: `SELECT * FROM cat_conexiones`, una tabla
+    que vive en la base de la que salieron los datos y no aqui.
+
+    Lo que salia era un «Catalog Error ... Did you mean
+    "information_schema.constraint_column_usage"?». Eso no se puede accionar.
+    """
+    r = cliente.post("/api/transformaciones/desde-sql", headers=cab_admin,
+                     json={"sql": "SELECT * FROM tabla_que_no_existe_en_ningun_sitio"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["convertible"] is False
+    motivo = " ".join(d["no_representable"])
+    assert "tabla_que_no_existe_en_ningun_sitio" in motivo
+    assert "tiene que existir aquí" in motivo
+    # Y no se ofrece un origen roto que falle mas adelante.
+    assert d["origenes"] == []
+
+
+def test_pegar_sql_sugiere_el_nombre_parecido(cliente, cab_admin):
+    """Negar sin sugerir deja a alguien adivinando entre mil nombres."""
+    r = cliente.post("/api/transformaciones/desde-sql", headers=cab_admin,
+                     json={"sql": "SELECT * FROM fact_ventas"})   # sobra la 's'
+    assert r.status_code == 200, r.text
+    motivo = " ".join(r.json()["no_representable"])
+    assert "fact_venta" in motivo
+
+
+def test_en_modo_sql_una_tabla_sin_origen_da_un_error_util(cliente, cab_admin):
+    """
+    En modo SQL los orígenes se exponen como CTEs con su alias. Si la consulta
+    nombra algo que no está entre ellos, el error tiene que decir eso —y no
+    dejar que DuckDB culpe a la tabla.
+    """
+    r = cliente.post("/api/transformaciones/previsualizar", headers=cab_admin,
+                     json={
+        "definicion": {
+            "nombre": "sql_sin_origen",
+            "origenes": [{"nombre": "v", "tipo": "tabla", "referencia": "fact_venta"}],
+            "pasos": [],
+            "sql": "SELECT * FROM cat_conexiones",
+        }})
+    assert r.status_code == 422, r.text
+    detalle = str(r.json()["detail"])
+    assert "cat_conexiones" in detalle
+    assert "no está entre los orígenes" in detalle
+    assert "Orígenes de esta transformación: v" in detalle

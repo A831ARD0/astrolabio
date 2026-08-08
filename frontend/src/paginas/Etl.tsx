@@ -634,6 +634,11 @@ export function Etl() {
                   // la consulta menciona, para que el alias funcione tal cual.
                   desdeSql.mutate(sqlPegado, {
                     onSuccess: (c) => {
+                      // Si alguna tabla nombrada no existe como origen, el
+                      // diálogo se queda abierto con el motivo. Antes se cerraba
+                      // igual y el error salía después, al previsualizar, en
+                      // forma de «Catalog Error» de DuckDB.
+                      if (!c.origenes.length && c.no_representable.length) return
                       setD({
                         ...d,
                         origenes: c.origenes.length ? c.origenes : d.origenes,

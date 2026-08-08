@@ -166,6 +166,27 @@ pantalla te dice qué haría hoy: *«El mes en curso y el anterior: del 2026-07-
 
 «Cargar» respeta la ventana; **«Recargar completo» se la salta**.
 
+### Pegar una consulta SQL
+
+**Transformar → Pegar SQL.** Se puede escribir SQL normal contra lo que ya tienes:
+
+```sql
+SELECT * FROM VW_MATRIZ__ventas WHERE anio = 2026
+```
+
+El nombre que pongas en el `FROM` se busca entre **lo que existe aquí**: las tablas
+del motor, los datasets ya cargados, los resultados de otras transformaciones y las
+tablas que llegaron de varias conexiones. No hace falta saber si detrás hay una
+tabla o un Parquet particionado.
+
+⚠️ **Tiene que existir aquí, no en la base de la que salieron los datos.** Una tabla
+de tu MySQL o de tu Pervasive no se puede nombrar en una consulta hasta que la hayas
+traído como dataset. Si el nombre no existe, la pantalla lo dice y sugiere el más
+parecido, en vez de dejarte con un error del motor.
+
+Dos botones: **Convertir a pasos** la traduce a la vista visual —y si algo no se
+puede representar, dice exactamente qué—, y **Usar como SQL** la deja tal cual.
+
 ### Flujos
 
 ![Pantalla de flujos](img/flujos.png)
