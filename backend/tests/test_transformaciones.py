@@ -544,6 +544,38 @@ def test_el_motor_analitico_se_crea_si_no_existe(tmp_path, monkeypatch):
     assert asegurar_base() is False
 
 
+def test_el_etl_lee_el_motor_aunque_este_abierto_para_escritura(monkeypatch):
+    """
+    Con `ASTROLABIO_DUCKDB_SOLO_LECTURA=false` el ETL tiene que seguir leyendo.
+
+    DuckDB no admite dos manejadores del mismo archivo en un proceso si alguno es
+    de escritura, y esa bandera hace justo eso: la conexion de consultas abre el
+    motor para escribir y el ATTACH del ETL reventaba con «Unique file handle
+    conflict». Se caia previsualizar, ejecutar y hasta ofrecer los nombres de las
+    columnas, sin ninguna pista de que la causa fuera una variable de entorno —y
+    el docker-compose.yml traia la bandera puesta.
+
+    El manejador de escritura se abre aqui y se cierra aqui, en vez de usar
+    `analitico.conexion()`: esa se guarda por hilo y se quedaria abierta para el
+    resto de la corrida, que es exactamente el estado que rompe a las demas.
+    """
+    from pathlib import Path
+
+    import duckdb
+
+    from app.config import config
+    from app.materializar import _alias_motor, columnas_de
+
+    monkeypatch.setattr(config(), "duckdb_solo_lectura", False)
+    escritura = duckdb.connect(config().ruta_duckdb, read_only=False)
+    try:
+        assert _alias_motor() == Path(config().ruta_duckdb).stem
+        cols = columnas_de("tabla", "cat_marca")
+        assert [c["nombre"] for c in cols] == ["marca_id", "marca_nombre"]
+    finally:
+        escritura.close()
+
+
 # --------------------------------------------------------------------------- #
 # Pegar SQL que nombra algo que existe —o que no
 # --------------------------------------------------------------------------- #

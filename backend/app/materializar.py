@@ -92,7 +92,7 @@ def _resolver(t: Transformacion) -> dict[str, str]:
                 if not _nombre_simple(o.referencia):
                     raise ErrorTransformacion(
                         f"Nombre de tabla no válido: {o.referencia!r}")
-                salida[o.nombre] = f'origen."{o.referencia}"'
+                salida[o.nombre] = f'{_alias_motor()}."{o.referencia}"'
     finally:
         con.close()
     return salida
@@ -224,13 +224,42 @@ def ruta_datos_dataset(nombre: str) -> str | None:
     return f"{carpeta}/**/*.parquet"
 
 
+def _alias_motor() -> str:
+    """
+    Con qué nombre se llama a la base analítica dentro de la conexión de trabajo.
+
+    Depende de cómo se haya podido abrir (ver `_conexion_trabajo`), y se calcula
+    solo con la configuración porque el SQL se compila sin una conexión a mano.
+    """
+    if config().duckdb_solo_lectura:
+        return "origen"
+    # Sin ATTACH no hay alias que elegir: es el nombre que DuckDB le da al archivo.
+    return Path(config().ruta_duckdb).stem
+
+
 def _conexion_trabajo() -> duckdb.DuckDBPyConnection:
     """
-    Conexión de trabajo: en memoria, con la base analítica adjunta en
-    **solo lectura**. Escribir solo se puede hacia archivos Parquet.
+    Conexión de trabajo. Escribir solo se puede hacia archivos Parquet: de la base
+    analítica aquí únicamente se lee.
+
+    Dos caminos, y no por gusto. Lo normal es una conexión en memoria con el
+    archivo adjunto en solo lectura. Pero DuckDB no admite dos manejadores del
+    mismo archivo en un proceso si alguno es de escritura, y
+    `ASTROLABIO_DUCKDB_SOLO_LECTURA=false` provoca justo eso: `analitico.conexion()`
+    lo abre para escribir y el ATTACH de aquí revienta con
+
+        Binder Error: Unique file handle conflict: Cannot attach "origen"
+
+    Eso dejaba el ETL entero inservible —previsualizar, ejecutar, y hasta ofrecer
+    los nombres de las columnas— sin ninguna pista de que la causa fuera una
+    variable de entorno. Con esa bandera puesta se abre el archivo directamente,
+    reaprovechando el manejador que el proceso ya tiene.
     """
-    con = duckdb.connect()
     ruta = config().ruta_duckdb
+    if not config().duckdb_solo_lectura:
+        return duckdb.connect(ruta, read_only=False)
+
+    con = duckdb.connect()
     if Path(ruta).exists():
         con.execute(f"ATTACH '{ruta}' AS origen (READ_ONLY)")
     return con
@@ -359,7 +388,7 @@ def columnas_de(origen_tipo: str, referencia: str) -> list[dict[str, str]]:
         else:
             if not _nombre_simple(referencia):
                 raise ErrorTransformacion(f"Nombre no válido: {referencia!r}")
-            desde = f'origen."{referencia}"'
+            desde = f'{_alias_motor()}."{referencia}"'
         cur = con.execute(f"SELECT * FROM {desde} LIMIT 0")
         return [{"nombre": d[0], "tipo": str(d[1])} for d in cur.description]
     finally:

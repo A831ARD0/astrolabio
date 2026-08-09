@@ -22,7 +22,10 @@ services:
       ASTROLABIO_CLAVE_SECRETA: ${ASTROLABIO_CLAVE_SECRETA:-cambiame-en-produccion}
       ASTROLABIO_CLAVE_CIFRADO: ${ASTROLABIO_CLAVE_CIFRADO:-}
       ASTROLABIO_RUTA_DUCKDB: /app/analitico/astrolabio.duckdb
-      ASTROLABIO_DUCKDB_SOLO_LECTURA: "false"
+      # ASTROLABIO_DUCKDB_SOLO_LECTURA se queda en su valor por omision, que es
+      # `true`. La API no escribe en el motor analitico —escribe Parquet—, y el
+      # archivo lo crea `asegurar_base()` al arrancar, asi que abrirlo para
+      # escritura no habilita nada y si quita la red de seguridad.
       ASTROLABIO_ORIGENES_CORS: '["http://localhost:5173"]'
     volumes:
       # metadatos: un solo archivo SQLite. Respaldar = copiar este directorio.
