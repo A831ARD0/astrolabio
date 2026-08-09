@@ -1,0 +1,10 @@
+# Los archivos que se copian dentro de un contenedor Linux van SIEMPRE con LF,
+# sin importar el core.autocrlf de quien clone. En Windows, con autocrlf=true,
+# `instalar-driver-actian.sh` salia con CRLF y la construccion de la imagen
+# fallaba con "set: Illegal option -" (el \r se pega al final de cada linea).
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Caddyfile*  text eol=lf
+
+# PowerShell si es de Windows.
+*.ps1       text eol=crlf
