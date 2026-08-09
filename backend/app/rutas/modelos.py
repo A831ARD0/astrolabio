@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
-from app.analitico import ejecutar_consulta, estados_asociativos
+from app.analitico import ejecutar_consulta, ejecutar_muestra, estados_asociativos
 from app.auditoria import registrar
 from app.exportar import (
     Procedencia, TOPE_FILAS, a_csv, a_excel, nombre_archivo,
@@ -132,6 +132,36 @@ class RevisarFormula(BaseModel):
     metricas: dict[str, str] | None = None
 
 
+class VistaPrevia(BaseModel):
+    """
+    Una consulta contra el modelo que se tiene EN PANTALLA.
+
+    `definicion` llega del navegador por la misma razon que en `RevisarFormula`:
+    quien esta editando quiere ver el resultado de las metricas que acaba de
+    escribir, y esas todavia no estan publicadas —puede que ni guardadas—. Sin
+    esto habria que publicar para poder mirar el numero, que es exactamente al
+    reves de como se trabaja: primero se mira, y si cuadra se publica.
+
+    Si no viene, se cae al borrador guardado, y si tampoco hay, a la version
+    vigente.
+    """
+
+    definicion: Definicion | None = None
+    dimensiones: list[str] = []
+    metricas: list[str] = []
+    filtros: list[dict] = []
+    rutas_elegidas: dict[str, str] = {}
+    limite: int = Field(default=200, le=5000)
+
+
+class MuestraEntidad(BaseModel):
+    """Filas crudas de una entidad, para ver que hay dentro de la tabla."""
+
+    definicion: Definicion | None = None
+    entidad: str
+    limite: int = Field(default=50, le=500)
+
+
 class PeticionExportar(PeticionConsulta):
     formato: Literal["xlsx", "csv"] = "xlsx"
     titulo: str = "Astrolabio"
@@ -200,6 +230,24 @@ def _existe(sesion: SesionDep, modelo_id: int) -> ModeloDB:
     if m is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Modelo no encontrado")
     return m
+
+
+def _modelo_en_curso(sesion: SesionDep, modelo_id: int,
+                     definicion: Definicion | None) -> ModeloSemantico:
+    """
+    El modelo tal como lo esta viendo quien edita, y no el que ven los tableros.
+
+    Por orden: lo que manda el navegador, el borrador guardado, la version
+    vigente. Es la escalera de «lo mas fresco que haya», y existe para que mirar
+    un resultado nunca obligue a publicar antes.
+    """
+    _existe(sesion, modelo_id)
+    if definicion is not None:
+        return _cargar_semantico(definicion.a_yaml())
+    borrador = sesion.get(BorradorModelo, modelo_id)
+    if borrador is not None:
+        return _cargar_semantico(borrador.yaml)
+    return _cargar_semantico(_version_vigente(sesion, modelo_id).yaml)
 
 
 def _resumen_borrador(sesion: SesionDep, b: BorradorModelo) -> dict:
@@ -771,6 +819,86 @@ def probar_metrica(modelo_id: int, cuerpo: ProbarMetrica, sesion: SesionDep,
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
             "sql": res.sql}
+
+
+@router.post("/{modelo_id}/vista-previa")
+def vista_previa(modelo_id: int, cuerpo: VistaPrevia, sesion: SesionDep,
+                 ctx: ContextoDep,
+                 _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Ejecuta el modelo que se tiene en pantalla y devuelve la tabla.
+
+    Es lo que cierra el ciclo de escribir una metrica: `revisar-formula` dice si
+    esta bien escrita, `probar-metrica` da el numero de UNA, y esto enseña el
+    modelo entero funcionando junto —varias metricas, desglosadas por las
+    dimensiones que se elijan— sin haber publicado nada.
+
+    No se audita, por lo mismo que no se audita guardar el borrador: esto es
+    escribir el modelo, no consultarlo. Lo que queda en la auditoria es
+    `consultar`, que es cuando alguien lee una cifra publicada.
+    """
+    if not cuerpo.metricas:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Elige al menos una metrica. Para ver filas sin agregar, la muestra "
+            "de la entidad es la ruta '/muestra'.")
+
+    m = _modelo_en_curso(sesion, modelo_id, cuerpo.definicion)
+    try:
+        res = ejecutar_consulta(m, Consulta(
+            dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
+            filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
+            limite=cuerpo.limite,
+        ), ctx)
+    except ErrorModelo as e:
+        detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}
+        if hasattr(e, "rutas"):
+            detalle["rutas"] = [" → ".join(r) for r in e.rutas]
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detalle)
+    except PoliticaInvalida as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
+    except Exception as e:
+        # El modelo puede estar a medio escribir: eso es un error de quien edita,
+        # no una falla del servidor, y se devuelve para que lo lea.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            f"La consulta no se pudo ejecutar: {e}")
+
+    return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
+            "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas}
+
+
+@router.post("/{modelo_id}/muestra")
+def muestra(modelo_id: int, cuerpo: MuestraEntidad, sesion: SesionDep,
+            ctx: ContextoDep,
+            _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Unas filas de una entidad, sin agregar nada.
+
+    Antes de escribir la primera metrica hay una pregunta mas basica: que trae
+    esta tabla. Sin poder mirarla, el rol de cada campo y el tipo de cada columna
+    se declaran a ciegas.
+    """
+    m = _modelo_en_curso(sesion, modelo_id, cuerpo.definicion)
+    if cuerpo.entidad not in m.entidades:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"La entidad '{cuerpo.entidad}' no esta en el modelo")
+    try:
+        res = ejecutar_muestra(m, cuerpo.entidad, cuerpo.limite, ctx)
+    except ErrorModelo as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+    except PoliticaInvalida as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
+    except Exception as e:
+        # Lo normal aqui es que la tabla del origen todavia no exista en el
+        # motor: decirlo tal cual ahorra buscarlo en el modelo.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            f"No se pudo leer la tabla: {e}")
+
+    return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
+            "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas,
+            # Que columnas son datos personales, para poder avisarlo en pantalla.
+            "pii": [c.nombre for c in m.entidades[cuerpo.entidad].campos.values()
+                    if c.pii and c.visible]}
 
 
 @router.post("/{modelo_id}/revisar-formula")

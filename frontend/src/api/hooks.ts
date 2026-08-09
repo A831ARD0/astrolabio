@@ -20,6 +20,7 @@ import type {
   ModeloResumen,
   Problema,
   RespuestaDefinicion,
+  ResultadoDatos,
   ResultadoPrueba,
   RevisionFormula,
   Rutas,
@@ -338,5 +339,30 @@ export function useProbarMetrica(id: number) {
       dimensiones?: string[]
       limite?: number
     }) => api.post<ResultadoPrueba>(`/modelos/${id}/probar-metrica`, v),
+  })
+}
+
+/**
+ * Ejecuta el modelo que se tiene en pantalla, sin guardarlo ni publicarlo.
+ *
+ * Se manda la `definicion` completa a proposito: lo que hay que ver es el
+ * resultado de lo que se acaba de escribir, no el de lo que quedo publicado.
+ */
+export function useVistaPrevia(id: number) {
+  return useMutation({
+    mutationFn: (v: {
+      definicion?: Definicion
+      dimensiones?: string[]
+      metricas: string[]
+      limite?: number
+    }) => api.post<ResultadoDatos>(`/modelos/${id}/vista-previa`, v),
+  })
+}
+
+/** Filas crudas de una entidad, sin agregar. */
+export function useMuestra(id: number) {
+  return useMutation({
+    mutationFn: (v: { definicion?: Definicion; entidad: string; limite?: number }) =>
+      api.post<ResultadoDatos>(`/modelos/${id}/muestra`, v),
   })
 }

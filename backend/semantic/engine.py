@@ -397,6 +397,87 @@ class Compilador:
             )
         return "\n  ".join(partes)
 
+    def _plan_alcance(self, ent_base: str, objetivos: list[str],
+                      rutas_elegidas: dict[str, str],
+                      ) -> tuple[dict[str, str], list[str]]:
+        """
+        Alias de tabla y JOINs para alcanzar `objetivos` partiendo de `ent_base`.
+
+        Lo usan la agregacion y la muestra de filas. Comparten esto a proposito:
+        las dos tienen que aplicar las mismas politicas de seguridad, y si cada
+        una resolviera sus rutas por su cuenta acabarian uniendo por caminos
+        distintos — es decir, lo que un usuario puede ver dependeria de por que
+        pantalla lo pregunta.
+        """
+        necesarias = {ent_base}
+        rutas: dict[str, list[str]] = {}
+        for ent in objetivos:
+            if ent == ent_base:
+                rutas[ent] = [ent_base]
+                continue
+            clave = f"{ent_base}->{ent}"
+            if clave in rutas_elegidas:
+                ruta = rutas_elegidas[clave].split(" → ")
+            else:
+                ruta = self.m.ruta_unica(ent_base, ent)
+            rutas[ent] = ruta
+            necesarias.update(ruta)
+
+        alias = {e: f"t{i}" for i, e in enumerate(sorted(necesarias))}
+        vistos = {ent_base}
+        joins: list[str] = []
+        for ruta in rutas.values():
+            tramo = [ruta[0]]
+            for paso in ruta[1:]:
+                tramo.append(paso)
+                if paso in vistos:
+                    continue
+                joins.append(self._sql_join(tramo[-2:], alias))
+                vistos.add(paso)
+        return alias, joins
+
+    def compilar_muestra(self, entidad: str, limite: int,
+                         predicados: list | None = None) -> ConsultaCompilada:
+        """
+        Unas filas de una entidad, tal como estan en su tabla, sin agregar nada.
+
+        Contesta «¿que hay aqui dentro?», que es la pregunta previa a escribir la
+        primera metrica: sin ver una fila no se sabe si `Fecha_Factura` trae
+        fechas o trae texto, ni si `Tipo_Venta` dice 'Contado' o 'CONTADO'.
+
+        Pasa por la seguridad por fila igual que cualquier otra lectura. Una
+        muestra sin filtrar seria la puerta trasera perfecta: justo las filas que
+        las politicas tapan en el resto de la aplicacion, servidas en una tabla.
+        """
+        if entidad not in self.m.entidades:
+            raise ErrorModelo(f"La entidad '{entidad}' no esta en el modelo.")
+        ent = self.m.entidades[entidad]
+        predicados = predicados or []
+
+        alias, joins = self._plan_alcance(entidad, [p.entidad for p in predicados], {})
+        base = alias[entidad]
+
+        where: list[str] = []
+        params: list = []
+        for p in predicados:
+            campos_prot = set(self.m.entidades[p.entidad].campos)
+            where.append(_calificar(p.sql, alias[p.entidad], campos_prot))
+            params.extend(p.parametros)
+
+        columnas = [c.nombre for c in ent.campos.values() if c.visible]
+        # DISTINCT solo si una politica obligo a unir otra tabla: ese JOIN puede
+        # multiplicar filas, y una muestra con la misma fila repetida seis veces
+        # por culpa de un permiso no se parece a los datos que describe.
+        sel = ", ".join(f"{base}.{_cita(c)} AS {_cita(c)}" for c in columnas)
+        sql = (f"SELECT {'DISTINCT ' if joins else ''}{sel}"
+               f"\nFROM {_cita(ent.tabla)} AS {base}")
+        if joins:
+            sql += "\n  " + "\n  ".join(joins)
+        if where:
+            sql += "\nWHERE " + " AND ".join(where)
+        sql += f"\nLIMIT {int(limite)}"
+        return ConsultaCompilada(sql, params)
+
     def _cte_metrica(self, ent_metrica: str, metricas: list[Metrica],
                      dims: list[tuple[str, str]], filtros: list[dict],
                      rutas_elegidas: dict[str, str],
@@ -417,8 +498,6 @@ class Compilador:
         filtrar es peor que uno que no filtra: nadie lo nota.
         """
         predicados = predicados or []
-        necesarias = {ent_metrica}
-        rutas: dict[str, list[str]] = {}
 
         # Entidades a alcanzar: las de las dimensiones pedidas, MAS las de los
         # filtros, MAS las protegidas por una politica que aplique a este usuario.
@@ -431,29 +510,7 @@ class Compilador:
             if p.entidad not in objetivos:
                 objetivos.append(p.entidad)
 
-        for ent_dim in objetivos:
-            if ent_dim == ent_metrica:
-                rutas[ent_dim] = [ent_metrica]
-                continue
-            clave = f"{ent_metrica}->{ent_dim}"
-            if clave in rutas_elegidas:
-                ruta = rutas_elegidas[clave].split(" → ")
-            else:
-                ruta = self.m.ruta_unica(ent_metrica, ent_dim)
-            rutas[ent_dim] = ruta
-            necesarias.update(ruta)
-
-        alias = {e: f"t{i}" for i, e in enumerate(sorted(necesarias))}
-        vistos = {ent_metrica}
-        joins: list[str] = []
-        for ruta in rutas.values():
-            tramo = [ruta[0]]
-            for paso in ruta[1:]:
-                tramo.append(paso)
-                if paso in vistos:
-                    continue
-                joins.append(self._sql_join(tramo[-2:], alias))
-                vistos.add(paso)
+        alias, joins = self._plan_alcance(ent_metrica, objetivos, rutas_elegidas)
 
         sel_dims = [
             f"{alias[e]}.{_cita(c)} AS {_cita(f'{e}.{c}')}" for e, c in dims

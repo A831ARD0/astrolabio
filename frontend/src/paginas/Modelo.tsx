@@ -31,6 +31,7 @@ import {
 import type { Entidad, Metrica } from '../api/tipos'
 import { DialogoEntidad } from '../modelo/DialogoEntidad'
 import { Lienzo, type Seleccion } from '../modelo/Lienzo'
+import { PanelDatos } from '../modelo/PanelDatos'
 import { PanelDiagnostico } from '../modelo/PanelDiagnostico'
 import { PanelEntidad } from '../modelo/PanelEntidad'
 import { PanelMetrica } from '../modelo/PanelMetrica'
@@ -44,7 +45,7 @@ import {
   reducir,
 } from '../modelo/estado'
 
-type Pestana = 'lienzo' | 'yaml'
+type Pestana = 'lienzo' | 'datos' | 'yaml'
 type Panel = 'seleccion' | 'diagnostico'
 
 const METRICA_NUEVA: Metrica = {
@@ -259,6 +260,13 @@ export function Modelo() {
               Lienzo
             </button>
             <button
+              className={pestana === 'datos' ? 'activo' : ''}
+              onClick={() => setPestana('datos')}
+              title="Ejecutar el modelo tal como está en pantalla"
+            >
+              Datos
+            </button>
+            <button
               className={pestana === 'yaml' ? 'activo' : ''}
               onClick={() => setPestana('yaml')}
             >
@@ -365,7 +373,9 @@ export function Modelo() {
           </div>
         )}
 
-        {pestana === 'lienzo' ? (
+        {pestana === 'datos' ? (
+          <PanelDatos modeloId={modeloId} definicion={d} />
+        ) : pestana === 'lienzo' ? (
           <Lienzo
             definicion={d}
             problemas={problemas}

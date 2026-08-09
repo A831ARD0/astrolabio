@@ -1485,3 +1485,48 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
     padding-top: 10px;
   }
 }
+
+/* ------------------------------------------------------ datos del modelo */
+
+/* La pestaña ocupa el mismo hueco que el lienzo, así que scrollea ella misma:
+   la tabla de resultados puede ser larga y el editor entero no debe moverse. */
+.datos-vista {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 10px 12px 14px;
+}
+
+.barra-datos { display: flex; align-items: center; gap: 10px; }
+
+.controles-datos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 10px 12px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+}
+.grupo-datos { display: flex; flex-direction: column; gap: 5px; }
+.grupo-datos > label { font-size: 12px; color: var(--texto-suave); }
+
+/* La métrica elegida se distingue de la que sólo está disponible. Sin esto, una
+   fila de chips todos iguales no dice cuáles se están calculando. */
+.chip.como-boton.puesto {
+  background: var(--acento-suave);
+  color: var(--acento);
+  border-color: var(--acento);
+}
+
+.resultado-datos { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.resultado-datos .tabla-envoltura { max-height: 60vh; }
+
+/* Una columna con datos personales se marca en la cabecera: la muestra enseña
+   filas de verdad, y quien mira tiene que saber qué está mirando. */
+table.datos th.pii { color: var(--aviso); }
+table.datos th.pii::after { content: ' ·'; }

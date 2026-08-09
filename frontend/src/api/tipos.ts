@@ -269,3 +269,10 @@ export interface ResultadoPrueba {
   ms: number
   sql: string
 }
+
+/** Lo que devuelven `vista-previa` y `muestra`: la misma tabla, distinto origen. */
+export interface ResultadoDatos extends ResultadoPrueba {
+  politicas_aplicadas: string[]
+  /** Solo la muestra: columnas marcadas como datos personales. */
+  pii?: string[]
+}

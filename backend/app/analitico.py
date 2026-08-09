@@ -174,6 +174,30 @@ def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
     )
 
 
+def ejecutar_muestra(modelo: Modelo, entidad: str, limite: int,
+                     ctx: ContextoUsuario) -> Resultado:
+    """
+    Unas filas de una entidad, sin agregar. Mismo camino que `ejecutar_consulta`:
+    pasa por la capa de politicas antes de tocar el motor.
+    """
+    preparar(modelo)
+    capa = CapaPoliticas(modelo, modelo.politicas)
+    predicados = capa.resolver(ctx)
+
+    compilada = Compilador(modelo).compilar_muestra(entidad, limite, predicados)
+
+    t0 = time.perf_counter()
+    cur = conexion().execute(compilada.sql, compilada.parametros)
+    columnas = [d[0] for d in cur.description]
+    filas = [dict(zip(columnas, f)) for f in cur.fetchall()]
+    ms = (time.perf_counter() - t0) * 1000
+
+    return Resultado(
+        columnas=columnas, filas=filas, sql=compilada.sql, ms=round(ms, 1),
+        politicas_aplicadas=[p.politica for p in predicados],
+    )
+
+
 def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
                         selecciones: dict[str, list], ctx: ContextoUsuario
                         ) -> dict[str, list]:
