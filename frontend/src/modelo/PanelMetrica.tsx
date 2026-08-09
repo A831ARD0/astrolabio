@@ -63,6 +63,15 @@ export function PanelMetrica({
   alCerrar: () => void
 }) {
   const [borrador, setBorrador] = useState<Metrica>(metrica)
+  /**
+   * Si el nombre técnico deja de seguir a la etiqueta.
+   *
+   * En una métrica que ya existe empieza en `true` sin remedio: su nombre es lo
+   * que las demás fórmulas escriben como `[nombre]` y lo que los tableros tienen
+   * guardado, así que cambiarlo solo porque se corrigió una tilde de la etiqueta
+   * rompería cosas que no se están mirando.
+   */
+  const [nombreAMano, setNombreAMano] = useState(indice !== null)
   const [agruparPor, setAgruparPor] = useState('')
   const [fallos, setFallos] = useState<FalloFormula[]>([])
   const [sql, setSql] = useState<string | null>(null)
@@ -204,23 +213,52 @@ export function PanelMetrica({
           {/* ------------------------------------------------- izquierda */}
           <div className="metrica-editor">
             <div className="fila">
-              <div className="campo">
-                <label>Nombre técnico</label>
-                <input
-                  type="text"
-                  className="mono"
-                  value={borrador.nombre}
-                  onChange={(e) => setBorrador({ ...borrador, nombre: e.target.value })}
-                  placeholder="monto_utilidad"
-                />
-              </div>
+              {/*
+                La etiqueta va primero porque es lo único que se escribe
+                pensando: es el texto que va a salir en el tablero. El nombre
+                técnico se deduce de ella y solo se toca cuando hace falta.
+              */}
               <div className="campo">
                 <label>Etiqueta</label>
                 <input
                   type="text"
+                  autoFocus
                   value={borrador.etiqueta}
-                  onChange={(e) => setBorrador({ ...borrador, etiqueta: e.target.value })}
-                  placeholder="Utilidad"
+                  onChange={(e) => {
+                    const etiqueta = e.target.value
+                    setBorrador((b) => ({
+                      ...b,
+                      etiqueta,
+                      nombre: nombreAMano ? b.nombre : tecnificar(etiqueta),
+                    }))
+                  }}
+                  placeholder="Utilidad promedio"
+                />
+              </div>
+              <div className="campo">
+                <label>
+                  Nombre técnico
+                  {!nombreAMano && (
+                    <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 6 }}>
+                      automático
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  className="mono"
+                  value={borrador.nombre}
+                  onChange={(e) => {
+                    // Vaciarlo devuelve el campo al automático: es el único gesto
+                    // evidente para deshacer un nombre escrito a mano.
+                    const nombre = e.target.value
+                    setNombreAMano(nombre.trim() !== '')
+                    setBorrador((b) => ({
+                      ...b,
+                      nombre: nombre.trim() === '' ? tecnificar(b.etiqueta) : nombre,
+                    }))
+                  }}
+                  placeholder="utilidad_promedio"
                 />
               </div>
               <div className="campo" style={{ flex: '0 0 150px' }}>
@@ -256,7 +294,13 @@ export function PanelMetrica({
               <div className="error-caja">Ya hay otra métrica con ese nombre.</div>
             )}
 
-            <div className="campo" style={{ flex: 1, minHeight: 0 }}>
+            {/*
+              Sin `min-height: 0`, a propósito. Un elemento flex no se encoge por
+              debajo de su contenido salvo que se le diga, y aquí ese permiso
+              hacía que el editor y su pie se salieran de la caja y se pintaran
+              encima de la fila de medidas. La columna entera ya tiene scroll.
+            */}
+            <div className="campo" style={{ flex: 1 }}>
               <label>
                 Expresión
                 <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 8 }}>
@@ -508,6 +552,24 @@ export function PanelMetrica({
       </div>
     </Velo>
   )
+}
+
+/**
+ * El nombre técnico que le toca a una etiqueta.
+ *
+ * El nombre viaja por sitios donde «Utilidad promedio %» no cabe: se escribe
+ * como `[nombre]` dentro de otras fórmulas y acaba de alias en el SQL. Así que
+ * se le quitan acentos, mayúsculas y todo lo que no sea letra o dígito, y no se
+ * deja empezar por dígito, que ningún motor acepta como identificador.
+ */
+function tecnificar(etiqueta: string): string {
+  const base = etiqueta
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return /^\d/.test(base) ? `m_${base}` : base
 }
 
 function formatear(v: unknown): string {
