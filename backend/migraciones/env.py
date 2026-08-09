@@ -22,7 +22,15 @@ from app.modelos_db import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` NO es opcional aqui, aunque sea el valor
+    # contrario al que trae fileConfig por defecto.
+    #
+    # Las migraciones corren DENTRO del arranque de la API (app.main.arranque),
+    # con los loggers de `astrolabio` y de `uvicorn` ya creados. Con el valor por
+    # defecto, esta linea los apagaba a todos: se perdia el aviso con la
+    # contrasena del administrador del primer arranque —que solo se muestra esa
+    # vez— y, a partir de ahi, tambien todo el registro de peticiones.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option("sqlalchemy.url", config_app().url_metadatos)
 target_metadata = Base.metadata

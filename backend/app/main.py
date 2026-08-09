@@ -21,6 +21,10 @@ from app.seguridad import hashear
 log = logging.getLogger("astrolabio")
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# El nivel, explicito en NUESTRO logger y no heredado de la raiz: las migraciones
+# corren dentro del arranque y `alembic.ini` deja la raiz en WARNING, con lo que
+# todo lo que la aplicacion registrara con log.info() se perderia a partir de ahi.
+log.setLevel(logging.INFO)
 
 @asynccontextmanager
 async def ciclo_de_vida(_: FastAPI):
