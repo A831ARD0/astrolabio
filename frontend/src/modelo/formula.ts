@@ -14,12 +14,38 @@
  * `contexto`, que el proveedor lee en el momento de sugerir.
  */
 
+import { loader } from '@monaco-editor/react'
 import type { Monaco } from '@monaco-editor/react'
+import * as monacoLocal from 'monaco-editor'
+import ObreroEditor from 'monaco-editor/editor/editor.worker?worker'
 // Solo para los tipos de los proveedores. `Monaco` da el objeto global, pero los
 // parametros de `provideCompletionItems`/`provideHover` no se infieren solos.
 import type { Position, editor } from 'monaco-editor'
 
 import type { FuncionFormula } from '../api/tipos'
+
+/**
+ * Monaco sale del paquete instalado, no de internet.
+ *
+ * `@monaco-editor/react` viene apuntando por defecto a un CDN (jsdelivr). En un
+ * Astrolabio instalado dentro de la red de alguien eso no se descarga nunca, y
+ * lo que se ve es un editor eternamente en «Loading…»: la métrica no se puede
+ * escribir y no hay ningún error que lo explique. Se le pasa el `monaco` que ya
+ * está en `node_modules` y el editor deja de depender de que haya salida a
+ * internet.
+ *
+ * El obrero va aparte porque Monaco lo arranca solo y, sin decirle de dónde
+ * sacarlo, revienta al montar. Solo hace falta el genérico: los servicios de
+ * lenguaje que traen los suyos (TypeScript, JSON) no se usan aquí.
+ *
+ * La ruta del obrero es `monaco-editor/editor/…` y no la clásica
+ * `monaco-editor/esm/vs/editor/…`: desde la 0.56 el paquete declara `exports`
+ * con `"./*": "./esm/vs/*.js"`, así que el prefijo `esm/vs` ya no se escribe
+ * —escribirlo hace que Vite no resuelva el módulo y arranque sin avisar en la
+ * pantalla, solo con una línea en su propio log.
+ */
+self.MonacoEnvironment = { getWorker: () => new ObreroEditor() }
+loader.config({ monaco: monacoLocal })
 
 export const LENGUAJE = 'formula-astrolabio'
 export const TEMA_CLARO = 'astrolabio-formula-claro'
