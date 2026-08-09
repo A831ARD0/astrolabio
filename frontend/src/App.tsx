@@ -46,6 +46,20 @@ export function App() {
           </svg>
           Astrolabio
         </div>
+        {/*
+          El orden es el del recorrido del dato, LEIDO AL REVES: primero el
+          tablero, que es a donde se llega, y despues cada paso que hubo que dar
+          para llegar ahi —modelo, flujos, transformaciones, cargas, conexiones—.
+
+          Se lee de izquierda a derecha como «esta cifra sale de este modelo, que
+          se alimenta de estos flujos, que corren estas transformaciones, que
+          leen estas cargas, que vienen de esta conexion». Que es exactamente el
+          camino que se recorre cuando un numero no cuadra y hay que ir hacia
+          atras. Poner las conexiones primero ordenaria el menu por el trabajo de
+          quien lo monta una vez, no por el de quien lo usa todos los dias.
+
+          Avisos y Gobierno no son pasos: son transversales, y van al final.
+        */}
         <nav className="nav">
           <NavLink to="/tableros" className={({ isActive }) => (isActive ? 'activo' : '')}>
             Tableros
@@ -53,28 +67,23 @@ export function App() {
           {/* Un lector no edita el modelo; enseñarle la pestaña solo lleva a un 403. */}
           {yo.data?.rol !== 'lector' && (
             <>
-              <NavLink to="/conexiones" className={({ isActive }) => (isActive ? 'activo' : '')}>
-                Conexiones
-              </NavLink>
-              <NavLink to="/etl" className={({ isActive }) => (isActive ? 'activo' : '')}>
-                Transformar
-              </NavLink>
-              {/* Tareas va antes que Flujos porque es la que se mira a diario:
-                  qué corrió anoche. Flujos es donde se arma, y eso se hace una
-                  vez. */}
-              <NavLink to="/tareas" className={({ isActive }) => (isActive ? 'activo' : '')}>
-                Tareas
+              <NavLink to="/modelos" className={({ isActive }) => (isActive ? 'activo' : '')}>
+                Modelo
               </NavLink>
               <NavLink to="/flujos" className={({ isActive }) => (isActive ? 'activo' : '')}>
                 Flujos
               </NavLink>
-              {/* Junto a Flujos porque es de lo mismo: quién se entera cuando uno
-                  de ellos se rompe de madrugada. */}
+              <NavLink to="/etl" className={({ isActive }) => (isActive ? 'activo' : '')}>
+                Transformar
+              </NavLink>
+              <NavLink to="/tareas" className={({ isActive }) => (isActive ? 'activo' : '')}>
+                Tareas
+              </NavLink>
+              <NavLink to="/conexiones" className={({ isActive }) => (isActive ? 'activo' : '')}>
+                Conexiones
+              </NavLink>
               <NavLink to="/avisos" className={({ isActive }) => (isActive ? 'activo' : '')}>
                 Avisos
-              </NavLink>
-              <NavLink to="/modelos" className={({ isActive }) => (isActive ? 'activo' : '')}>
-                Modelo
               </NavLink>
             </>
           )}
