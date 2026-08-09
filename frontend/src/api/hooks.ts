@@ -10,14 +10,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './cliente'
 import type {
+  Borrador,
   CampoCatalogo,
   DashboardResumen,
   Definicion,
   DefinicionDashboard,
+  FuncionFormula,
   MetricaCatalogo,
   ModeloResumen,
+  Problema,
   RespuestaDefinicion,
   ResultadoPrueba,
+  RevisionFormula,
   Rutas,
   TablaCatalogo,
   TablaResumen,
@@ -129,7 +133,7 @@ export function useRutas(id: number, desde: string | null, hasta: string | null)
 }
 
 /**
- * Guardar crea una versión nueva; nunca sobreescribe. Por eso al terminar se
+ * Publicar crea una versión nueva; nunca sobreescribe. Por eso al terminar se
  * invalida también el historial: la lista de versiones acaba de cambiar.
  */
 export function useGuardarDefinicion(id: number) {
@@ -144,6 +148,102 @@ export function useGuardarDefinicion(id: number) {
       qc.invalidateQueries({ queryKey: ['modelo', id] })
       qc.invalidateQueries({ queryKey: claves.modelos })
     },
+  })
+}
+
+// --------------------------------------------------------------------------- //
+// Borrador: guardar sin publicar
+//
+// Guardar el borrador NO invalida `claves.modelos` —la versión vigente no ha
+// cambiado— pero sí escribe el resultado en la caché de la definición, para que
+// el aviso de «sin publicar» y la marca de tiempo se actualicen sin ir de nuevo
+// al servidor por algo que se acaba de mandar.
+// --------------------------------------------------------------------------- //
+
+export function useGuardarBorrador(id: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { definicion: Definicion }) =>
+      api.put<{ problemas: Problema[]; borrador: Borrador; yaml: string }>(
+        `/modelos/${id}/borrador`,
+        v,
+      ),
+    onSuccess: (r, v) => {
+      qc.setQueryData<RespuestaDefinicion>(claves.definicion(id), (antes) =>
+        antes
+          ? { ...antes, definicion: v.definicion, problemas: r.problemas,
+              borrador: r.borrador }
+          : antes,
+      )
+      qc.invalidateQueries({ queryKey: claves.yaml(id) })
+    },
+  })
+}
+
+export function useDescartarBorrador(id: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.del<{ version: number }>(`/modelos/${id}/borrador`),
+    // Sin `setQueryData`: hay que releer lo publicado, que es justo lo que no
+    // está en el navegador.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['modelo', id] }),
+  })
+}
+
+export function usePublicar(id: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { notas?: string }) =>
+      api.post<{ version: number; problemas: Problema[] }>(
+        `/modelos/${id}/publicar`,
+        v,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['modelo', id] })
+      qc.invalidateQueries({ queryKey: claves.modelos })
+    },
+  })
+}
+
+export function useBorrarModelo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del<void>(`/modelos/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: claves.modelos }),
+  })
+}
+
+// --------------------------------------------------------------------------- //
+// Fórmulas
+// --------------------------------------------------------------------------- //
+
+/**
+ * El catálogo de funciones. Es el mismo para todos los modelos y no cambia
+ * mientras el servidor no se reinicie, así que se pide una vez y se guarda: lo
+ * consume el autocompletado, que dispara con cada tecla.
+ */
+export function useFunciones() {
+  return useQuery({
+    queryKey: ['formula', 'funciones'] as const,
+    queryFn: () => api.get<{ funciones: FuncionFormula[] }>('/modelos/funciones'),
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Revisa una fórmula sin ejecutarla. Se le mandan los campos y las métricas que
+ * hay EN PANTALLA y no los guardados: se está escribiendo sobre un borrador que
+ * puede tener una entidad que el servidor todavía no ha visto, y validar contra
+ * lo guardado subrayaría en rojo un campo que sí existe.
+ */
+export function useRevisarFormula(id: number) {
+  return useMutation({
+    mutationFn: (v: {
+      entidad: string
+      expresion: string
+      campos: string[]
+      metricas: Record<string, string>
+    }) => api.post<RevisionFormula>(`/modelos/${id}/revisar-formula`, v),
   })
 }
 

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { useCrearModelo, useModelos, useYo } from '../api/hooks'
-import type { Entidad } from '../api/tipos'
+import type { ErrorApi } from '../api/cliente'
+import { useBorrarModelo, useCrearModelo, useModelos, useYo } from '../api/hooks'
+import type { Entidad, ModeloResumen } from '../api/tipos'
 import { CuerpoEntidad } from '../modelo/DialogoEntidad'
 import { Velo } from '../comunes/Velo'
 
@@ -10,14 +11,28 @@ export function Modelos() {
   const modelos = useModelos()
   const yo = useYo()
   const crear = useCrearModelo()
+  const borrar = useBorrarModelo()
   const navegar = useNavigate()
 
   const [nuevo, setNuevo] = useState(false)
   const [nombre, setNombre] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [entidad, setEntidad] = useState<Entidad | null>(null)
+  const [aBorrar, setABorrar] = useState<ModeloResumen | null>(null)
+  const [confirmacion, setConfirmacion] = useState('')
 
   const puedeEditar = yo.data?.rol === 'administrador' || yo.data?.rol === 'editor'
+  const puedeBorrar = yo.data?.rol === 'administrador'
+
+  /**
+   * Los tableros que impiden borrar. Vienen dentro del 409 y no de otra
+   * llamada: preguntar antes «¿tiene tableros?» y borrar después deja una
+   * ventana en la que alguien publica uno justo en medio.
+   */
+  const detalle = (borrar.error as ErrorApi | null)?.detalle as
+    | { tableros?: { id: number; nombre: string; publicado: boolean }[] }
+    | undefined
+  const tablerosQueEstorban = detalle?.tableros ?? []
 
   function cerrar() {
     setNuevo(false)
@@ -65,9 +80,95 @@ export function Modelos() {
               {m.descripcion ?? 'Sin descripción'}
             </p>
             <span className="etiqueta">versión {m.version_actual}</span>
+            {puedeBorrar && (
+              // Dentro del Link, así que hay que cortarle la navegación: sin
+              // esto, pulsar «Borrar» abriría el modelo y el diálogo saldría
+              // encima de otra pantalla.
+              <button
+                className="btn chico peligro borrar-tarjeta"
+                title="Borrar el modelo"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  borrar.reset()
+                  setConfirmacion('')
+                  setABorrar(m)
+                }}
+              >
+                Borrar
+              </button>
+            )}
           </Link>
         ))}
       </div>
+
+      {/*
+        Se pide teclear el nombre. No es ceremonia: borrar un modelo se lleva su
+        historial entero de versiones, y esa es la clase de cosa que no se debe
+        poder hacer con el mismo gesto con el que se cierra un aviso.
+      */}
+      {aBorrar && (
+        <Velo alCerrar={() => setABorrar(null)}>
+          <div className="modal">
+            <header>Borrar «{aBorrar.nombre}»</header>
+            <div className="cont">
+              <p>
+                Se borran el modelo y sus {aBorrar.version_actual} versiones, con
+                su historial. No se puede deshacer.
+              </p>
+
+              {tablerosQueEstorban.length > 0 ? (
+                <div className="error-caja">
+                  <div>{(borrar.error as Error).message}</div>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                    {tablerosQueEstorban.map((t) => (
+                      <li key={t.id}>
+                        {t.nombre}
+                        {t.publicado ? ' (publicado)' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="chico" style={{ marginTop: 6 }}>
+                    Bórralos o muévelos a otro modelo primero.
+                  </div>
+                </div>
+              ) : (
+                borrar.isError && (
+                  <div className="error-caja">{(borrar.error as Error).message}</div>
+                )
+              )}
+
+              <div className="campo">
+                <label>
+                  Escribe <span className="mono">{aBorrar.nombre}</span> para
+                  confirmar
+                </label>
+                <input
+                  type="text"
+                  className="mono"
+                  autoFocus
+                  value={confirmacion}
+                  onChange={(e) => setConfirmacion(e.target.value)}
+                />
+              </div>
+            </div>
+            <footer>
+              <button className="btn" onClick={() => setABorrar(null)}>
+                Cancelar
+              </button>
+              <button
+                className="btn peligro"
+                disabled={confirmacion !== aBorrar.nombre || borrar.isPending}
+                onClick={() =>
+                  borrar.mutate(aBorrar.id, { onSuccess: () => setABorrar(null) })
+                }
+              >
+                {borrar.isPending ? 'Borrando…' : 'Borrar'}
+              </button>
+            </footer>
+          </div>
+        </Velo>
+      )}
 
       {/*
         La primera entidad se elige aquí y no después: un modelo sin ninguna no se

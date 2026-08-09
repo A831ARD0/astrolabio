@@ -418,6 +418,44 @@ class Modelo(Base):
         back_populates="modelo", cascade="all, delete-orphan",
         order_by="VersionModelo.version",
     )
+    borrador: Mapped[BorradorModelo | None] = relationship(
+        back_populates="modelo", cascade="all, delete-orphan", uselist=False,
+    )
+
+
+class BorradorModelo(Base):
+    """
+    El trabajo en curso sobre un modelo, todavia sin publicar.
+
+    Existe porque *guardar* y *publicar* no son lo mismo. Una version es inmutable
+    y hay tableros anclados a ella: crear una por cada prueba a medias llena el
+    historial de ruido y deja a quien llega despues eligiendo a mano cual de las
+    once era la buena. El borrador es el lugar donde se prueba —se guarda las
+    veces que haga falta, se descarta entero si no sirvio— y solo al publicar se
+    convierte en una version.
+
+    Uno por modelo y no uno por persona. Dos editores sobre el mismo modelo tienen
+    que ver el MISMO trabajo en curso: con un borrador por cabeza, el segundo en
+    publicar borraria el trabajo del primero sin que ninguno de los dos se
+    enterara. `actualizado_por` esta para poder decir de quien es lo que hay antes
+    de pisarlo.
+    """
+
+    __tablename__ = "borrador_modelo"
+
+    modelo_id: Mapped[int] = mapped_column(
+        ForeignKey("modelo.id", ondelete="CASCADE"), primary_key=True)
+    yaml: Mapped[str] = mapped_column(Text)
+    # De que version se partio. Si mientras tanto alguien publico otra, el
+    # borrador esta escrito sobre una base que ya no es la vigente y hay que
+    # decirlo antes de publicar, no despues.
+    desde_version: Mapped[int] = mapped_column(Integer)
+    actualizado_por: Mapped[int | None] = mapped_column(
+        ForeignKey("usuario.id"), nullable=True)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora,
+                                                     onupdate=ahora)
+
+    modelo: Mapped[Modelo] = relationship(back_populates="borrador")
 
 
 class VersionModelo(Base):

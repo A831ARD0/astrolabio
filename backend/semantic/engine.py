@@ -31,6 +31,10 @@ import sqlglot
 import sqlglot.expressions as exp
 import yaml
 
+from semantic.formula import Contexto, ErrorFormula
+from semantic.formula import compilar as compilar_formula
+from semantic.formula import revisar as revisar_formula
+
 
 # --------------------------------------------------------------------------- #
 # Excepciones de dominio: cada una representa una decision que el motor se
@@ -151,6 +155,46 @@ class Modelo:
             self.grafo[r.entidad_a].append((r.entidad_b, r))
             self.grafo[r.entidad_b].append((r.entidad_a, r))
 
+        # Formulas ya traducidas a SQL, por texto de expresion. Una metrica que
+        # referencia a otra recompila la referenciada cada vez, y una consulta
+        # con seis metricas encima de la misma base lo haria seis veces.
+        self._sql_formula: dict[str, str] = {}
+
+    # ---------------- metricas ----------------
+
+    def contexto(self, entidad: str) -> Contexto:
+        """
+        Contra que se resuelve una formula: los campos de su entidad y las demas
+        metricas de ESA entidad.
+
+        Solo las de la misma entidad a proposito. Pegar dentro de una metrica de
+        ventas la expresion de una que vive en objetivos daria SQL que compila
+        —son columnas con nombre distinto— sobre una tabla que no las tiene, y el
+        error saldria como «columna inexistente» en vez de decir lo que pasa.
+        """
+        e = self.entidades[entidad]
+        return Contexto(
+            campos=set(e.campos),
+            metricas={m.nombre: m.expresion for m in self.metricas.values()
+                      if m.entidad == entidad},
+        )
+
+    def sql_de(self, metrica: Metrica) -> str:
+        """La formula de la metrica, ya como SQL de DuckDB."""
+        if metrica.expresion not in self._sql_formula:
+            try:
+                sql = compilar_formula(metrica.expresion,
+                                       self.contexto(metrica.entidad))
+            except ErrorFormula as e:
+                # Se traduce a ErrorModelo para que salga por el mismo camino que
+                # una ruta ambigua: es un error de quien definio el modelo, la
+                # respuesta es 422 y el texto se le enseña tal cual.
+                raise ErrorModelo(
+                    f"La formula de la metrica '{metrica.nombre}' no se puede "
+                    f"compilar: {e}") from e
+            self._sql_formula[metrica.expresion] = sql
+        return self._sql_formula[metrica.expresion]
+
     # ---------------- rutas ----------------
 
     def rutas_minimas(self, desde: str, hasta: str, tope: int = 6,
@@ -261,6 +305,26 @@ class Modelo:
                                f"'{r.entidad_a}.{r.campo_a}' y "
                                f"'{r.entidad_b}.{r.campo_b}': revisa que no "
                                f"duplique filas al agregar.",
+                })
+
+        # Las formulas. Una metrica mal escrita no rompe nada hasta que alguien
+        # la pone en un tablero, y para entonces el error le sale como «no se
+        # pudo consultar» a quien solo estaba mirando una cifra.
+        #
+        # Se revisa entera y no solo si compila: un campo que no existe o uno
+        # suelto fuera de la agregacion SI compilan, y son los dos errores que de
+        # verdad se cometen.
+        for m in self.metricas.values():
+            if m.entidad not in self.entidades:
+                continue                       # ya lo dice revisar_referencias
+            for fallo in revisar_formula(m.expresion, self.contexto(m.entidad)):
+                problemas.append({
+                    "tipo": "formula",
+                    "gravedad": ("critico" if fallo["gravedad"] == "error"
+                                 else "advertencia"),
+                    "entidad": f"{m.entidad}.{m.nombre}",
+                    "mensaje": f"Metrica '{m.nombre}', linea {fallo['linea']}: "
+                               f"{fallo['mensaje']}",
                 })
 
         orden = {"critico": 0, "advertencia": 1}
@@ -396,7 +460,7 @@ class Compilador:
         ]
         campos_ent = set(self.m.entidades[ent_metrica].campos)
         sel_mets = [
-            f"{_calificar(met.expresion, alias[ent_metrica], campos_ent)} "
+            f"{_calificar(self.m.sql_de(met), alias[ent_metrica], campos_ent)} "
             f"AS {_cita(met.nombre)}"
             for met in metricas
         ]

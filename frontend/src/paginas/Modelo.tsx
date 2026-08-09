@@ -1,17 +1,33 @@
 /**
  * Editor del modelo semántico.
  *
- * Una decisión de fondo: **nada se guarda al escribir.** Se trabaja sobre un
- * borrador y guardar es un acto explícito que crea una versión nueva e inmutable.
- * Los dashboards publicados están anclados a una versión concreta, así que editar
- * el modelo no puede cambiarles la cifra por debajo.
+ * Tres estados y no dos, que es lo que distingue guardar de publicar:
+ *
+ *   1. **En pantalla** — lo que se está tocando. No sale del navegador.
+ *   2. **Borrador** — guardado en el servidor, sobrevive a cerrar la pestaña y a
+ *      cambiar de máquina, y NO lo ve nadie más que quien edita el modelo. Los
+ *      tableros siguen leyendo lo publicado.
+ *   3. **Publicado** — una versión inmutable. Los tableros están anclados a una
+ *      concreta, así que publicar es lo único que puede cambiarle la cifra a
+ *      alguien, y por eso es un acto aparte y con nota.
+ *
+ * Descartar tira el borrador entero y devuelve el modelo a lo publicado. Esa es
+ * la red que permite probar cosas: se puede romper el modelo a gusto sabiendo
+ * que hay un botón para volver.
  */
 
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { PanelLateral } from '../comunes/Panel'
-import { useDefinicion, useGuardarDefinicion, useVersiones } from '../api/hooks'
+import { Velo } from '../comunes/Velo'
+import {
+  useDefinicion,
+  useDescartarBorrador,
+  useGuardarBorrador,
+  usePublicar,
+  useVersiones,
+} from '../api/hooks'
 import type { Entidad, Metrica } from '../api/tipos'
 import { DialogoEntidad } from '../modelo/DialogoEntidad'
 import { Lienzo, type Seleccion } from '../modelo/Lienzo'
@@ -43,7 +59,9 @@ export function Modelo() {
   const modeloId = Number(useParams().id)
   const cargada = useDefinicion(modeloId)
   const versiones = useVersiones(modeloId)
-  const guardar = useGuardarDefinicion(modeloId)
+  const guardar = useGuardarBorrador(modeloId)
+  const descartar = useDescartarBorrador(modeloId)
+  const publicar = usePublicar(modeloId)
 
   const [estado, despachar] = useReducer(reducir, estadoInicial)
   const [pestana, setPestana] = useState<Pestana>('lienzo')
@@ -53,6 +71,7 @@ export function Modelo() {
   const [dialogoEntidad, setDialogoEntidad] = useState(false)
   const [metricaAbierta, setMetricaAbierta] = useState<number | 'nueva' | null>(null)
   const [notas, setNotas] = useState('')
+  const [confirmarDescarte, setConfirmarDescarte] = useState(false)
 
   // Cargar en el borrador. Si el modelo no traía disposición (viene de un YAML
   // escrito a mano), se coloca una inicial para que se pueda leer al abrirlo.
@@ -70,6 +89,8 @@ export function Modelo() {
 
   const d = estado.borrador
   const sucio = haCambiado(estado)
+  const borrador = cargada.data?.borrador ?? null
+  const hayBorrador = borrador !== null
 
   // Avisar antes de cerrar la pestaña con trabajo sin guardar.
   useEffect(() => {
@@ -212,8 +233,9 @@ export function Modelo() {
               ))}
             </div>
             <div className="chico tenue" style={{ padding: '6px 8px 0' }}>
-              Las versiones son inmutables: guardar crea una nueva y no toca las
-              anteriores.
+              Las versiones son inmutables: <strong>publicar</strong> crea una
+              nueva y no toca las anteriores. Guardar el borrador no crea
+              ninguna.
             </div>
           </div>
         </section>
@@ -223,7 +245,11 @@ export function Modelo() {
       <div className="centro">
         <div className="barra-editor">
           <strong className="mono">{d.modelo}</strong>
-          <span className="etiqueta">v{cargada.data?.version}</span>
+          <span className={`etiqueta${hayBorrador ? ' aviso' : ''}`}>
+            {hayBorrador
+              ? `borrador · sobre v${cargada.data?.version_vigente}`
+              : `v${cargada.data?.version}`}
+          </span>
 
           <div className="pestanas">
             <button
@@ -249,7 +275,11 @@ export function Modelo() {
               minWidth: 0,
             }}
           >
-            {sucio && <span className="sin-guardar">cambios sin guardar</span>}
+            {sucio ? (
+              <span className="sin-guardar">cambios sin guardar</span>
+            ) : (
+              hayBorrador && <span className="sin-guardar">sin publicar</span>
+            )}
             <button
               className="btn"
               disabled={estado.historial.length === 0}
@@ -258,31 +288,80 @@ export function Modelo() {
             >
               Deshacer
             </button>
+            {/* Descartar solo cuando hay algo que descartar: un botón que a
+                veces no hace nada enseña a no fiarse de los botones. */}
+            {(hayBorrador || sucio) && (
+              <button
+                className="btn peligro"
+                disabled={descartar.isPending}
+                onClick={() => setConfirmarDescarte(true)}
+                title="Tirar todo lo no publicado y volver a la versión vigente"
+              >
+                Descartar
+              </button>
+            )}
+            <button
+              className="btn"
+              disabled={!sucio || guardar.isPending}
+              onClick={() => guardar.mutate({ definicion: d })}
+              title="Guarda el trabajo sin tocar lo que ven los tableros"
+            >
+              {guardar.isPending ? 'Guardando…' : 'Guardar borrador'}
+            </button>
             <input
               type="text"
               placeholder="Nota de la versión"
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
-              style={{ flex: '0 1 170px' }}
+              style={{ flex: '0 1 150px' }}
             />
             <button
               className="btn primario"
-              disabled={!sucio || guardar.isPending}
-              onClick={() =>
-                guardar.mutate(
-                  { definicion: d, notas: notas.trim() || undefined },
-                  { onSuccess: () => setNotas('') },
-                )
+              disabled={(!hayBorrador && !sucio) || publicar.isPending || guardar.isPending}
+              title={
+                sucio
+                  ? 'Guarda el borrador y publícalo como versión nueva'
+                  : 'Publica el borrador como versión nueva'
               }
+              onClick={() => {
+                const notaFinal = notas.trim() || undefined
+                // Si hay cambios en pantalla se guardan ANTES de publicar: el
+                // servidor publica lo que hay en el borrador, no lo que tenga
+                // abierto un navegador. Hacerlo en dos pasos aquí es lo que
+                // evita que «publicar» se coma cambios que no había visto.
+                if (sucio) {
+                  guardar.mutate(
+                    { definicion: d },
+                    {
+                      onSuccess: () =>
+                        publicar.mutate(
+                          { notas: notaFinal },
+                          { onSuccess: () => setNotas('') },
+                        ),
+                    },
+                  )
+                } else {
+                  publicar.mutate({ notas: notaFinal }, { onSuccess: () => setNotas('') })
+                }
+              }}
             >
-              {guardar.isPending ? 'Guardando…' : 'Guardar versión'}
+              {publicar.isPending ? 'Publicando…' : 'Publicar versión'}
             </button>
           </div>
         </div>
 
-        {guardar.isError && (
+        {(guardar.isError || publicar.isError || descartar.isError) && (
           <div className="error-caja" style={{ margin: '10px 12px 0' }}>
-            {(guardar.error as Error).message}
+            {((guardar.error ?? publicar.error ?? descartar.error) as Error).message}
+          </div>
+        )}
+
+        {hayBorrador && !sucio && (
+          <div className="aviso-caja" style={{ margin: '10px 12px 0' }}>
+            Estás viendo un borrador guardado
+            {borrador?.actualizado_por ? ` por ${borrador.actualizado_por}` : ''}
+            {borrador ? ` el ${new Date(borrador.actualizado_en).toLocaleString('es-MX')}` : ''}.
+            Los tableros siguen usando la versión {cargada.data?.version_vigente}.
           </div>
         )}
 
@@ -371,6 +450,53 @@ export function Modelo() {
           alAceptar={agregarEntidad}
           alCerrar={() => setDialogoEntidad(false)}
         />
+      )}
+
+      {/* Descartar no se deshace: no hay historial de borradores del que sacarlo
+          otra vez. Un clic de más ahí cuesta una tarde de trabajo. */}
+      {confirmarDescarte && (
+        <Velo alCerrar={() => setConfirmarDescarte(false)}>
+          <div className="modal">
+            <header>Descartar los cambios sin publicar</header>
+            <div className="cont">
+              <p>
+                Se tira todo lo que no esté publicado y el modelo vuelve a la
+                versión {cargada.data?.version_vigente}, que es la que están
+                usando los tableros.
+              </p>
+              <p className="chico tenue">
+                Esto no se puede deshacer: un borrador descartado no queda en el
+                historial.
+              </p>
+            </div>
+            <footer>
+              <button className="btn" onClick={() => setConfirmarDescarte(false)}>
+                Cancelar
+              </button>
+              <button
+                className="btn peligro"
+                disabled={descartar.isPending}
+                onClick={() =>
+                  descartar.mutate(undefined, {
+                    onSuccess: () => {
+                      setConfirmarDescarte(false)
+                      setSeleccion(null)
+                    },
+                    // Si no había borrador en el servidor —solo cambios en
+                    // pantalla— la respuesta es 404 y aun así hay que cerrar y
+                    // recargar: es exactamente lo que se pidió.
+                    onError: () => {
+                      setConfirmarDescarte(false)
+                      cargada.refetch()
+                    },
+                  })
+                }
+              >
+                {descartar.isPending ? 'Descartando…' : 'Descartar'}
+              </button>
+            </footer>
+          </div>
+        </Velo>
       )}
 
       {metricaAbierta !== null && (

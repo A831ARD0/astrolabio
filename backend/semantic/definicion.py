@@ -24,6 +24,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from semantic.formula import Contexto, ErrorFormula
+from semantic.formula import compilar as compilar_formula
 from semantic.politica import PoliticaDef, revisar_politicas
 
 TIPOS_CAMPO = ("entero", "decimal", "texto", "fecha", "booleano")
@@ -150,6 +152,35 @@ class Definicion(_Base):
                 errores.append(
                     f"La metrica '{m.nombre}' vive en la entidad '{m.entidad}', "
                     f"que no existe.")
+
+        # Que la formula al menos COMPILE. Lo que no compila no se guarda: una
+        # metrica rota no falla al guardarla, falla en el primer tablero que la
+        # use, y para entonces quien la escribio ya no esta mirando.
+        #
+        # Solo compilar, no la revision completa: «este campo no existe» y «este
+        # campo esta fuera de la agregacion» salen en el diagnostico y en el
+        # editor de la metrica, en rojo y con la linea señalada, pero no impiden
+        # guardar. Hay modelos que apoyan una metrica en una columna de una tabla
+        # unida, y romperles el guardado al actualizar seria cobrarles el cambio
+        # a ellos.
+        for m in self.metricas:
+            if m.entidad not in entidades:
+                continue
+            ent = entidades[m.entidad]
+            contexto = Contexto(
+                campos={c.nombre for c in ent.campos},
+                metricas={o.nombre: o.expresion for o in self.metricas
+                          if o.entidad == m.entidad and o.nombre != m.nombre},
+            )
+            try:
+                compilar_formula(m.expresion, contexto)
+            except ErrorFormula as e:
+                for f in e.fallos:
+                    errores.append(
+                        f"La formula de '{m.nombre}' (linea {f.con_posicion(m.expresion)['linea']}): "
+                        f"{f.mensaje}")
+            except Exception as e:                       # pragma: no cover
+                errores.append(f"La formula de '{m.nombre}' no se pudo leer: {e}")
 
         nombres_metrica = [m.nombre for m in self.metricas]
         for n in {n for n in nombres_metrica if nombres_metrica.count(n) > 1}:

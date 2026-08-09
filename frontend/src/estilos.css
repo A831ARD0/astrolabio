@@ -256,6 +256,15 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 .tarjeta:hover { border-color: var(--acento); }
 .tarjeta h3 { margin: 0 0 4px; font-size: 14px; }
 
+/* Borrar, en la esquina de la tarjeta. Solo al pasar por encima: es una accion
+   que no se deshace y no tiene por que estar compitiendo por la mirada con el
+   nombre del modelo. Se mantiene al enfocar con el teclado, o seria inalcanzable
+   sin raton. */
+.tarjeta { position: relative; }
+.borrar-tarjeta { position: absolute; top: 10px; right: 10px; opacity: 0; }
+.tarjeta:hover .borrar-tarjeta,
+.borrar-tarjeta:focus-visible { opacity: 1; }
+
 /* -------------------------------------------------------- editor del modelo */
 
 .editor { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
@@ -1367,3 +1376,112 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 .grupo > header .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grupo > header .cuenta { margin-left: auto; font-variant-numeric: tabular-nums; }
 .grupo > header .plegar { flex: 0 0 9px; font-size: 9px; }
+
+/* ------------------------------------------------- el editor de una metrica
+
+   Dos columnas: se escribe a la izquierda y se consulta a la derecha, con las
+   dos a la vista al mismo tiempo. Una referencia que hay que abrir en otra
+   ventana no se consulta, y la mitad del valor de tener un catalogo de funciones
+   es que se vea sin dejar de escribir. */
+
+.modal.metrica { width: min(1180px, 96vw); height: min(88vh, 900px); }
+.modal.metrica > header { display: flex; align-items: center; gap: 10px; }
+.modal > .cont.metrica-cuerpo {
+  flex-direction: row;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+.metrica-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+}
+/* El editor de codigo NO puede encogerse a cero. Monaco mide su contenedor una
+   vez y se queda con ese alto: dentro de una columna flex sin minimo, cuando el
+   dialogo se estrecha acaba con dos pixeles y el cursor invisible. */
+.caja-formula {
+  flex: 1;
+  min-height: 190px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--fondo-panel);
+}
+.metrica-editor .campo > label { display: flex; align-items: baseline; }
+
+/* Los botones de insertar un campo o una metrica de un clic. */
+.atajos { display: flex; flex-direction: column; gap: 4px; }
+.atajos .btn.chico { margin: 2px 3px 0 0; }
+
+.metrica-referencia {
+  flex: 0 0 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding-left: 14px;
+  border-left: 1px solid var(--borde);
+}
+.metrica-referencia input[type='search'] { position: sticky; top: 0; z-index: 2; }
+.metrica-referencia h5 {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-tenue);
+}
+.metrica-referencia details {
+  border-bottom: 1px solid var(--borde);
+  padding: 4px 0;
+}
+.metrica-referencia summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.metrica-referencia summary .etiqueta { font-size: 10px; padding: 0 4px; }
+.metrica-referencia p { margin: 5px 0; font-size: 12px; color: var(--texto-suave); }
+.metrica-referencia .firma {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-tenue);
+  word-break: break-word;
+}
+.metrica-referencia .ejemplo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.metrica-referencia .ejemplo code {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Los fallos de la formula, en lista. Uno por renglon y con su linea delante. */
+.metrica-editor .error-caja > div + div,
+.metrica-editor .aviso-caja > div + div { margin-top: 3px; }
+
+@media (max-width: 900px) {
+  /* Apiladas, la referencia estorba mas de lo que ayuda: se cierra con el boton
+     de la cabecera y aqui solo se garantiza que no aplaste al editor. */
+  .modal > .cont.metrica-cuerpo { flex-direction: column; overflow: auto; }
+  .metrica-referencia {
+    flex: none;
+    max-height: 40vh;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--borde);
+    padding-top: 10px;
+  }
+}

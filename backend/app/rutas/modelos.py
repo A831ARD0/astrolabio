@@ -23,10 +23,15 @@ from app.exportar import (
     Procedencia, TOPE_FILAS, a_csv, a_excel, nombre_archivo,
 )
 from app.dependencias import ContextoDep, SesionDep, UsuarioDep, exigir_rol
+from app.modelos_db import BorradorModelo, Dashboard
 from app.modelos_db import Modelo as ModeloDB
 from app.modelos_db import Rol, Usuario, VersionModelo, iso
 from app.politicas import PoliticaInvalida
 from semantic.definicion import Definicion, desde_yaml, volcar_yaml
+from semantic.formula import (
+    Contexto, ErrorFormula, catalogo_para_pantalla, compilar as compilar_formula,
+    revisar as revisar_formula,
+)
 from semantic.politica import PoliticaDef, atributos_requeridos
 from semantic.engine import Consulta, ErrorModelo
 from semantic.engine import Metrica as MetricaSemantica
@@ -93,12 +98,38 @@ class GuardarDefinicion(BaseModel):
     notas: str | None = None
 
 
+class GuardarBorrador(BaseModel):
+    definicion: Definicion
+
+
+class Publicar(BaseModel):
+    notas: str | None = None
+
+
 class ProbarMetrica(BaseModel):
     entidad: str
     expresion: str
     formato: str = "numero"
     dimensiones: list[str] = []
     limite: int = Field(default=20, le=500)
+
+
+class RevisarFormula(BaseModel):
+    """
+    Lo que hace falta para revisar una formula sin haberla guardado.
+
+    `campos` y `metricas` llegan del navegador y NO se leen del modelo guardado a
+    proposito: se esta escribiendo sobre un borrador que puede tener una entidad
+    o una metrica que el servidor todavia no ha visto, y revisar contra lo
+    guardado subrayaria en rojo un campo que existe en la pantalla de quien
+    escribe. Si no vienen, se cae al modelo guardado, que es lo correcto para
+    quien llame a esta ruta desde fuera.
+    """
+
+    entidad: str
+    expresion: str
+    campos: list[str] | None = None
+    metricas: dict[str, str] | None = None
 
 
 class PeticionExportar(PeticionConsulta):
@@ -164,6 +195,23 @@ def _version_exacta(sesion: SesionDep, modelo_id: int,
     return v
 
 
+def _existe(sesion: SesionDep, modelo_id: int) -> ModeloDB:
+    m = sesion.get(ModeloDB, modelo_id)
+    if m is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Modelo no encontrado")
+    return m
+
+
+def _resumen_borrador(sesion: SesionDep, b: BorradorModelo) -> dict:
+    """Quien lo tiene a medias y desde cuando. Sale junto con la definicion."""
+    autor = sesion.get(Usuario, b.actualizado_por) if b.actualizado_por else None
+    return {
+        "desde_version": b.desde_version,
+        "actualizado_en": iso(b.actualizado_en),
+        "actualizado_por": autor.email if autor else None,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Rutas
 # --------------------------------------------------------------------------- #
@@ -177,6 +225,18 @@ def listar(sesion: SesionDep, _: UsuarioDep):
                                    descripcion=m.descripcion,
                                    version_actual=ultima))
     return salida
+
+
+@router.get("/funciones")
+def funciones(_: UsuarioDep):
+    """
+    El catalogo de funciones de formula: firma, resumen y ejemplo de cada una.
+
+    Va antes que `/{modelo_id}/…` porque no depende de ningun modelo — el
+    lenguaje es el mismo para todos— y asi el editor lo pide una sola vez y lo
+    guarda en cache para el autocompletado.
+    """
+    return {"funciones": catalogo_para_pantalla()}
 
 
 @router.post("", response_model=ModeloSalida, status_code=201)
@@ -266,24 +326,38 @@ def versiones(modelo_id: int, sesion: SesionDep, _: UsuarioDep):
 def leer_definicion(modelo_id: int, sesion: SesionDep, _: UsuarioDep,
                     version: int | None = None):
     """
-    La definicion estructurada que edita el lienzo, mas su diagnostico.
+    Lo que hay que abrir en el lienzo, mas su diagnostico.
+
+    Si hay un borrador sin publicar, **es lo que se devuelve**: es el trabajo en
+    curso, y abrir el editor en la version publicada haria que los cambios
+    guardados pero no publicados parecieran perdidos. Pedir una `version`
+    concreta salta el borrador — es la via para mirar el historial.
 
     Devuelve el YAML crudo tal cual, sin pasar por los objetos del motor: el
     motor ignora jerarquias, perspectivas y la disposicion del lienzo, y
     serializar desde el las borraria en silencio.
     """
-    v = (_version_exacta(sesion, modelo_id, version) if version
-         else _version_vigente(sesion, modelo_id))
+    vigente = _version_vigente(sesion, modelo_id)
+    borrador = None if version else sesion.get(BorradorModelo, modelo_id)
+    if borrador is not None:
+        texto, num = borrador.yaml, borrador.desde_version
+    else:
+        v = _version_exacta(sesion, modelo_id, version) if version else vigente
+        texto, num = v.yaml, v.version
+
     try:
-        definicion = desde_yaml(v.yaml)
+        definicion = desde_yaml(texto)
     except Exception as e:
+        que = "El borrador" if borrador is not None else f"La version {num}"
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"La version {v.version} no se puede leer: {e}")
+                            f"{que} no se puede leer: {e}")
     return {
-        "version": v.version,
-        "es_vigente": v.version == _version_vigente(sesion, modelo_id).version,
+        "version": num,
+        "es_vigente": num == vigente.version,
         "definicion": definicion.model_dump(exclude_none=True, mode="json"),
-        "problemas": _cargar_semantico(v.yaml).diagnosticar(),
+        "problemas": _cargar_semantico(texto).diagnosticar(),
+        "borrador": _resumen_borrador(sesion, borrador) if borrador else None,
+        "version_vigente": vigente.version,
     }
 
 
@@ -292,14 +366,17 @@ def guardar_definicion(modelo_id: int, cuerpo: GuardarDefinicion,
                        sesion: SesionDep,
                        actor: Usuario = Depends(exigir_rol(Rol.editor))):
     """
-    Guarda la definicion como una version nueva.
+    Publica la definicion como una version nueva.
 
     Dos validaciones distintas, y las dos hacen falta:
       1. referencias cruzadas — dicen QUE esta mal y donde.
       2. el motor — dice si el modelo compila de verdad.
+
+    Publicar cierra el borrador: lo que se acaba de publicar ES el borrador, y
+    dejarlo ahi haria que el editor siguiera abriendo trabajo «sin publicar»
+    identico a la version vigente, con el aviso puesto y nada que hacerle.
     """
-    if sesion.get(ModeloDB, modelo_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Modelo no encontrado")
+    _existe(sesion, modelo_id)
 
     errores = cuerpo.definicion.revisar_referencias()
     if errores:
@@ -317,6 +394,10 @@ def guardar_definicion(modelo_id: int, cuerpo: GuardarDefinicion,
     sesion.add(v)
     sesion.flush()
 
+    borrador = sesion.get(BorradorModelo, modelo_id)
+    if borrador is not None:
+        sesion.delete(borrador)
+
     problemas = semantico.diagnosticar()
     registrar(sesion, accion="modelo_version_creada", usuario_id=actor.id,
               email=actor.email, objeto_tipo="modelo", objeto_id=modelo_id,
@@ -325,6 +406,169 @@ def guardar_definicion(modelo_id: int, cuerpo: GuardarDefinicion,
                        "problemas_criticos": sum(
                            1 for p in problemas if p["gravedad"] == "critico")})
     return {"version": v.version, "problemas": problemas, "yaml": texto}
+
+
+# --------------------------------------------------------------------------- #
+# Borrador: guardar sin publicar
+#
+# La regla del modelo semantico es que una version es inmutable, y esa regla no
+# se toca. Lo que faltaba era el escalon de antes: un sitio donde probar sin
+# comprometer a nadie. Un borrador se guarda, se descarta entero y se publica; lo
+# que ven los tableros no cambia hasta ese ultimo paso.
+# --------------------------------------------------------------------------- #
+
+@router.put("/{modelo_id}/borrador")
+def guardar_borrador(modelo_id: int, cuerpo: GuardarBorrador, sesion: SesionDep,
+                     actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Guarda el trabajo en curso. NO crea version y NO cambia lo que ven los
+    tableros.
+
+    Se valida igual de fuerte que al publicar, a proposito. Un borrador que no
+    compila se guardaria sin protestar y el error saldria dias despues, al
+    publicar, cuando ya nadie recuerda que se estaba haciendo. Guardar seguido es
+    justo el momento en que un error sale barato.
+    """
+    _existe(sesion, modelo_id)
+
+    errores = cuerpo.definicion.revisar_referencias()
+    if errores:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            {"errores": errores})
+
+    texto = cuerpo.definicion.a_yaml()
+    semantico = _cargar_semantico(texto)
+    vigente = _version_vigente(sesion, modelo_id)
+
+    b = sesion.get(BorradorModelo, modelo_id)
+    if b is None:
+        b = BorradorModelo(modelo_id=modelo_id, yaml=texto,
+                           desde_version=vigente.version,
+                           actualizado_por=actor.id)
+        sesion.add(b)
+    else:
+        b.yaml = texto
+        b.actualizado_por = actor.id
+    sesion.flush()
+
+    # Sin auditar. Un borrador se guarda decenas de veces en una tarde y el
+    # registro dejaria de servir para lo que sirve: saber que cambio de verdad.
+    # Lo que se audita es publicar y descartar, que son los actos con efecto.
+    return {"problemas": semantico.diagnosticar(),
+            "borrador": _resumen_borrador(sesion, b), "yaml": texto}
+
+
+@router.delete("/{modelo_id}/borrador")
+def descartar_borrador(modelo_id: int, sesion: SesionDep,
+                       actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Tira el borrador entero y deja el modelo como la version vigente.
+
+    Devuelve la version a la que se vuelve en vez de 204: quien descarta necesita
+    ver de inmediato sobre que quedo parado, y el editor tiene que recargar algo.
+    """
+    _existe(sesion, modelo_id)
+    b = sesion.get(BorradorModelo, modelo_id)
+    if b is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "Este modelo no tiene ningun borrador que descartar")
+    sesion.delete(b)
+    vigente = _version_vigente(sesion, modelo_id)
+    registrar(sesion, accion="modelo_borrador_descartado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="modelo", objeto_id=modelo_id,
+              detalle={"vuelve_a_version": vigente.version,
+                       "era_de": b.actualizado_por})
+    return {"version": vigente.version}
+
+
+@router.post("/{modelo_id}/publicar", status_code=201)
+def publicar(modelo_id: int, cuerpo: Publicar, sesion: SesionDep,
+             actor: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Convierte el borrador en una version inmutable y lo cierra.
+
+    Publica lo que hay GUARDADO en el borrador, no lo que el navegador tenga en
+    pantalla: si fuera lo segundo, dos pestañas abiertas publicarian cosas
+    distintas segun cual apretara el boton.
+    """
+    _existe(sesion, modelo_id)
+    b = sesion.get(BorradorModelo, modelo_id)
+    if b is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No hay nada que publicar: el modelo no tiene cambios sin publicar.")
+
+    semantico = _cargar_semantico(b.yaml)
+    definicion = desde_yaml(b.yaml)
+    errores = definicion.revisar_referencias()
+    if errores:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            {"errores": errores})
+
+    ultima = sesion.scalar(
+        select(func.coalesce(func.max(VersionModelo.version), 0))
+        .where(VersionModelo.modelo_id == modelo_id))
+    v = VersionModelo(modelo_id=modelo_id, version=ultima + 1, yaml=b.yaml,
+                      notas=cuerpo.notas, creado_por=actor.id)
+    sesion.add(v)
+    # `desde_version` puede haber quedado atras si alguien publico mientras
+    # tanto. Se anota en la auditoria en vez de rechazar: el borrador es uno solo
+    # y compartido, asi que lo que se publica ya incluye el trabajo de los dos.
+    partio_de = b.desde_version
+    sesion.delete(b)
+    sesion.flush()
+
+    problemas = semantico.diagnosticar()
+    registrar(sesion, accion="modelo_version_creada", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="modelo", objeto_id=modelo_id,
+              detalle={"version": v.version, "notas": cuerpo.notas,
+                       "desde_borrador": True, "partio_de": partio_de,
+                       "entidades": len(definicion.entidades),
+                       "problemas_criticos": sum(
+                           1 for p in problemas if p["gravedad"] == "critico")})
+    return {"version": v.version, "problemas": problemas}
+
+
+# --------------------------------------------------------------------------- #
+# Borrar el modelo
+# --------------------------------------------------------------------------- #
+
+@router.delete("/{modelo_id}", status_code=204)
+def borrar(modelo_id: int, sesion: SesionDep,
+           actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Borra el modelo entero: sus versiones, su borrador y su historial.
+
+    Se niega si algun tablero esta anclado a una de sus versiones, y dice CUALES.
+    Podria borrarlos en cascada, y seria peor: quien borra un modelo de prueba no
+    espera perder ademas un tablero que alguien mas publico sobre el. Que la
+    pantalla ensene la lista y que la decida una persona.
+
+    Solo administrador. Un editor puede crear y publicar versiones —todo eso deja
+    rastro y se puede volver atras— pero esto no se deshace.
+    """
+    m = _existe(sesion, modelo_id)
+
+    anclados = list(sesion.scalars(
+        select(Dashboard)
+        .join(VersionModelo, VersionModelo.id == Dashboard.version_modelo_id)
+        .where(VersionModelo.modelo_id == modelo_id)
+        .order_by(Dashboard.nombre)
+    ))
+    if anclados:
+        raise HTTPException(status.HTTP_409_CONFLICT, {
+            "mensaje": f"No se puede borrar '{m.nombre}': "
+                       f"{len(anclados)} tablero(s) lo estan usando.",
+            "tableros": [{"id": d.id, "nombre": d.nombre,
+                          "publicado": d.publicado} for d in anclados],
+        })
+
+    versiones = len(m.versiones)
+    registrar(sesion, accion="modelo_borrado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="modelo", objeto_id=modelo_id,
+              detalle={"nombre": m.nombre, "versiones": versiones})
+    sesion.delete(m)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --------------------------------------------------------------------------- #
@@ -527,6 +771,40 @@ def probar_metrica(modelo_id: int, cuerpo: ProbarMetrica, sesion: SesionDep,
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
             "sql": res.sql}
+
+
+@router.post("/{modelo_id}/revisar-formula")
+def revisar_formula_ruta(modelo_id: int, cuerpo: RevisarFormula, sesion: SesionDep,
+                         _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Revisa la formula sin ejecutarla y devuelve los fallos con linea y columna.
+
+    Es lo que subraya en rojo mientras se escribe. No toca los datos: mira la
+    formula contra los campos de la entidad, asi que responde en milisegundos y
+    se puede llamar en cada pausa del teclado. `probar-metrica`, que si ejecuta,
+    sigue siendo el paso siguiente — este dice si esta bien ESCRITA, aquel dice
+    si da el numero que se esperaba.
+    """
+    if cuerpo.campos is not None:
+        contexto = Contexto(campos=set(cuerpo.campos),
+                            metricas=dict(cuerpo.metricas or {}))
+    else:
+        m = _cargar_semantico(_version_vigente(sesion, modelo_id).yaml)
+        if cuerpo.entidad not in m.entidades:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                f"La entidad '{cuerpo.entidad}' no esta en el modelo")
+        contexto = m.contexto(cuerpo.entidad)
+
+    fallos = revisar_formula(cuerpo.expresion, contexto)
+    try:
+        sql = compilar_formula(cuerpo.expresion, contexto)
+    except Exception:
+        # Que no compile ya lo dice `fallos`, con su posicion. Aqui el SQL es un
+        # extra —para poder verlo— y no tener que enseñarlo no es un error.
+        sql = None
+    return {"fallos": fallos,
+            "hay_errores": any(f["gravedad"] == "error" for f in fallos),
+            "sql": sql}
 
 
 @router.get("/{modelo_id}/diagnostico")

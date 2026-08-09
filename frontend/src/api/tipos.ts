@@ -61,18 +61,56 @@ export interface Definicion {
 }
 
 export interface Problema {
-  tipo: 'ruta_ambigua' | 'tabla_huerfana' | 'muchos_a_muchos'
+  tipo: 'ruta_ambigua' | 'tabla_huerfana' | 'muchos_a_muchos' | 'formula'
   gravedad: 'critico' | 'advertencia'
   entidad: string
   mensaje: string
   rutas?: string[]
 }
 
+/** Quién tiene trabajo a medias sobre el modelo, y desde cuándo. */
+export interface Borrador {
+  desde_version: number
+  actualizado_en: string
+  actualizado_por: string | null
+}
+
 export interface RespuestaDefinicion {
+  /** La del borrador si lo hay; si no, la vigente o la que se pidió. */
   version: number
   es_vigente: boolean
   definicion: Definicion
   problemas: Problema[]
+  /** null = no hay nada sin publicar. */
+  borrador: Borrador | null
+  version_vigente: number
+}
+
+/** Una función del lenguaje de fórmulas, tal como la ofrece el editor. */
+export interface FuncionFormula {
+  nombre: string
+  firma: string
+  categoria: 'agregacion' | 'condicion' | 'matematica' | 'texto' | 'fecha'
+  resumen: string
+  ejemplo: string
+  agrega: boolean
+  minimo: number
+  maximo: number | null
+}
+
+/** Un problema de una fórmula, con dónde está para poder subrayarlo. */
+export interface FalloFormula {
+  mensaje: string
+  linea: number
+  columna: number
+  largo: number
+  gravedad: 'error' | 'advertencia'
+}
+
+export interface RevisionFormula {
+  fallos: FalloFormula[]
+  hay_errores: boolean
+  sql: string | null
 }
 
 export interface ModeloResumen {
