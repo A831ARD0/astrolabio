@@ -19,7 +19,18 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 
-BASE_ANALITICA = RAIZ / "datos" / "analitico.duckdb"
+# El entorno, ANTES de cualquier import que toque la configuracion: `config()`
+# esta cacheada con lru_cache, asi que el primero que la llame fija los valores
+# para toda la corrida. Generar la base de demostracion tambien la llama —lee de
+# ahi donde escribir—, de modo que esto tiene que ir primero o las pruebas se
+# irian contra la base de metadatos de verdad en vez de la temporal.
+_tmp = tempfile.mkdtemp(prefix="astrolabio_test_")
+os.environ["ASTROLABIO_URL_METADATOS"] = f"sqlite:///{_tmp}/prueba.db"
+os.environ["ASTROLABIO_RUTA_DUCKDB"] = str(RAIZ / "datos" / "analitico.duckdb")
+os.environ["ASTROLABIO_CLAVE_SECRETA"] = "clave-solo-para-pruebas-no-produccion"
+os.environ["ASTROLABIO_ENTORNO"] = "desarrollo"
+
+BASE_ANALITICA = Path(os.environ["ASTROLABIO_RUTA_DUCKDB"])
 if not BASE_ANALITICA.exists():
     import sys
     sys.path.insert(0, str(RAIZ))
@@ -27,13 +38,6 @@ if not BASE_ANALITICA.exists():
 
     print(f"\nNo hay base de demostracion en {BASE_ANALITICA}; generandola...")
     generar(rapido=os.environ.get("ASTROLABIO_DEMO_RAPIDO") == "1")
-
-# Debe hacerse ANTES de importar la app: la config se cachea con lru_cache.
-_tmp = tempfile.mkdtemp(prefix="astrolabio_test_")
-os.environ["ASTROLABIO_URL_METADATOS"] = f"sqlite:///{_tmp}/prueba.db"
-os.environ["ASTROLABIO_RUTA_DUCKDB"] = str(RAIZ / "datos" / "analitico.duckdb")
-os.environ["ASTROLABIO_CLAVE_SECRETA"] = "clave-solo-para-pruebas-no-produccion"
-os.environ["ASTROLABIO_ENTORNO"] = "desarrollo"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

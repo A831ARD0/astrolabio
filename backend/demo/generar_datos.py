@@ -32,6 +32,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import duckdb
@@ -39,7 +40,15 @@ import numpy as np
 
 SEMILLA = 20260803
 RAIZ = Path(__file__).resolve().parent.parent
-DB = RAIZ / "datos" / "analitico.duckdb"
+sys.path.insert(0, str(RAIZ))
+
+from app.config import config                                       # noqa: E402
+
+# La MISMA ruta que abre la API, no una fija. Cuando eran dos, el generador
+# escribia en `datos/analitico.duckdb` mientras el servidor leia la que le dice
+# ASTROLABIO_RUTA_DUCKDB, y en Docker —donde el compose la mueve a otro
+# volumen— sembrar la demo dejaba las pantallas vacias sin un solo error.
+DB = Path(config().ruta_duckdb)
 
 # Marcas inventadas de un grupo automotriz que no existe.
 MARCAS = [

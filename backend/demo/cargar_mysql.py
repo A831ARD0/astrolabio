@@ -17,13 +17,19 @@ una base con datos que te importen: el script empieza con DROP DATABASE.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import duckdb
 import pymysql
 
 RAIZ = Path(__file__).resolve().parent.parent
-DUCK = RAIZ / "datos" / "analitico.duckdb"
+sys.path.insert(0, str(RAIZ))
+
+from app.config import config                                       # noqa: E402
+
+# La misma que genera `generar_datos.py`, que es la que dice ASTROLABIO_RUTA_DUCKDB.
+DUCK = Path(config().ruta_duckdb)
 
 BASE = "astrolabio_demo"
 

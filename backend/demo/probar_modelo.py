@@ -10,12 +10,15 @@ from pathlib import Path
 import duckdb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app.config import config  # noqa: E402
 from semantic.engine import (  # noqa: E402
     Compilador, Consulta, Modelo, MotorAsociativo, RutaAmbigua, SinRuta,
 )
 
 AQUI = Path(__file__).parent
-con = duckdb.connect(str(AQUI / "analitico.duckdb"), read_only=True)
+# La que dice ASTROLABIO_RUTA_DUCKDB. Antes buscaba `demo/analitico.duckdb`,
+# que no es donde `generar_datos.py` escribe.
+con = duckdb.connect(config().ruta_duckdb, read_only=True)
 modelo = Modelo(AQUI / "modelo_demo.yaml")
 comp = Compilador(modelo)
 
