@@ -40,6 +40,8 @@ import { PanelProyectos } from '../etl/PanelProyectos'
 import { columnasAntesDe } from '../etl/columnas'
 import { Velo } from '../comunes/Velo'
 import { coincide } from '../comunes/buscar'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 const TIPOS: TipoPaso[] = [
   'filtrar', 'columnas', 'derivar', 'agrupar', 'unir', 'apilar', 'renombrar',
@@ -60,6 +62,11 @@ export function Etl() {
   const guardar = useGuardarTransformacion()
   const ejecutar = useEjecutarTransformacion()
   const desdeSql = useDesdeSql()
+
+  // Las cincuenta filas de la vista previa. Ordenarlas es como se ve de un
+  // vistazo si la transformación dejó nulos donde no debía.
+  const ordenPrevia = useOrden(
+    (previa.data?.filas ?? []).slice(0, 50), (f, c) => f[c])
 
   const [id, setId] = useState<number | null>(null)
   const [d, setD] = useState<DefinicionTransformacion>(VACIA)
@@ -727,12 +734,12 @@ export function Etl() {
                     <thead>
                       <tr>
                         {previa.data.columnas.map((c) => (
-                          <th key={c}>{c}</th>
+                          <Th key={c} orden={ordenPrevia} clave={c}>{c}</Th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {previa.data.filas.slice(0, 50).map((f, i) => (
+                      {ordenPrevia.filas.map((f, i) => (
                         <tr key={i}>
                           {previa.data!.columnas.map((c) => {
                             const bruto = f[c] ?? null

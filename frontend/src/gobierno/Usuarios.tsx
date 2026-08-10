@@ -16,6 +16,8 @@ import {
   useRestablecerContrasena,
   useUsuarios,
 } from '../api/gobierno'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 import { Velo } from '../comunes/Velo'
 
 const ROLES: { valor: RolUsuario; que_puede: string }[] = [
@@ -318,6 +320,17 @@ export function Usuarios() {
   const [editando, setEditando] = useState<UsuarioCompleto | null>(null)
   const [nuevo, setNuevo] = useState(false)
 
+  const orden = useOrden(
+    usuarios.data ?? [],
+    (u, clave) =>
+      clave === 'nombre' ? u.nombre
+      : clave === 'email' ? u.email
+      : clave === 'rol' ? u.rol
+      : clave === 'atributos'
+        ? Object.entries(u.atributos).map(([k, v]) => `${k}=${v}`).join(' ')
+        : u.ultimo_ingreso,
+  )
+
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
@@ -341,16 +354,16 @@ export function Usuarios() {
         <table className="datos">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Correo</th>
-              <th>Rol</th>
-              <th>Atributos</th>
-              <th>Último ingreso</th>
+              <Th orden={orden} clave="nombre">Nombre</Th>
+              <Th orden={orden} clave="email">Correo</Th>
+              <Th orden={orden} clave="rol">Rol</Th>
+              <Th orden={orden} clave="atributos">Atributos</Th>
+              <Th orden={orden} clave="ingreso">Último ingreso</Th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {usuarios.data?.map((u) => (
+            {orden.filas.map((u) => (
               <tr key={u.id} style={{ opacity: u.activo ? 1 : 0.5 }}>
                 <td>{u.nombre}</td>
                 <td className="mono">{u.email}</td>

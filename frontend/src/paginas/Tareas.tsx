@@ -25,6 +25,8 @@ import { Link } from 'react-router-dom'
 import { type Dataset, useConexiones, useDatasets } from '../api/conexiones'
 import { type Flujo, useDetener, useFlujos } from '../api/flujos'
 import { enPalabras } from '../comunes/cron'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 import { useLanzador } from '../flujos/Lanzar'
 
 /** Cómo salió la última vez. Es por lo que se filtra al entrar por la mañana. */
@@ -96,6 +98,33 @@ function horario(t: Tarea): string {
   const propio = enPalabras(t.cron, t.zona) + (t.activa ? '' : ' (pausado)')
   // Con horario propio Y dentro de un maestro corre dos veces. Se dice.
   return dentro ? `${propio} · y ${dentro}` : propio
+}
+
+/**
+ * El texto de la columna «Qué hace».
+ *
+ * Está aparte de la celda porque la ordenación usa exactamente esto: ordenar por
+ * una cosa y enseñar otra es la manera más rápida de que una tabla parezca rota.
+ */
+function queHace(t: Tarea): string {
+  if (t.tipo !== 'flujo') return t.contexto
+  const n = t.pasos.length
+  return t.esProyecto
+    ? `${n} secci${n === 1 ? 'ón' : 'ones'}`
+    : `${n} paso${n === 1 ? '' : 's'}`
+}
+
+/** Con qué se compara cada columna al pulsar su encabezado. */
+function valorTarea(t: Tarea, clave: string): unknown {
+  switch (clave) {
+    case 'nombre': return t.nombre
+    case 'que_hace': return queHace(t)
+    case 'horario': return horario(t)
+    case 'ultima': return t.ultima
+    case 'resultado': return t.salida
+    case 'proxima': return t.proxima
+    default: return null
+  }
 }
 
 function cuando(iso: string | null): string {
@@ -233,6 +262,10 @@ export function Tareas() {
       })
   }, [tareas, busca, filtro])
 
+  // Sin orden elegido manda el de `visibles`: lo que falló, arriba. Volver a
+  // pulsar una tercera vez devuelve a eso, que es lo que se quiere ver de mañana.
+  const orden = useOrden(visibles, valorTarea)
+
   const fallaron = tareas.filter((t) => t.salida === 'error').length
 
   // Lo que esta vivo AHORA. La columna «Resultado» dice como salio la vez
@@ -369,17 +402,17 @@ export function Tareas() {
             <thead>
               <tr>
                 <th style={{ width: 24 }} />
-                <th>Tarea</th>
-                <th>Qué hace</th>
-                <th>Horario</th>
-                <th>Última</th>
-                <th>Resultado</th>
-                <th>Próxima</th>
+                <Th orden={orden} clave="nombre">Tarea</Th>
+                <Th orden={orden} clave="que_hace">Qué hace</Th>
+                <Th orden={orden} clave="horario">Horario</Th>
+                <Th orden={orden} clave="ultima">Última</Th>
+                <Th orden={orden} clave="resultado">Resultado</Th>
+                <Th orden={orden} clave="proxima">Próxima</Th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {visibles.map((t) => {
+              {orden.filas.map((t) => {
                 const abierto = abierta === t.clave
                 return [
                   <tr key={t.clave}>
@@ -411,14 +444,7 @@ export function Tareas() {
                         </div>
                       )}
                     </td>
-                    <td className="chico suave">
-                      {t.tipo === 'flujo'
-                        ? t.esProyecto
-                          ? `${t.pasos.length} `
-                            + `secci${t.pasos.length === 1 ? 'ón' : 'ones'}`
-                          : `${t.pasos.length} paso${t.pasos.length === 1 ? '' : 's'}`
-                        : t.contexto}
-                    </td>
+                    <td className="chico suave">{queHace(t)}</td>
                     <td className="chico">{horario(t)}</td>
                     <td className="chico">{cuando(t.ultima)}</td>
                     <td>

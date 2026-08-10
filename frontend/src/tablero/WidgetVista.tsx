@@ -14,6 +14,8 @@
  */
 
 import { useCampos } from '../api/hooks'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
@@ -211,20 +213,28 @@ function Tabla({
   formatoDe: (m: string) => Formato
   metricas: string[]
 }) {
+  const orden = useOrden(datos.filas, (f, c) => f[c])
+
   return (
     <div className="tabla-envoltura" style={{ height: '100%', border: 0 }}>
       <table className="datos">
         <thead>
           <tr>
             {datos.columnas.map((c) => (
-              <th key={c} className={metricas.includes(c) ? 'num' : ''}>
+              <Th
+                key={c}
+                orden={orden}
+                clave={c}
+                className={metricas.includes(c) ? 'num' : ''}
+                titulo={c}
+              >
                 {etiquetaDe(c)}
-              </th>
+              </Th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {datos.filas.map((f, i) => (
+          {orden.filas.map((f, i) => (
             <tr key={i}>
               {datos.columnas.map((c) => (
                 <td key={c} className={esNumero(f[c]) ? 'num' : ''}>

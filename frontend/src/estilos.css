@@ -1530,3 +1530,51 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
    filas de verdad, y quien mira tiene que saber qué está mirando. */
 table.datos th.pii { color: var(--aviso); }
 table.datos th.pii::after { content: ' ·'; }
+
+/* --------------------------------------------------- ordenar por columna */
+
+/* El botón ocupa la celda entera para que el clic caiga donde se apunta, y
+   hereda la tipografía del `th` para que el encabezado siga pareciendo un
+   encabezado y no un botón metido dentro. */
+th > button.ordenar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  margin: -5px -9px;
+  padding: 5px 9px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+table.campos th > button.ordenar { margin: -4px -5px; padding: 4px 5px; }
+th > button.ordenar:hover { color: var(--acento); }
+th > button.ordenar.activa { color: var(--acento); }
+
+/* La flecha del «se puede ordenar» sólo aparece al pasar por encima: con las
+   nueve columnas marcadas a la vez, el encabezado se vuelve ilegible. La de la
+   columna que SÍ ordena se queda siempre, que es la que informa. */
+th > button.ordenar .flecha { font-size: 10px; opacity: 0; margin-left: auto; }
+th > button.ordenar:hover .flecha,
+th > button.ordenar:focus-visible .flecha,
+th > button.ordenar.activa .flecha { opacity: 1; }
+
+/* Cuando el encabezado ya tiene botones propios, el que ordena es sólo el
+   nombre: envolver la celda entera metería un botón dentro de otro. */
+button.ordenar.en-linea {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button.ordenar.en-linea .flecha { margin-left: 0; }

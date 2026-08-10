@@ -21,6 +21,8 @@ import {
 import { Horario } from '../comunes/Horario'
 import { enPalabras, zonaDelNavegador } from '../comunes/cron'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 function cuando(iso: string | null): string {
   if (!iso) return 'nunca'
@@ -195,6 +197,13 @@ export function PanelDataset({
 }) {
   const acc = useAccionesDataset(ds.id)
   const historial = useHistorialDataset(ds.id)
+  const ordenHist = useOrden(historial.data?.ejecuciones ?? [], (e, c) =>
+    c === 'cuando' ? e.cuando
+    : c === 'modo' ? e.modo
+    : c === 'disparo' ? e.disparo
+    : c === 'filas' ? e.filas
+    : c === 'ms' ? e.ms
+    : e.estado)
 
   const [limite, setLimite] = useState('')
   const [desde, setDesde] = useState(mesRelativo(1))
@@ -418,16 +427,16 @@ export function PanelDataset({
             <table className="datos">
               <thead>
                 <tr>
-                  <th>Cuándo</th>
-                  <th>Modo</th>
-                  <th>Quién</th>
-                  <th>Filas</th>
-                  <th>ms</th>
-                  <th>Resultado</th>
+                  <Th orden={ordenHist} clave="cuando">Cuándo</Th>
+                  <Th orden={ordenHist} clave="modo">Modo</Th>
+                  <Th orden={ordenHist} clave="disparo">Quién</Th>
+                  <Th orden={ordenHist} clave="filas">Filas</Th>
+                  <Th orden={ordenHist} clave="ms">ms</Th>
+                  <Th orden={ordenHist} clave="estado">Resultado</Th>
                 </tr>
               </thead>
               <tbody>
-                {historial.data?.ejecuciones.map((e) => (
+                {ordenHist.filas.map((e) => (
                   <tr key={e.id}>
                     <td className="chico">{cuando(e.cuando)}</td>
                     <td className="chico">{e.modo}</td>

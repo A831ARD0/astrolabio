@@ -9,6 +9,8 @@
 
 import type { Campo, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
 import { ETIQUETA_ROL, type Accion } from './estado'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
@@ -24,6 +26,13 @@ export function PanelEntidad({
 }) {
   const cambiar = (cambios: Partial<Entidad>) =>
     despachar({ t: 'cambiar_entidad', nombre: entidad.nombre, cambios })
+
+  const orden = useOrden(entidad.campos, (c, clave) =>
+    clave === 'nombre' ? c.nombre
+    : clave === 'tipo' ? c.tipo
+    : clave === 'rol' ? c.rol
+    : clave === 'ver' ? c.visible !== false
+    : c.pii === true)
 
   const cambiarCampo = (campo: string, cambios: Partial<Campo>) =>
     despachar({ t: 'cambiar_campo', entidad: entidad.nombre, campo, cambios })
@@ -62,7 +71,7 @@ export function PanelEntidad({
             onChange={(e) => cambiar({ clave_primaria: e.target.value || null })}
           >
             <option value="">(ninguna)</option>
-            {entidad.campos.map((c) => (
+            {orden.filas.map((c) => (
               <option key={c.nombre} value={c.nombre}>
                 {c.nombre}
               </option>
@@ -105,11 +114,13 @@ export function PanelEntidad({
         <table className="campos">
           <thead>
             <tr>
-              <th>campo</th>
-              <th>tipo</th>
-              <th>rol</th>
-              <th title="Visible en la interfaz para quien explora">ver</th>
-              <th title="Dato personal">PII</th>
+              <Th orden={orden} clave="nombre">campo</Th>
+              <Th orden={orden} clave="tipo">tipo</Th>
+              <Th orden={orden} clave="rol">rol</Th>
+              <Th orden={orden} clave="ver" titulo="Visible en la interfaz para quien explora">
+                ver
+              </Th>
+              <Th orden={orden} clave="pii" titulo="Dato personal">PII</Th>
             </tr>
           </thead>
           <tbody>

@@ -20,6 +20,8 @@ import { useMemo, useState } from 'react'
 
 import { useConexiones, useGuardarEtiquetas } from '../api/conexiones'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 /** Un valor de celda: se guarda como número si lo parece, y si no como texto. */
 function comoValor(texto: string): string | number | null {
@@ -65,6 +67,11 @@ export function Etiquetas({ alCerrar }: { alCerrar: () => void }) {
     const c = cons.find((x) => x.id === id)
     return comoTexto(c?.etiquetas?.[clave])
   }
+
+  // La clave «__conexion__» ordena por el nombre; cualquier otra es una etiqueta
+  // y ordena por su valor en esa fila.
+  const orden = useOrden(cons, (c, clave) =>
+    clave === '__conexion__' ? c.nombre : celda(clave, c.id))
 
   function escribir(clave: string, id: number, texto: string) {
     setGuardado(null)
@@ -180,11 +187,25 @@ export function Etiquetas({ alCerrar }: { alCerrar: () => void }) {
               <table className="datos">
                 <thead>
                   <tr>
-                    <th>Conexión</th>
+                    <Th orden={orden} clave="__conexion__">Conexión</Th>
                     {columnas.map((k) => (
                       <th key={k}>
                         <div className="acciones">
-                          <span className="mono">{k}</span>
+                          {/* El nombre de la etiqueta ES el botón de ordenar. No
+                              se puede envolver el `th` entero: dentro ya viven
+                              dos botones, y un botón dentro de otro no es HTML
+                              válido ni se puede pulsar. */}
+                          <button
+                            type="button"
+                            className={`ordenar en-linea mono${orden.clave === k ? ' activa' : ''}`}
+                            title="Ordenar por esta etiqueta"
+                            onClick={() => orden.alternar(k)}
+                          >
+                            {k}
+                            <span className="flecha">
+                              {orden.clave !== k ? '↕' : orden.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          </button>
                           <button className="btn chico" title="Copiar el primer valor a las vacías"
                                   onClick={() => rellenar(k)}>↓</button>
                           <button className="btn chico peligro" title="Quitar la etiqueta de todas"
@@ -195,7 +216,7 @@ export function Etiquetas({ alCerrar }: { alCerrar: () => void }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {cons.map((c) => (
+                  {orden.filas.map((c) => (
                     <tr key={c.id}>
                       <td>
                         {c.nombre} <span className="etiqueta dim">{c.tipo}</span>

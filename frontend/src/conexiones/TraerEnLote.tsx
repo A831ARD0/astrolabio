@@ -23,6 +23,8 @@ import {
   useTraerEnLote,
 } from '../api/conexiones'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 export function TraerEnLote({ alCerrar }: { alCerrar: () => void }) {
   const conexiones = useConexiones()
@@ -41,6 +43,10 @@ export function TraerEnLote({ alCerrar }: { alCerrar: () => void }) {
   const [buscaTabla, setBuscaTabla] = useState('')
   const [buscaCon, setBuscaCon] = useState('')
   const [resultado, setResultado] = useState<ResultadoLote | null>(null)
+  const ordenFallidos = useOrden(resultado?.fallidos ?? [], (f, c) =>
+    c === 'conexion' ? f.conexion : c === 'tabla' ? f.tabla : f.motivo)
+  const ordenCreados = useOrden(resultado?.creados ?? [], (x, c) =>
+    c === 'conexion' ? x.conexion : c === 'tabla' ? x.tabla : x.nombre)
 
   const listaTablas = (tablas.data?.tablas ?? []).filter((t) =>
     t.nombre.toLowerCase().includes(buscaTabla.trim().toLowerCase()))
@@ -99,10 +105,14 @@ export function TraerEnLote({ alCerrar }: { alCerrar: () => void }) {
                 <div className="tabla-envoltura">
                   <table className="datos">
                     <thead>
-                      <tr><th>Conexión</th><th>Tabla</th><th>Motivo</th></tr>
+                      <tr>
+                        <Th orden={ordenFallidos} clave="conexion">Conexión</Th>
+                        <Th orden={ordenFallidos} clave="tabla">Tabla</Th>
+                        <Th orden={ordenFallidos} clave="motivo">Motivo</Th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {resultado.fallidos.map((f, i) => (
+                      {ordenFallidos.filas.map((f, i) => (
                         <tr key={i}>
                           <td>{f.conexion}</td>
                           <td className="mono">{f.tabla}</td>
@@ -121,10 +131,14 @@ export function TraerEnLote({ alCerrar }: { alCerrar: () => void }) {
                 <div className="tabla-envoltura" style={{ maxHeight: '32vh' }}>
                   <table className="datos">
                     <thead>
-                      <tr><th>Conexión</th><th>Tabla</th><th>Dataset</th></tr>
+                      <tr>
+                        <Th orden={ordenCreados} clave="conexion">Conexión</Th>
+                        <Th orden={ordenCreados} clave="tabla">Tabla</Th>
+                        <Th orden={ordenCreados} clave="nombre">Dataset</Th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {resultado.creados.map((c) => (
+                      {ordenCreados.filas.map((c) => (
                         <tr key={c.id}>
                           <td>{c.conexion}</td>
                           <td className="mono">{c.tabla}</td>

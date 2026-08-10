@@ -27,6 +27,8 @@ import {
   useHistorialAvisos,
   useProbarAviso,
 } from '../api/avisos'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 const VACIA: CuerpoRegla = {
   nombre: '',
@@ -65,6 +67,17 @@ export function Avisos() {
   const guardar = useGuardarAviso()
   const probar = useProbarAviso()
   const borrar = useBorrarAviso()
+
+  const ordenReglas = useOrden(lista.data ?? [], (x, c) =>
+    c === 'nombre' ? x.nombre
+    : c === 'destino' ? x.destino
+    : c === 'eventos' ? x.eventos.length
+    : x.ultimo_envio)
+  const ordenEnvios = useOrden(historial.data?.envios ?? [], (e, c) =>
+    c === 'cuando' ? e.cuando
+    : c === 'regla' ? e.regla
+    : c === 'asunto' ? e.asunto
+    : e.estado)
 
   const [id, setId] = useState<number | null>(null)
   const [r, setR] = useState<CuerpoRegla>(VACIA)
@@ -148,15 +161,15 @@ export function Avisos() {
             <table className="datos">
               <thead>
                 <tr>
-                  <th>Regla</th>
-                  <th>Por dónde</th>
-                  <th>De qué</th>
-                  <th>Último</th>
+                  <Th orden={ordenReglas} clave="nombre">Regla</Th>
+                  <Th orden={ordenReglas} clave="destino">Por dónde</Th>
+                  <Th orden={ordenReglas} clave="eventos">De qué</Th>
+                  <Th orden={ordenReglas} clave="ultimo">Último</Th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {lista.data?.map((x) => {
+                {ordenReglas.filas.map((x) => {
                   const p = probado[x.id]
                   return (
                     <tr key={x.id} className={x.activa ? '' : 'fuera'}>
@@ -387,14 +400,14 @@ export function Avisos() {
           <table className="datos">
             <thead>
               <tr>
-                <th>Cuándo</th>
-                <th>Regla</th>
-                <th>Qué pasó</th>
-                <th>Estado</th>
+                <Th orden={ordenEnvios} clave="cuando">Cuándo</Th>
+                <Th orden={ordenEnvios} clave="regla">Regla</Th>
+                <Th orden={ordenEnvios} clave="asunto">Qué pasó</Th>
+                <Th orden={ordenEnvios} clave="estado">Estado</Th>
               </tr>
             </thead>
             <tbody>
-              {historial.data?.envios.map((e) => (
+              {ordenEnvios.filas.map((e) => (
                 <tr key={e.id}>
                   <td className="chico">{fecha(e.cuando)}</td>
                   <td className="chico">{e.regla}</td>

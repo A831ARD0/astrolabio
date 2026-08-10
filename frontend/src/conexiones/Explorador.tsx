@@ -26,6 +26,8 @@ import {
   useTablasOrigen,
 } from '../api/conexiones'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 /** Tipos que sirven como marca incremental o como partición. */
 function esFecha(c: ColumnaOrigen): boolean {
@@ -67,6 +69,7 @@ export function Explorador({
   const [elegidas, setElegidas] = useState<string[] | null>(null)
 
   const muestra = useMuestra(conexionId, esquema, tabla, elegidas)
+  const ordenMuestra = useOrden(muestra.data?.filas ?? [], (f, c) => f[c])
 
   // Al cambiar de tabla se propone un nombre y se limpian las elecciones: dejar la
   // columna incremental de la tabla anterior sería un error silencioso.
@@ -91,6 +94,14 @@ export function Explorador({
 
   const seTrae = (c: string) => elegidas === null || elegidas.includes(c)
   const cuantas = elegidas === null ? columnas.length : elegidas.length
+
+  // `!seTrae` para que, al ordenar por «Traer», las marcadas queden arriba: la
+  // primera pulsada tiene que enseñar lo elegido, no lo descartado.
+  const ordenCols = useOrden(columnas, (c, clave) =>
+    clave === 'traer' ? !seTrae(c.nombre)
+    : clave === 'nombre' ? c.nombre
+    : clave === 'tipo' ? c.tipo
+    : c.nulable)
 
   const alternar = (c: string) => {
     // Desde "todas" hay que materializar la lista para poder quitar una.
@@ -232,16 +243,21 @@ export function Explorador({
                   <table className="datos">
                     <thead>
                       <tr>
-                        <th style={{ width: 34 }} title="Traer esta columna">
+                        <Th
+                          orden={ordenCols}
+                          clave="traer"
+                          style={{ width: 34 }}
+                          titulo="Ordenar dejando arriba las que se traen"
+                        >
                           Traer
-                        </th>
-                        <th>Columna</th>
-                        <th>Tipo</th>
-                        <th>Nulos</th>
+                        </Th>
+                        <Th orden={ordenCols} clave="nombre">Columna</Th>
+                        <Th orden={ordenCols} clave="tipo">Tipo</Th>
+                        <Th orden={ordenCols} clave="nulos">Nulos</Th>
                       </tr>
                     </thead>
                     <tbody>
-                      {columnas.map((c) => (
+                      {ordenCols.filas.map((c) => (
                         <tr key={c.nombre} className={seTrae(c.nombre) ? '' : 'fuera'}>
                           <td>
                             <input
@@ -269,12 +285,12 @@ export function Explorador({
                       <thead>
                         <tr>
                           {muestra.data.columnas.map((c) => (
-                            <th key={c}>{c}</th>
+                            <Th key={c} orden={ordenMuestra} clave={c}>{c}</Th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {muestra.data.filas.map((f, i) => (
+                        {ordenMuestra.filas.map((f, i) => (
                           <tr key={i}>
                             {muestra.data!.columnas.map((c) => (
                               <td key={c}>

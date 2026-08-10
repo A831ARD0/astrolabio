@@ -28,6 +28,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFunciones, useProbarMetrica, useRevisarFormula } from '../api/hooks'
 import type { Definicion, FalloFormula, FuncionFormula, Metrica } from '../api/tipos'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 import type { Accion } from './estado'
 import {
   LENGUAJE, TEMA_CLARO, TEMA_OSCURO, fijarContexto, registrarLenguaje,
@@ -81,6 +83,12 @@ export function PanelMetrica({
   const prueba = useProbarMetrica(modeloId)
   const revisar = useRevisarFormula(modeloId)
   const funciones = useFunciones()
+
+  // La tabla de la prueba: pocas filas, pero es donde se comprueba si la
+  // fórmula dice lo que se quería, y para eso hace falta ver los extremos.
+  const ordenPrueba = useOrden(
+    prueba.data?.filas ?? [], (f, c) => f[c])
+
   const monacoRef = useRef<Monaco | null>(null)
   const editorRef = useRef<{ getModel: () => unknown } | null>(null)
 
@@ -435,14 +443,14 @@ export function PanelMetrica({
                     <thead>
                       <tr>
                         {prueba.data.columnas.map((c) => (
-                          <th key={c}>
+                          <Th key={c} orden={ordenPrueba} clave={c} titulo={c}>
                             {c === '__prueba__' ? borrador.etiqueta || 'valor' : c}
-                          </th>
+                          </Th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {prueba.data.filas.map((f, i) => (
+                      {ordenPrueba.filas.map((f, i) => (
                         <tr key={i}>
                           {prueba.data!.columnas.map((c) => (
                             <td key={c} className={typeof f[c] === 'number' ? 'num' : ''}>

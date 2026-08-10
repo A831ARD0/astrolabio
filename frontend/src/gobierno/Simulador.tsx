@@ -14,6 +14,8 @@ import { useState } from 'react'
 
 import { type UsuarioCompleto, useSimular, useUsuarios } from '../api/gobierno'
 import { useCampos } from '../api/hooks'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 function filas(n: number): string {
   return n === 1 ? '1 fila' : `${n.toLocaleString('es-MX')} filas`
@@ -287,18 +289,22 @@ function Tabla({
   columnas: string[]
   filas: Record<string, unknown>[]
 }) {
+  const orden = useOrden(filas.slice(0, 50), (f, c) => f[c])
+
   return (
     <div className="tabla-envoltura" style={{ maxHeight: 260 }}>
       <table className="datos">
         <thead>
           <tr>
             {columnas.map((c) => (
-              <th key={c}>{c.split('.').pop()}</th>
+              <Th key={c} orden={orden} clave={c} titulo={c}>
+                {c.split('.').pop()}
+              </Th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {filas.slice(0, 50).map((f, i) => (
+          {orden.filas.map((f, i) => (
             <tr key={i}>
               {columnas.map((c) => {
                 const v = f[c]

@@ -34,6 +34,8 @@ import { Etiquetas } from '../conexiones/Etiquetas'
 import { Explorador } from '../conexiones/Explorador'
 import { PanelDataset } from '../conexiones/PanelDataset'
 import { TraerEnLote } from '../conexiones/TraerEnLote'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 /** Los estados por los que de verdad se filtra al entrar por la mañana. */
 type Estado = 'todos' | 'error' | 'sin_datos' | 'cargado'
@@ -69,24 +71,34 @@ function TablaDatasets({ datasets, alAbrir }: {
   datasets: Dataset[]
   alAbrir: (ds: Dataset) => void
 }) {
+  const orden = useOrden(datasets, (ds, c) =>
+    c === 'origen' ? `${ds.esquema_origen ?? ''}.${ds.tabla_origen}`
+    : c === 'nombre' ? ds.nombre
+    : c === 'filas' ? ds.filas
+    : c === 'mb' ? ds.mb
+    : c === 'incremental' ? ds.incremental
+    : c === 'particionado' ? ds.particionado
+    : c === 'carga' ? ds.ultima_carga
+    : ds.programacion_activa ? ds.cron : null)
+
   return (
     <div className="tabla-envoltura">
       <table className="datos">
         <thead>
           <tr>
-            <th>Tabla del origen</th>
-            <th>Dataset</th>
-            <th>Filas</th>
-            <th>MB</th>
-            <th>Incremental</th>
-            <th>Partido por</th>
-            <th>Última carga</th>
-            <th>Horario</th>
+            <Th orden={orden} clave="origen">Tabla del origen</Th>
+            <Th orden={orden} clave="nombre">Dataset</Th>
+            <Th orden={orden} clave="filas">Filas</Th>
+            <Th orden={orden} clave="mb">MB</Th>
+            <Th orden={orden} clave="incremental">Incremental</Th>
+            <Th orden={orden} clave="particionado">Partido por</Th>
+            <Th orden={orden} clave="carga">Última carga</Th>
+            <Th orden={orden} clave="horario">Horario</Th>
             <th />
           </tr>
         </thead>
         <tbody>
-          {datasets.map((ds) => (
+          {orden.filas.map((ds) => (
             <tr key={ds.id}>
               {/* La tabla del origen va PRIMERO: dentro de una conexión es lo que
                   identifica al dataset. El nombre en Astrolabio es un detalle de

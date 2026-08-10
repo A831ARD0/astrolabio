@@ -12,6 +12,8 @@
 import { useState } from 'react'
 
 import { type Evento, useAuditoria, useResumenAuditoria } from '../api/gobierno'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 /** Las acciones que conviene distinguir de un vistazo. */
 const COLOR: Record<string, string> = {
@@ -70,6 +72,18 @@ export function Auditoria() {
     dias: dias || undefined,
     pagina,
   })
+
+  // Ordena la página que se está viendo, no la auditoría entera: el servidor
+  // pagina, y decir lo contrario sería mentir sobre lo que se está mirando.
+  const orden = useOrden(
+    datos.data?.eventos ?? [],
+    (e, clave) =>
+      clave === 'cuando' ? e.cuando
+      : clave === 'quien' ? e.email
+      : clave === 'accion' ? e.accion
+      : clave === 'objeto' ? `${e.objeto_tipo ?? ''} ${e.objeto_id ?? ''}`.trim()
+      : resumen(e),
+  )
 
   const paginas = datos.data ? Math.ceil(datos.data.total / datos.data.por_pagina) : 1
   const fallidos = resumenDatos.data?.ingresos_fallidos ?? 0
@@ -167,15 +181,15 @@ export function Auditoria() {
         <table className="datos">
           <thead>
             <tr>
-              <th>Cuándo</th>
-              <th>Quién</th>
-              <th>Acción</th>
-              <th>Objeto</th>
-              <th>Qué pasó</th>
+              <Th orden={orden} clave="cuando">Cuándo</Th>
+              <Th orden={orden} clave="quien">Quién</Th>
+              <Th orden={orden} clave="accion">Acción</Th>
+              <Th orden={orden} clave="objeto">Objeto</Th>
+              <Th orden={orden} clave="detalle">Qué pasó</Th>
             </tr>
           </thead>
           <tbody>
-            {datos.data?.eventos.map((e) => (
+            {orden.filas.map((e) => (
               <tr
                 key={e.id}
                 onClick={() => setAbierto(abierto === e.id ? null : e.id)}

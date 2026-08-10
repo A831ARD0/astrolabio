@@ -20,6 +20,8 @@ import { useTabla, useTablas } from '../api/hooks'
 import type { Entidad, OrigenTabla, RolCampo, TipoEntidad } from '../api/tipos'
 import { ETIQUETA_ROL } from './estado'
 import { Velo } from '../comunes/Velo'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
@@ -60,6 +62,11 @@ export function CuerpoEntidad({
   const columnas = detalle.data?.columnas ?? []
   const clave = detalle.data?.clave_primaria ?? null
   const rolDe = (c: string, sugerido: RolCampo) => roles[c] ?? sugerido
+
+  const orden = useOrden(columnas, (c, clave) =>
+    clave === 'nombre' ? c.nombre
+    : clave === 'tipo' ? c.tipo
+    : rolDe(c.nombre, c.rol_sugerido))
   const nombreLibre = !!nombre.trim() && !yaUsadas.has(nombre.trim())
 
   // Se arma al renderizar y se avisa en un efecto: así lo que se construye depende
@@ -165,13 +172,13 @@ export function CuerpoEntidad({
             <table className="campos" style={{ margin: 0 }}>
               <thead>
                 <tr>
-                  <th>columna</th>
-                  <th>tipo</th>
-                  <th>rol</th>
+                  <Th orden={orden} clave="nombre">columna</Th>
+                  <Th orden={orden} clave="tipo">tipo</Th>
+                  <Th orden={orden} clave="rol">rol</Th>
                 </tr>
               </thead>
               <tbody>
-                {columnas.map((c) => (
+                {orden.filas.map((c) => (
                   <tr key={c.nombre}>
                     <td>{c.nombre}</td>
                     <td className="tenue chico" title={c.tipo_origen}>

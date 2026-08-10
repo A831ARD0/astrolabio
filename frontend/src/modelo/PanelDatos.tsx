@@ -22,6 +22,8 @@ import { useEffect, useState } from 'react'
 
 import { useMuestra, useVistaPrevia } from '../api/hooks'
 import type { Definicion, ResultadoDatos } from '../api/tipos'
+import { useOrden } from '../comunes/orden'
+import { Th } from '../comunes/Th'
 
 type Vista = 'resultado' | 'muestra'
 
@@ -260,6 +262,7 @@ function Tabla({
   /** Columnas numéricas que se escriben tal cual, sin separador de miles. */
   crudas: Set<string>
 }) {
+  const orden = useOrden(resultado.filas, (f, c) => f[c])
   const pii = new Set(resultado.pii ?? [])
 
   return (
@@ -291,14 +294,20 @@ function Tabla({
             <thead>
               <tr>
                 {resultado.columnas.map((c) => (
-                  <th key={c} className={pii.has(c) ? 'pii' : ''} title={c}>
+                  <Th
+                    key={c}
+                    orden={orden}
+                    clave={c}
+                    className={pii.has(c) ? 'pii' : ''}
+                    titulo={c}
+                  >
                     {etiquetas[c] ?? c}
-                  </th>
+                  </Th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {resultado.filas.map((f, i) => (
+              {orden.filas.map((f, i) => (
                 <tr key={i}>
                   {resultado.columnas.map((c) => (
                     <td key={c} className={typeof f[c] === 'number' ? 'num' : ''}>
