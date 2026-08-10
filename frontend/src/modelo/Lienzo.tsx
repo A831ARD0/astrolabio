@@ -137,11 +137,16 @@ export function Lienzo({
         sourceHandle: r.desde[1],
         target: r.hasta[0],
         targetHandle: r.hasta[1],
-        label: ETIQUETA_CARDINALIDAD[r.cardinalidad],
+        label: r.activa === false
+          ? `${ETIQUETA_CARDINALIDAD[r.cardinalidad]} · inactiva`
+          : ETIQUETA_CARDINALIDAD[r.cardinalidad],
         labelShowBg: true,
         selected: seleccion?.tipo === 'relacion' && seleccion.id === i,
         className: [
           r.cardinalidad === 'muchos_a_muchos' && 'm2m',
+          // Punteada y apagada: existe, se puede activar, y ninguna consulta
+          // pasa por ella. Verla igual que las demás haría creer que sí.
+          r.activa === false && 'inactiva',
           // Solo se pinta en rojo la relación que forma parte de la ruta que se
           // está inspeccionando: pintar todas las sospechosas no dice cuál.
           resaltadas?.has(r.desde[0]) && resaltadas?.has(r.hasta[0]) && 'ambigua',

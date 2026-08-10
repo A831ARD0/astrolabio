@@ -37,6 +37,12 @@ export interface Relacion {
   hasta: [string, string]
   cardinalidad: Cardinalidad
   direccion_filtro: DireccionFiltro
+  /**
+   * Solo la activa se usa al agregar. Dos tablas pueden relacionarse por varias
+   * columnas —tres fechas contra el calendario— y las tres se dejan escritas,
+   * pero mandando una sola: con dos, cada consulta tendría dos caminos válidos.
+   */
+  activa?: boolean
   [clave: string]: unknown
 }
 
@@ -62,7 +68,7 @@ export interface Definicion {
 
 export interface Problema {
   tipo: 'ruta_ambigua' | 'tabla_huerfana' | 'muchos_a_muchos' | 'formula'
-  gravedad: 'critico' | 'advertencia'
+  gravedad: 'critico' | 'advertencia' | 'informativo'
   entidad: string
   mensaje: string
   rutas?: string[]

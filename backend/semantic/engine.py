@@ -98,6 +98,8 @@ class Relacion:
     campo_b: str
     cardinalidad: str
     direccion_filtro: str
+    #: Solo las activas se recorren al consultar. Ver `RelacionDef.activa`.
+    activa: bool = True
 
 
 @dataclass
@@ -135,7 +137,8 @@ class Modelo:
         # y todavia ninguna relacion, y tiene que poder guardarse asi.
         self.relaciones: list[Relacion] = [
             Relacion(r["desde"][0], r["desde"][1], r["hasta"][0], r["hasta"][1],
-                     r["cardinalidad"], r.get("direccion_filtro", "ambas"))
+                     r["cardinalidad"], r.get("direccion_filtro", "ambas"),
+                     r.get("activa", True))
             for r in crudo.get("relaciones", [])
         ]
 
@@ -150,8 +153,14 @@ class Modelo:
         self.politicas: list[dict] = crudo.get("politicas", [])
 
         # Grafo no dirigido: entidad -> [(vecina, relacion)]
+        # Solo las activas. Una inactiva esta escrita en el modelo —se ve en el
+        # lienzo y se puede activar— pero no es un camino: si lo fuera, tener
+        # tres fechas contra el calendario haria ambigua cualquier consulta que
+        # pase por ahi, que es justo lo que `activa` viene a evitar.
         self.grafo: dict[str, list[tuple[str, Relacion]]] = {n: [] for n in self.entidades}
         for r in self.relaciones:
+            if not r.activa:
+                continue
             self.grafo[r.entidad_a].append((r.entidad_b, r))
             self.grafo[r.entidad_b].append((r.entidad_a, r))
 
@@ -295,6 +304,23 @@ class Modelo:
                         "rutas": [" → ".join(r) for r in rutas],
                     })
 
+        # Las inactivas se listan a proposito. No son un error —se marcan para
+        # que el modelo tenga un solo camino— pero quien mire el lienzo y vea una
+        # linea punteada tiene que poder saber que existe, que esta apagada y que
+        # ninguna consulta pasa por ahi.
+        for r in self.relaciones:
+            if not r.activa:
+                problemas.append({
+                    "tipo": "relacion_inactiva",
+                    "gravedad": "informativo",
+                    "entidad": f"{r.entidad_a} ↔ {r.entidad_b}",
+                    "mensaje": f"'{r.entidad_a}.{r.campo_a}' → "
+                               f"'{r.entidad_b}.{r.campo_b}' esta inactiva: "
+                               f"queda escrita en el modelo, pero al agregar no "
+                               f"se usa. Manda la relacion activa entre esas dos "
+                               f"tablas.",
+                })
+
         for r in self.relaciones:
             if r.cardinalidad == "muchos_a_muchos":
                 problemas.append({
@@ -327,8 +353,11 @@ class Modelo:
                                f"{fallo['mensaje']}",
                 })
 
-        orden = {"critico": 0, "advertencia": 1}
-        return sorted(problemas, key=lambda p: orden[p["gravedad"]])
+        # Lo que hay que arreglar primero, arriba. `.get` con un tope al final
+        # para que una gravedad nueva se coloque sola en vez de reventar la
+        # pantalla entera de diagnostico.
+        orden = {"critico": 0, "advertencia": 1, "informativo": 2}
+        return sorted(problemas, key=lambda p: orden.get(p["gravedad"], 9))
 
 
 # --------------------------------------------------------------------------- #

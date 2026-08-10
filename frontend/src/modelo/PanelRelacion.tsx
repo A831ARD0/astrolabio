@@ -40,6 +40,13 @@ export function PanelRelacion({
   // Avisar aquí es la diferencia entre eso y una tarde buscando el fallo.
   const tiposDistintos = !!tipoDesde && !!tipoHasta && tipoDesde !== tipoHasta
 
+  const otrasEntreLasMismas = definicion.relaciones.filter(
+    (o, i) =>
+      i !== indice &&
+      ((o.desde[0] === r.desde[0] && o.hasta[0] === r.hasta[0]) ||
+        (o.desde[0] === r.hasta[0] && o.hasta[0] === r.desde[0])),
+  ).length
+
   return (
     <div className="inspector">
       <h3>Relación</h3>
@@ -81,6 +88,48 @@ export function PanelRelacion({
           Las dos columnas no son del mismo tipo (<b>{tipoDesde}</b> contra{' '}
           <b>{tipoHasta}</b>). La unión puede no encontrar ninguna coincidencia
           aunque los valores se parezcan al leerlos.
+        </div>
+      )}
+
+      {/*
+        Activa o no. Dos tablas se relacionan por más de una columna más a menudo
+        de lo que parece —un hecho con fecha de alta, de cierre y de entrega toca
+        el calendario tres veces— y las tres son ciertas. Al agregar sólo puede
+        mandar una: con dos, cada consulta tendría dos caminos igual de válidos y
+        el total dependería de cuál eligiera el compilador.
+      */}
+      <div className="campo">
+        <label>Estado</label>
+        <select
+          value={r.activa === false ? 'inactiva' : 'activa'}
+          onChange={(e) =>
+            despachar({
+              t: 'cambiar_relacion',
+              indice,
+              cambios: { activa: e.target.value === 'activa' },
+            })
+          }
+        >
+          <option value="activa">activa — por aquí se une al agregar</option>
+          <option value="inactiva">
+            inactiva — queda escrita, pero no se usa
+          </option>
+        </select>
+      </div>
+
+      {r.activa === false && (
+        <div className="aviso-caja">
+          Ninguna consulta pasa por aquí. Sirve para dejar documentada la unión
+          —y poder activarla cuando toque—, pero para <b>usar</b> esta columna en
+          una cifra hay que activarla y desactivar la otra, o traer{' '}
+          <b>{r.hasta[0]}</b> una segunda vez como entidad aparte.
+        </div>
+      )}
+
+      {otrasEntreLasMismas > 0 && (
+        <div className="chico tenue">
+          Hay {otrasEntreLasMismas} relación(es) más entre <b>{r.desde[0]}</b> y{' '}
+          <b>{r.hasta[0]}</b>. Sólo una puede estar activa.
         </div>
       )}
 

@@ -45,6 +45,7 @@ export type Accion =
         // fallado la columna, que es el error normal cuando no se llaman igual.
         desde?: [string, string]
         hasta?: [string, string]
+        activa?: boolean
       }
     }
   | { t: 'quitar_relacion'; indice: number }
@@ -166,6 +167,17 @@ function aplicar(d: Definicion, a: Accion): Definicion {
             r.hasta[1] === a.desde[1]),
       )
       if (repetida) return d
+      // La segunda relación entre las mismas dos tablas nace INACTIVA. Tres
+      // fechas de un hecho contra el calendario son tres relaciones ciertas,
+      // pero si las tres estuvieran activas cada consulta tendría tres caminos
+      // válidos hacia el calendario y el total dependería de cuál se eligiera.
+      // Activarla es un clic; que el modelo se rompa solo, no.
+      const yaHayActiva = d.relaciones.some(
+        (r) =>
+          r.activa !== false &&
+          ((r.desde[0] === a.desde[0] && r.hasta[0] === a.hasta[0]) ||
+            (r.desde[0] === a.hasta[0] && r.hasta[0] === a.desde[0])),
+      )
       return {
         ...d,
         relaciones: [
@@ -175,6 +187,7 @@ function aplicar(d: Definicion, a: Accion): Definicion {
             hasta: a.hasta,
             cardinalidad: a.cardinalidad,
             direccion_filtro: 'ambas',
+            activa: !yaHayActiva,
           },
         ],
       }

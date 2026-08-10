@@ -31,7 +31,7 @@ git clone https://github.com/a831ard0/astrolabio.git
 cd astrolabio/backend
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python demo/generar_datos.py     # datos ficticios, 8 segundos
-./venv/bin/python -m pytest -q              # 523 pasando, 47 saltadas
+./venv/bin/python -m pytest -q              # 530 pasando, 47 saltadas
 ```
 
 El detalle está en el [manual técnico](docs/manual-tecnico.md).

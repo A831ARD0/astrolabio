@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="Licencia AGPL-3.0" src="https://img.shields.io/badge/licencia-AGPL--3.0-4c8dff"></a>
-  <img alt="523 pruebas" src="https://img.shields.io/badge/pruebas-523%20pasando-3fb950">
+  <img alt="530 pruebas" src="https://img.shields.io/badge/pruebas-530%20pasando-3fb950">
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-4c8dff">
   <img alt="En español" src="https://img.shields.io/badge/c%C3%B3digo-en%20espa%C3%B1ol-98a2b3">
 </p>
@@ -135,8 +135,8 @@ backend/demo/  Datos ficticios y semilla para ver el producto funcionando
 
 ## Estado
 
-Funciona de punta a punta y está probado: **523 pruebas** automatizadas pasando, de
-570 en total. Las 47 restantes se saltan solas si no hay un MySQL o un ODBC de
+Funciona de punta a punta y está probado: **530 pruebas** automatizadas pasando, de
+577 en total. Las 47 restantes se saltan solas si no hay un MySQL o un ODBC de
 verdad a mano; con ellos, corren. Están las que comprueban que la seguridad por
 fila filtra de verdad, las que ejecutan cada función del lenguaje de fórmulas
 contra DuckDB y las que verifican que una muestra de filas no se salta las

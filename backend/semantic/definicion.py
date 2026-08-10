@@ -72,10 +72,23 @@ class EntidadDef(_Base):
 
 
 class RelacionDef(_Base):
+    """
+    Una union entre dos entidades.
+
+    `activa` existe porque dos tablas se relacionan por mas de una columna mas a
+    menudo de lo que parece: un hecho con fecha de alta, fecha de cierre y fecha
+    de entrega toca el calendario tres veces. Las tres son ciertas y las tres se
+    quieren dejar escritas, pero al agregar solo puede mandar UNA —si mandaran
+    dos, cada consulta tendria dos caminos igual de validos hacia el calendario y
+    el total dependeria de cual eligiera el compilador—. Asi que una activa y las
+    demas apuntadas, que es tambien como lo resuelve Power BI.
+    """
+
     desde: list[str] = Field(min_length=2, max_length=2)   # [entidad, campo]
     hasta: list[str] = Field(min_length=2, max_length=2)
     cardinalidad: Literal[CARDINALIDADES]                  # type: ignore[valid-type]
     direccion_filtro: Literal[DIRECCIONES] = "ambas"       # type: ignore[valid-type]
+    activa: bool = True
 
 
 class MetricaDef(_Base):
@@ -146,6 +159,24 @@ class Definicion(_Base):
             if r.desde[0] == r.hasta[0]:
                 errores.append(
                     f"La relacion {i} une '{r.desde[0]}' consigo misma.")
+
+        # Dos activas entre el mismo par de tablas dejan dos caminos igual de
+        # validos, y entonces el total depende de cual elija el compilador. Se
+        # bloquea al guardar y no en la consulta: descubrirlo en un tablero seis
+        # meses despues es descubrirlo tarde.
+        activas: dict[tuple[str, str], list[int]] = {}
+        for i, r in enumerate(self.relaciones, 1):
+            if not r.activa:
+                continue
+            par = tuple(sorted((r.desde[0], r.hasta[0])))
+            activas.setdefault(par, []).append(i)  # type: ignore[arg-type]
+        for (a, b), cuales in activas.items():
+            if len(cuales) > 1:
+                errores.append(
+                    f"Hay {len(cuales)} relaciones activas entre '{a}' y '{b}' "
+                    f"(la {', la '.join(str(c) for c in cuales)}). Solo una "
+                    f"puede estar activa: deja activa la que se usa al agregar y "
+                    f"marca las demas como inactivas.")
 
         for m in self.metricas:
             if m.entidad not in entidades:

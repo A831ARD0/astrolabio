@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import sqlglot
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlglot import exp
 
 DIALECTO = "duckdb"
@@ -247,12 +247,23 @@ class Transformacion(BaseModel):
 
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = None
-    origenes: list[Origen] = Field(min_length=1)
+    # Sin minimo: en modo SQL una consulta puede no leer de ninguna tabla. El
+    # caso real es generar un calendario —`FROM range(fecha, fecha, INTERVAL)`—,
+    # que es una tabla que no existe en ningun origen porque se fabrica aqui.
+    # Obligar a declarar un origen que no se usa era pedir un tramite.
+    origenes: list[Origen] = []
     pasos: list[Paso] = []
     # Modo SQL: si viene, manda sobre los pasos. Existe porque mucha gente ya
     # tiene su consulta escrita y obligarla a rearmarla en una interfaz es
     # perder su trabajo.
     sql: str | None = None
+
+    @model_validator(mode="after")
+    def con_origenes_o_con_sql(self):
+        if not self.origenes and not self.es_sql:
+            raise ValueError(
+                "una transformacion por pasos necesita al menos un origen")
+        return self
 
     @field_validator("origenes")
     @classmethod
@@ -361,12 +372,19 @@ def _compilar_sql(t: Transformacion, resolver: dict[str, str]) -> Compilada:
             f"disponibles», a la izquierda, y volverá a funcionar. "
             f"Orígenes de esta transformación: {disponibles}.")
 
+    cuerpo = arbol.sql(dialect=DIALECTO, pretty=True)
+    # Sin origenes no hay CTE que anteponer, y un `WITH` vacio no es SQL. Pasa
+    # cuando la consulta fabrica sus propias filas: un calendario sale de
+    # `range(fecha, fecha, INTERVAL)` y no lee de ninguna tabla.
+    if not t.origenes:
+        return Compilada(cuerpo, [], [("sql", "consulta escrita a mano")])
+
     ctes = ",\n     ".join(
         f"{_ident(o.nombre)} AS (SELECT * FROM {resolver[o.nombre]})"
         for o in t.origenes
     )
-    sql = f"WITH {ctes}\n{arbol.sql(dialect=DIALECTO, pretty=True)}"
-    return Compilada(sql, [], [("sql", "consulta escrita a mano")])
+    return Compilada(f"WITH {ctes}\n{cuerpo}", [],
+                     [("sql", "consulta escrita a mano")])
 
 
 def _compilar_paso(paso: Paso, entrada: str,
