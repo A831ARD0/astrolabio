@@ -18,7 +18,6 @@ import type {
   Entidad,
   Metrica,
   RolCampo,
-  TipoEntidad,
 } from '../api/tipos'
 
 export type Accion =
@@ -51,6 +50,7 @@ export type Accion =
   | { t: 'quitar_relacion'; indice: number }
   | { t: 'guardar_metrica'; indice: number | null; metrica: Metrica }
   | { t: 'quitar_metrica'; nombre: string }
+  | { t: 'reorganizar'; disposicion: Record<string, { x: number; y: number }> }
   | { t: 'agregar_tabla_medidas'; nombre: string }
   | { t: 'renombrar_tabla_medidas'; antes: string; despues: string }
   | { t: 'quitar_tabla_medidas'; nombre: string }
@@ -219,6 +219,12 @@ function aplicar(d: Definicion, a: Accion): Definicion {
     case 'quitar_metrica':
       return { ...d, metricas: d.metricas.filter((m) => m.nombre !== a.nombre) }
 
+    // Toda la disposición de una vez, y no un `mover` por tabla: reorganizar es un
+    // solo gesto y tiene que deshacerse con un solo «Deshacer». Con trece tablas,
+    // trece pasos de historial para volver atrás no es un botón de deshacer.
+    case 'reorganizar':
+      return { ...d, disposicion: a.disposicion }
+
     case 'agregar_tabla_medidas':
       return {
         ...d,
@@ -371,28 +377,6 @@ export function confirmarClave(
     + '\n\n¿Cambiarla?',
   )
 }
-
-/**
- * Posiciones para un modelo que todavía no tiene disposición guardada:
- * dimensiones arriba, hechos abajo. No es un algoritmo de grafos, es lo
- * suficiente para que al abrirlo se entienda y se pueda acomodar a mano.
- */
-export function disponer(entidades: Entidad[]): Record<string, { x: number; y: number }> {
-  const ANCHO = 300
-  const salida: Record<string, { x: number; y: number }> = {}
-  const porTipo: Record<TipoEntidad, Entidad[]> = {
-    dimension: entidades.filter((e) => e.tipo === 'dimension'),
-    hecho: entidades.filter((e) => e.tipo === 'hecho'),
-  }
-  porTipo.dimension.forEach((e, i) => {
-    salida[e.nombre] = { x: i * ANCHO, y: 0 }
-  })
-  porTipo.hecho.forEach((e, i) => {
-    salida[e.nombre] = { x: i * ANCHO + 120, y: 420 }
-  })
-  return salida
-}
-
 export const ETIQUETA_ROL: Record<RolCampo, string> = {
   clave: 'clave',
   clave_externa: 'clave ext.',

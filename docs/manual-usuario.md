@@ -637,6 +637,24 @@ mismo que en Power BI, incluido lo importante:
 Quitar un cajón (`✕`) **no borra sus métricas**: vuelven a verse bajo su hecho.
 Cambiarle el nombre (`✎`) arrastra a las suyas con él.
 
+### Ordenar el lienzo
+
+Con más de media docena de tablas, colocarlas a mano deja de ser posible. El botón
+**⊞** de los controles del lienzo las recoloca: **hechos en la primera columna**,
+las dimensiones que tocan un hecho en la siguiente, las de copo de nieve después, y
+lo que no se relaciona con nada al final, apartado —verlo apartado es información—.
+Dentro de cada columna cada tabla se pone a la altura media de aquellas con las que
+se relaciona, que es lo que quita la mayoría de los cruces.
+
+Ninguna tabla queda encima de otra y ninguna línea pasa por encima de una tabla.
+
+Es un botón y no algo automático a propósito: la disposición se guarda con el modelo,
+y mover de sitio un lienzo que alguien ordenó a mano sin que lo haya pedido es peor
+que dejarlo desordenado. Se deshace con **un** «Deshacer».
+
+Y para seguir una relación concreta en un modelo con muchas: **pasa el ratón por una
+tabla** y se apagan todas las líneas que no son suyas.
+
 ### El panel de diagnóstico
 
 Marca los problemas que producen cifras mal sin avisar:

@@ -8,6 +8,7 @@
 
 import {
   Background,
+  ControlButton,
   Controls,
   type Connection,
   type Edge,
@@ -16,12 +17,14 @@ import {
   MiniMap,
   ReactFlow,
   useNodesState,
+  useReactFlow,
 } from '@xyflow/react'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { Definicion, Problema } from '../api/tipos'
 import { type DatosNodo, NodoEntidad } from './NodoEntidad'
 import { ETIQUETA_CARDINALIDAD, type Accion, cardinalidadProbable } from './estado'
+import { disponer } from './disponer'
 
 const TIPOS_NODO = { entidad: NodoEntidad }
 
@@ -32,6 +35,32 @@ const TIPOS_NODO = { entidad: NodoEntidad }
  * a las tablas o se enrosca; se usa ruta ortogonal en su lugar.
  */
 const HUECO_MINIMO = 24
+
+/**
+ * El botón de reorganizar, dentro del lienzo para poder ajustar la vista.
+ *
+ * Ajustarla no es un adorno: recolocar todo y dejar la cámara donde estaba hace que
+ * el modelo aparezca diminuto en una esquina, y lo que se lee entonces es «no ha
+ * pasado nada». Y va DOS fotogramas después porque las posiciones nuevas hacen dos
+ * viajes antes de existir para el lienzo: del reductor a las propiedades, y de ahí al
+ * estado que React Flow usa para medir. Ajustar en el primero encuadra las de antes.
+ */
+function BotonReorganizar({ alPulsar }: { alPulsar: () => void }) {
+  const rf = useReactFlow()
+  return (
+    <ControlButton
+      onClick={() => {
+        alPulsar()
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => rf.fitView({ padding: 0.12, duration: 300 })),
+        )
+      }}
+      title="Reorganizar: hechos a la izquierda y dimensiones a la derecha, sin que se toquen y sin líneas por encima de las tablas. Se puede deshacer."
+    >
+      ⊞
+    </ControlButton>
+  )
+}
 
 export interface Seleccion {
   tipo: 'entidad' | 'relacion'
@@ -130,6 +159,17 @@ export function Lienzo({
   /** Se está arrastrando una unión: los conectores se hacen visibles. */
   const [conectando, setConectando] = useState(false)
 
+  /**
+   * La tabla que tiene el ratón encima. Sus relaciones se quedan y las demás se
+   * apagan.
+   *
+   * Con veinticuatro relaciones, saber cuáles son las de UNA tabla mirando el
+   * dibujo es imposible: hay que seguir una línea con el dedo entre otras veinte
+   * que la cruzan. Apagar el resto un instante contesta esa pregunta sin cambiar
+   * nada del modelo, y se deshace solo al quitar el ratón.
+   */
+  const [sobre, setSobre] = useState<string | null>(null)
+
   useEffect(() => {
     setNodos((previos) => {
       const antes = new Map(previos.map((n) => [n.id, n]))
@@ -205,13 +245,29 @@ export function Lienzo({
             // Solo se pinta en rojo la relación que forma parte de la ruta que se
             // está inspeccionando: pintar todas las sospechosas no dice cuál.
             resaltadas?.has(r.desde[0]) && resaltadas?.has(r.hasta[0]) && 'ambigua',
+            sobre !== null && r.desde[0] !== sobre && r.hasta[0] !== sobre && 'apagada',
           ]
             .filter(Boolean)
             .join(' '),
         }
       }),
-    [definicion.relaciones, seleccion, resaltadas, cajas],
+    [definicion.relaciones, seleccion, resaltadas, cajas, sobre],
   )
+
+  /**
+   * Recolocar todas las tablas. Es un botón y no algo automático a propósito: la
+   * disposición viaja con la versión del modelo, y mover de sitio el trabajo de
+   * alguien sin que lo haya pedido es peor que dejarlo desordenado.
+   */
+  function reorganizar() {
+    const medidas = Object.fromEntries(
+      nodos.map((n) => [
+        n.id,
+        { ancho: n.measured?.width ?? 0, alto: n.measured?.height ?? 0 },
+      ]),
+    )
+    despachar({ t: 'reorganizar', disposicion: disponer(definicion, medidas) })
+  }
 
   function alConectar(c: Connection) {
     if (!c.source || !c.target || !c.sourceHandle || !c.targetHandle) return
@@ -249,6 +305,8 @@ export function Lienzo({
         onNodesChange={alCambiarNodos}
         onConnect={alConectar}
         onNodeClick={(_, n) => alSeleccionar({ tipo: 'entidad', id: n.id })}
+        onNodeMouseEnter={(_, n) => setSobre(n.id)}
+        onNodeMouseLeave={() => setSobre(null)}
         onEdgeClick={(_, e) =>
           alSeleccionar({ tipo: 'relacion', id: Number(e.id.slice(1)) })
         }
@@ -265,7 +323,9 @@ export function Lienzo({
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={18} size={1} color="var(--borde)" />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false}>
+          <BotonReorganizar alPulsar={reorganizar} />
+        </Controls>
         {/* Tamaño y máscara van en el CSS. Aquí solo el color por tipo, que
             depende del dato y tiene que ser un color literal: un var() dentro de
             un atributo de SVG no se resuelve. */}

@@ -7,6 +7,38 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **«Reorganizar» el lienzo, y las tablas dejan de solaparse.** Lo que colocaba las
+  tablas era `(i % 4) * 300, floor(i / 4) * 340`: una cuadrícula ciega. Con nodos de
+  hasta 260 de ancho separados 300, y filas de 340 cuando una tabla de veintidós
+  columnas mide más de 500 de alto, **las tablas se montaban unas sobre otras** y las
+  líneas cruzaban por encima. Con seis tablas se aguanta; con trece y veinticuatro
+  relaciones el lienzo deja de decir nada.
+
+  El botón nuevo del lienzo (⊞) coloca por **capas**, que es la forma del modelo y no
+  un accidente: los hechos en la primera columna —son terminales para el motor, nunca
+  puente—, las dimensiones que tocan un hecho en la siguiente, las de copo de nieve
+  después, y lo que no se relaciona con nada al final, junto. Dentro de cada columna
+  el orden se decide por **baricentro** —cada tabla a la altura media de aquellas con
+  las que se relaciona, en varias pasadas de ida y vuelta—, que es lo que quita la
+  mayoría de los cruces sin resolver un problema NP-completo. Usa el alto **medido**
+  de cada tabla, que es la única forma de garantizar que no se toquen.
+
+  Medido sobre el modelo de demostración —11 tablas, 15 relaciones—: las líneas que
+  pasaban por encima de una tabla van de **9 a 0**, el largo total de las líneas baja
+  un **54 %** y los cruces a la mitad.
+
+  Es un botón y no algo automático a propósito: la disposición viaja con la versión
+  del modelo, y mover de sitio el trabajo de alguien sin que lo pida es peor que
+  dejarlo desordenado. Se deshace con **un solo** «Deshacer», no con uno por tabla.
+
+  Y una tabla nueva ya no cae en la cuadrícula: se pone a la derecha de todo, en su
+  propia columna, donde no puede solaparse con nada.
+
+- **Al pasar el ratón por una tabla, sus relaciones se quedan y las demás se apagan.**
+  Con veinticuatro, saber cuáles son las de UNA tabla mirando el dibujo pedía seguir
+  una línea con el dedo entre otras veinte que la cruzan. No cambia nada del modelo y
+  se deshace solo al quitar el ratón.
+
 - **Tablas de medidas, y una métrica que se distingue de una tabla.** El panel del
   modelo listaba las métricas en plano y sin signo propio: con tres se lee, con
   treinta —lo normal en cuanto un modelo se usa de verdad— es un muro de renglones

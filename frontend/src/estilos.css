@@ -1853,3 +1853,11 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
   font-size: 12px;
 }
 .vacio-cajon { padding: 2px 8px 2px 18px; }
+
+/* Al pasar el raton por una tabla, sus relaciones se quedan y las demas se apagan.
+   Con veinticuatro, seguir una linea con el dedo entre otras veinte que la cruzan no
+   es leer un modelo. */
+.react-flow__edge.apagada { opacity: 0.12; }
+.react-flow__edge.apagada .react-flow__edge-text,
+.react-flow__edge.apagada .react-flow__edge-textbg { opacity: 0; }
+.react-flow__edge { transition: opacity 0.12s ease; }

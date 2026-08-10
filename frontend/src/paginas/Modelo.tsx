@@ -39,15 +39,13 @@ import { SeccionMetricas, type MetricaAbierta } from '../modelo/PanelMetricas'
 import { PanelRelacion } from '../modelo/PanelRelacion'
 import { PanelRelaciones } from '../modelo/PanelRelaciones'
 import { VistaYaml } from '../modelo/VistaYaml'
-import {
-  deshacer,
-  disponer,
-  estadoInicial,
-  haCambiado,
-  reducir,
-} from '../modelo/estado'
+import { deshacer, estadoInicial, haCambiado, reducir } from '../modelo/estado'
+import { disponer, medidaSupuesta } from '../modelo/disponer'
 
 type Pestana = 'lienzo' | 'relaciones' | 'datos' | 'yaml'
+
+/** Lo que se corre a la derecha cada tabla nueva. Más que el nodo más ancho. */
+const ANCHO_COLUMNA = 320
 type Panel = 'seleccion' | 'diagnostico'
 
 const METRICA_NUEVA: Metrica = {
@@ -86,7 +84,18 @@ export function Modelo() {
       definicion:
         Object.keys(d.disposicion ?? {}).length > 0
           ? d
-          : { ...d, disposicion: disponer(d.entidades) },
+          : {
+              ...d,
+              // Sin nada dibujado todavía no hay medidas, así que se estiman a
+              // partir del número de columnas. Es lo que evita que un modelo
+              // escrito a mano en YAML se abra con las tablas unas encima de otras.
+              disposicion: disponer(
+                d,
+                Object.fromEntries(
+                  d.entidades.map((e) => [e.nombre, medidaSupuesta(e)]),
+                ),
+              ),
+            },
     })
   }, [cargada.data])
 
@@ -132,13 +141,21 @@ export function Modelo() {
       : undefined
 
   function agregarEntidad(e: Entidad) {
-    const columna = d ? Object.keys(d.disposicion).length : 0
+    // A la derecha de todo, en una columna para ella sola. Antes se repartían en
+    // una cuadrícula de cuatro por fila separadas 340 en vertical, y una tabla de
+    // veintidós columnas mide más de 500: las tablas se solapaban unas encima de
+    // otras. Aquí no se puede solapar nada, y para ordenar el conjunto está
+    // «Reorganizar» en el lienzo.
+    const derecha = Object.values(d?.disposicion ?? {}).reduce(
+      (max, p) => Math.max(max, p.x),
+      -ANCHO_COLUMNA,
+    )
     despachar({ t: 'agregar_entidad', entidad: e })
     despachar({
       t: 'mover',
       entidad: e.nombre,
-      x: (columna % 4) * 300,
-      y: Math.floor(columna / 4) * 340,
+      x: derecha + ANCHO_COLUMNA,
+      y: 0,
     })
     setDialogoEntidad(false)
     setSeleccion({ tipo: 'entidad', id: e.nombre })
