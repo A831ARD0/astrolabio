@@ -247,6 +247,39 @@ export function cardinalidadProbable(
 }
 
 /**
+ * Preguntar antes de cambiarle la clave primaria a una entidad.
+ *
+ * Una entidad tiene UNA clave primaria. Declarar otra no es añadir: es sustituir,
+ * y las relaciones que apuntaban a la anterior se quedan apuntando a una columna
+ * que ya no consta única — así que el aviso que se venía a quitar reaparece en
+ * ellas. Hacerlo en silencio desde un botón que dice «declararla clave primaria»
+ * sería arreglar una fila rompiendo otras tres.
+ *
+ * Devuelve `true` si se puede seguir: o no había clave, o ya era esa, o el
+ * usuario aceptó el cambio.
+ */
+export function confirmarClave(
+  d: Definicion,
+  entidad: string,
+  campo: string,
+): boolean {
+  const actual = d.entidades.find((e) => e.nombre === entidad)?.clave_primaria
+  if (!actual || actual === campo) return true
+  const afectadas = d.relaciones.filter(
+    (r) => r.hasta[0] === entidad && r.hasta[1] === actual,
+  ).length
+  return window.confirm(
+    `${entidad} ya tiene clave primaria: ${actual}. Solo puede haber una, así `
+    + `que ${campo} la sustituye.`
+    + (afectadas > 0
+      ? `\n\nHay ${afectadas} relación(es) que unen contra ${actual} y pasarán a `
+        + 'avisar de lo mismo que estás quitando aquí.'
+      : '')
+    + '\n\n¿Cambiarla?',
+  )
+}
+
+/**
  * Posiciones para un modelo que todavía no tiene disposición guardada:
  * dimensiones arriba, hechos abajo. No es un algoritmo de grafos, es lo
  * suficiente para que al abrirlo se entienda y se pueda acomodar a mano.

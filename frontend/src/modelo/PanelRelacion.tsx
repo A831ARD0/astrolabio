@@ -11,7 +11,7 @@
  */
 
 import type { Cardinalidad, DireccionFiltro, Definicion } from '../api/tipos'
-import { ETIQUETA_CARDINALIDAD, type Accion } from './estado'
+import { ETIQUETA_CARDINALIDAD, type Accion, confirmarClave } from './estado'
 
 const CARDINALIDADES: Cardinalidad[] = ['muchos_a_uno', 'uno_a_uno', 'muchos_a_muchos']
 
@@ -155,10 +155,30 @@ export function PanelRelacion({
 
       {r.cardinalidad === 'muchos_a_uno' && !apuntaAClave && (
         <div className="aviso-caja">
-          <b>{r.hasta[1]}</b> no es la clave primaria de <b>{r.hasta[0]}</b>. Si
-          tiene valores repetidos, esta relación duplicará filas al agregar y los
-          totales saldrán inflados. Declárala como clave primaria si de verdad es
-          única.
+          <b>{r.hasta[1]}</b> no es la clave primaria de <b>{r.hasta[0]}</b>.
+          Dices que muchas filas de <b>{r.desde[0]}</b> apuntan a una sola de{' '}
+          <b>{r.hasta[0]}</b>, pero nadie ha declarado que esa columna no se
+          repita. Si se repitiera, cada fila del origen casaría con varias del
+          destino, la unión devolvería más filas de las que hay y las sumas
+          saldrían infladas — sin ningún error, solo con la cifra mal.
+          {/* El arreglo casi siempre es este y estaba a tres pantallas de aquí:
+              ir a la entidad, buscar el campo y marcarlo. Poder resolverlo donde
+              se lee el aviso es la diferencia entre corregirlo y convivir con él. */}
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="btn chico"
+              onClick={() => {
+                if (!confirmarClave(definicion, r.hasta[0], r.hasta[1])) return
+                despachar({
+                  t: 'cambiar_entidad',
+                  nombre: r.hasta[0],
+                  cambios: { clave_primaria: r.hasta[1] },
+                })
+              }}
+            >
+              {r.hasta[1]} no se repite: declararla clave primaria
+            </button>
+          </div>
         </div>
       )}
 
