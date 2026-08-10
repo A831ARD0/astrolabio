@@ -345,6 +345,15 @@ def ejecutar(t: Transformacion, comprimir: str = "zstd") -> ResultadoEjecucion:
             shutil.rmtree(destino)
         temporal.rename(destino)
 
+        # Los datos de este nombre son otros. Sin avisar, cada hilo que ya le
+        # habia puesto una vista encima seguiria usando la vieja, y si esta
+        # corrida cambio el tipo de una columna —un `cast(... as date)` recien
+        # puesto— DuckDB rechaza la vista entera con «types don't match». La
+        # importacion va aqui dentro para no cerrar el ciclo entre los dos
+        # modulos: `analitico` ya lee de `materializar`.
+        from app.analitico import invalidar_vistas
+        invalidar_vistas(t.nombre)
+
         archivos = list(destino.rglob("*.parquet"))
         return ResultadoEjecucion(
             filas=int(filas[0]) if filas else 0,

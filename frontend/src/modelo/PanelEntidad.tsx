@@ -7,8 +7,11 @@
  * el modelo permite, así que se edita aquí, a la vista, y no en un YAML aparte.
  */
 
+import { useState } from 'react'
+
 import type { Campo, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
-import { ETIQUETA_ROL, type Accion } from './estado'
+import { useTabla } from '../api/hooks'
+import { ETIQUETA_ROL, type Accion, resincronizar } from './estado'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 
@@ -26,6 +29,20 @@ export function PanelEntidad({
 }) {
   const cambiar = (cambios: Partial<Entidad>) =>
     despachar({ t: 'cambiar_entidad', nombre: entidad.nombre, cambios })
+
+  // Las columnas que tiene el origen AHORA MISMO, para poder compararlas con la
+  // copia que guarda la entidad. Se pide siempre: es una consulta cacheada por
+  // TanStack y saber que hay desfase importa antes de que alguien lo pregunte.
+  const origen = useTabla(entidad.origen.tabla)
+  const [resultado, setResultado] = useState<string | null>(null)
+
+  const enOrigen = origen.data?.columnas ?? []
+  const desfase = enOrigen.length
+    ? resincronizar(entidad, enOrigen)
+    : null
+  const hayDesfase = !!desfase
+    && (desfase.retipados.length > 0 || desfase.nuevas.length > 0
+      || desfase.desaparecidas.length > 0)
 
   const orden = useOrden(entidad.campos, (c, clave) =>
     clave === 'nombre' ? c.nombre
@@ -102,6 +119,58 @@ export function PanelEntidad({
             duplicando al cruzarla con otra de grano distinto.
           </span>
         </div>
+      )}
+
+      {/*
+        El desfase con el origen se avisa solo. Es el fallo que no se ve: la
+        transformación se cambia, el modelo sigue con la copia vieja y lo único
+        que se nota es un tipo raro en una tabla de catorce campos.
+      */}
+      {hayDesfase && (
+        <div className="aviso-caja">
+          <b className="mono">{entidad.origen.tabla}</b> ya no es como se leyó al
+          agregarla:
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {desfase!.retipados.length > 0 && (
+              <li>
+                cambió el tipo de {desfase!.retipados.length}:{' '}
+                <span className="mono">{desfase!.retipados.join(', ')}</span>
+              </li>
+            )}
+            {desfase!.nuevas.length > 0 && (
+              <li>
+                {desfase!.nuevas.length} columna(s) nueva(s):{' '}
+                <span className="mono">{desfase!.nuevas.join(', ')}</span>
+              </li>
+            )}
+            {desfase!.desaparecidas.length > 0 && (
+              <li>
+                ya no está(n):{' '}
+                <span className="mono">{desfase!.desaparecidas.join(', ')}</span>
+                {' '}— no se quitan solas por si alguna relación o métrica las usa.
+              </li>
+            )}
+          </ul>
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="btn chico"
+              onClick={() => {
+                // El rol, la etiqueta, «ver» y «PII» se conservan: son trabajo
+                // hecho a mano y volver a adivinarlos sería tirarlo.
+                cambiar({ campos: desfase!.campos })
+                setResultado(
+                  `${desfase!.retipados.length} tipo(s) al día, `
+                  + `${desfase!.nuevas.length} columna(s) agregada(s).`,
+                )
+              }}
+            >
+              Actualizar columnas desde el origen
+            </button>
+          </div>
+        </div>
+      )}
+      {resultado && !hayDesfase && (
+        <div className="chico tenue">{resultado} Los roles se conservaron.</div>
       )}
 
       <div>

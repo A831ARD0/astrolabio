@@ -171,6 +171,12 @@ def ejecutar_carga(
         _fallar(sesion, ejec, ds, actor, _inesperado(e, f"al traer {ds.tabla_origen}"))
 
     ejec.estado = EstadoCarga.exito
+    # El Parquet de este dataset es otro. Cada hilo que ya le habia puesto una
+    # vista encima tiene que rehacerla: si el origen cambio el tipo de una
+    # columna, la vista vieja declara el tipo que ya no es y DuckDB la rechaza
+    # entera con «types don't match».
+    from app.analitico import invalidar_vistas
+    invalidar_vistas(ds.nombre)
     ejec.filas = r.filas
     ejec.bytes_escritos = r.bytes_escritos
     ejec.ms = int(r.ms)

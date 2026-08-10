@@ -69,6 +69,29 @@ def conexion() -> duckdb.DuckDBPyConnection:
     return con
 
 
+# Cuantas veces se han reescrito los datos de cada nombre. Es un contador global
+# —compartido por todos los hilos— frente al recuerdo POR HILO de que ya se creo
+# la vista. Sin el, cada hilo daba por buena para siempre la vista que creo la
+# primera vez, y cuando una transformacion volvia a correr cambiando el tipo de
+# una columna la vista seguia declarando el tipo viejo. DuckDB no lo deja pasar:
+# «Contents of view were altered: types don't match! Expected [VARCHAR], but found
+# [DATE]». Un `cast(... as date)` recien puesto tumbaba el catalogo con un 500
+# hasta reiniciar el proceso, y hasta entonces el modelo seguia diciendo «texto».
+_sellos: dict[str, int] = {}
+
+
+def invalidar_vistas(*nombres: str) -> None:
+    """
+    Avisar de que un nombre tiene datos nuevos en disco.
+
+    Lo llama quien escribe Parquet. No toca ninguna vista: solo sube el sello, y
+    cada hilo vuelve a crear la suya la proxima vez que la use. Tocar las vistas
+    de otro hilo desde aqui no se puede — cada conexion DuckDB es suya.
+    """
+    for n in nombres:
+        _sellos[n] = _sellos.get(n, 0) + 1
+
+
 def tablas_del_motor(con: duckdb.DuckDBPyConnection | None = None) -> set[str]:
     """Las tablas que existen de verdad dentro del archivo del motor."""
     con = con or conexion()
@@ -104,11 +127,14 @@ def registrar_vistas(nombres: Iterable[str]) -> list[str]:
     from app.materializar import ErrorTransformacion, ruta_datos_dataset
 
     con = conexion()
-    hechas = getattr(_local, "vistas", None)
+    # nombre -> sello con el que se creo la vista de ESTE hilo. Se rehace cuando
+    # el sello global sube, que es como se entera de que los datos cambiaron.
+    hechas: dict[str, int] = getattr(_local, "vistas", None)
     if hechas is None:
-        hechas = _local.vistas = set()
+        hechas = _local.vistas = {}
 
-    faltan = [n for n in dict.fromkeys(nombres) if n not in hechas]
+    faltan = [n for n in dict.fromkeys(nombres)
+              if hechas.get(n) != _sellos.get(n, 0)]
     if not faltan:
         return []
 
@@ -116,7 +142,8 @@ def registrar_vistas(nombres: Iterable[str]) -> list[str]:
     nuevas = []
     for nombre in faltan:
         if nombre in reales:
-            hechas.add(nombre)          # no se le pone una vista encima
+            # No se le pone una vista encima: una tabla real siempre gana.
+            hechas[nombre] = _sellos.get(nombre, 0)
             continue
         try:
             ruta = ruta_datos_dataset(nombre)
@@ -130,7 +157,7 @@ def registrar_vistas(nombres: Iterable[str]) -> list[str]:
         con.execute(f'CREATE OR REPLACE TEMP VIEW {_cita_ident(nombre)} AS '
                     f"SELECT * FROM read_parquet('{ruta.replace(chr(39), chr(39) * 2)}', "
                     f'hive_partitioning=true)')
-        hechas.add(nombre)
+        hechas[nombre] = _sellos.get(nombre, 0)
         nuevas.append(nombre)
     return nuevas
 

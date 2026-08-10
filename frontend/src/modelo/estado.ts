@@ -247,6 +247,63 @@ export function cardinalidadProbable(
 }
 
 /**
+ * Volver a leer las columnas del origen y ponerlas al día en la entidad.
+ *
+ * La entidad guarda su propia copia de los campos, tomada el día que se agregó al
+ * modelo. Eso es a propósito —el modelo tiene que poder abrirse y compilar sin
+ * tocar la base— pero tiene un precio: si la transformación cambia después, la
+ * copia se queda vieja y no lo dice. El caso concreto que lo destapó fue una
+ * columna a la que se le añadió un `cast(… as date)` en la transformación y que
+ * en el modelo seguía saliendo como texto, con todo lo que eso arrastra: el rol
+ * sugerido, el aviso de tipos que no casan en la relación con el calendario, y
+ * las funciones de fecha que no se ofrecen en las fórmulas.
+ *
+ * Lo que se conserva y lo que se pisa:
+ *
+ * - **El tipo se pisa.** Es un hecho del origen, no una decisión de nadie.
+ * - **El rol, la etiqueta, `visible` y `pii` se conservan.** Son decisiones
+ *   tomadas a mano; volver a adivinarlas borraría el trabajo de clasificar
+ *   catorce campos.
+ * - **Las columnas nuevas se añaden** con su rol sugerido.
+ * - **Las que desaparecieron NO se borran.** Puede haber relaciones o métricas
+ *   apuntando a ellas, y borrarlas en silencio dejaría el modelo roto lejos de
+ *   aquí. Se devuelven en `desaparecidas` para poder decirlo.
+ */
+export function resincronizar(
+  entidad: Entidad,
+  columnas: { nombre: string; tipo: string; rol_sugerido: string }[],
+): { campos: Campo[]; retipados: string[]; nuevas: string[]; desaparecidas: string[] } {
+  const llegan = new Map(columnas.map((c) => [c.nombre, c]))
+  const retipados: string[] = []
+  const desaparecidas: string[] = []
+
+  const campos: Campo[] = entidad.campos.map((c) => {
+    const nueva = llegan.get(c.nombre)
+    if (!nueva) {
+      desaparecidas.push(c.nombre)
+      return c
+    }
+    if (nueva.tipo !== c.tipo) {
+      retipados.push(`${c.nombre}: ${c.tipo} → ${nueva.tipo}`)
+      return { ...c, tipo: nueva.tipo as Campo['tipo'] }
+    }
+    return c
+  })
+
+  const ya = new Set(entidad.campos.map((c) => c.nombre))
+  const nuevas = columnas.filter((c) => !ya.has(c.nombre))
+  for (const c of nuevas) {
+    campos.push({
+      nombre: c.nombre,
+      tipo: c.tipo as Campo['tipo'],
+      rol: c.rol_sugerido as RolCampo,
+    })
+  }
+
+  return { campos, retipados, nuevas: nuevas.map((c) => c.nombre), desaparecidas }
+}
+
+/**
  * Preguntar antes de cambiarle la clave primaria a una entidad.
  *
  * Una entidad tiene UNA clave primaria. Declarar otra no es añadir: es sustituir,

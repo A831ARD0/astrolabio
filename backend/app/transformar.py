@@ -136,6 +136,11 @@ def renombrar(sesion: Session, t: TransformacionDB, nuevo: str,
                 f"perdería lo que tenga.")
         carpeta.rename(destino)
         movidos = True
+        # Los dos nombres cambian de contenido: el viejo se queda sin datos y el
+        # nuevo los estrena. Una vista que sobreviva al renombrado apuntaria a una
+        # carpeta que ya no esta.
+        from app.analitico import invalidar_vistas
+        invalidar_vistas(viejo, nuevo)
 
     # Las que la leen. Se les reescribe la REFERENCIA y no el alias: el alias es el
     # nombre con el que la consulta —o el paso de unir— la llama por dentro, y
