@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 
 from app.analitico import ejecutar_consulta, ejecutar_muestra, estados_asociativos
 from app.auditoria import registrar
+from app.errores_motor import en_castellano
 from app.exportar import (
     Procedencia, TOPE_FILAS, a_csv, a_excel, nombre_archivo,
 )
@@ -815,7 +816,8 @@ def probar_metrica(modelo_id: int, cuerpo: ProbarMetrica, sesion: SesionDep,
         # Un error de SQL aqui es un error del usuario escribiendo la expresion,
         # no una falla del servidor: se devuelve tal cual para que lo lea.
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"La expresion no se pudo ejecutar: {e}")
+                            f"La expresion no se pudo ejecutar. "
+                            f"{en_castellano(e)}")
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
             "sql": res.sql}
@@ -861,7 +863,8 @@ def vista_previa(modelo_id: int, cuerpo: VistaPrevia, sesion: SesionDep,
         # El modelo puede estar a medio escribir: eso es un error de quien edita,
         # no una falla del servidor, y se devuelve para que lo lea.
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"La consulta no se pudo ejecutar: {e}")
+                            f"La consulta no se pudo ejecutar. "
+                            f"{en_castellano(e)}")
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
             "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas}
@@ -892,7 +895,7 @@ def muestra(modelo_id: int, cuerpo: MuestraEntidad, sesion: SesionDep,
         # Lo normal aqui es que la tabla del origen todavia no exista en el
         # motor: decirlo tal cual ahorra buscarlo en el modelo.
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"No se pudo leer la tabla: {e}")
+                            f"No se pudo leer la tabla. {en_castellano(e)}")
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
             "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas,

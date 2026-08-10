@@ -37,7 +37,15 @@ export type Accion =
   | {
       t: 'cambiar_relacion'
       indice: number
-      cambios: { cardinalidad?: Cardinalidad; direccion_filtro?: DireccionFiltro }
+      cambios: {
+        cardinalidad?: Cardinalidad
+        direccion_filtro?: DireccionFiltro
+        // Las columnas unidas también se cambian aquí. Antes había que quitar la
+        // relación y volver a arrastrarla sólo por haber acertado la tabla y
+        // fallado la columna, que es el error normal cuando no se llaman igual.
+        desde?: [string, string]
+        hasta?: [string, string]
+      }
     }
   | { t: 'quitar_relacion'; indice: number }
   | { t: 'guardar_metrica'; indice: number | null; metrica: Metrica }

@@ -1041,6 +1041,19 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
                 f"'{nombre}' no es un campo de esta entidad.{pista}",
                 _buscar(mascara, nombre), len(nombre)))
 
+    # Agregar lo que ya viene agregado. El caso corriente es referenciar otra
+    # metrica dentro de SUMA: `SUMA([utilidad_total])`, donde la referenciada ya
+    # es un SUM. El motor lo rechaza con un «aggregate function calls cannot be
+    # nested» que habla de un SQL que quien escribio la formula no ha visto.
+    anidadas = _agregaciones_anidadas(expresion, mascara, ctx)
+    if anidadas:
+        fallos.extend(anidadas)
+    elif _hay_agregado_dentro_de_agregado(arbol):
+        fallos.append(Fallo(
+            "Hay una agregacion dentro de otra, y eso no se puede calcular: el "
+            "motor tendria que agrupar dos veces sobre el mismo grupo. Deja una "
+            "sola.", 0, len(expresion.split("\n")[0])))
+
     hay_agregacion = arbol.find(exp.AggFunc) is not None
     sueltas = _columnas_desnudas(arbol)
     if sueltas and hay_agregacion:
@@ -1062,6 +1075,90 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
 
     fallos.sort(key=lambda f: f.inicio)
     return [f.con_posicion(expresion) for f in fallos]
+
+
+def _hay_agregado_dentro_de_agregado(arbol: exp.Expression) -> bool:
+    """Un SUM dentro de otro SUM, en el SQL ya compilado."""
+    for nodo in arbol.find_all(exp.AggFunc):
+        for dentro in nodo.find_all(exp.AggFunc):
+            if dentro is not nodo:
+                return True
+    return False
+
+
+def _envolturas(mascara: str, posicion: int) -> list[tuple[str, int]]:
+    """
+    Las funciones que envuelven a `posicion`, de la mas cercana a la mas lejana.
+
+    Se lee hacia atras contando parentesis sobre el texto ENMASCARADO, asi que un
+    parentesis dentro de un comentario o de un literal no cuenta. Devuelve el
+    nombre y donde empieza, para poder señalarlo.
+    """
+    fuera: list[tuple[str, int]] = []
+    profundidad = 0
+    i = posicion - 1
+    while i >= 0:
+        c = mascara[i]
+        if c == ")":
+            profundidad += 1
+        elif c == "(":
+            if profundidad > 0:
+                profundidad -= 1
+            else:
+                # Parentesis sin cerrar antes de la posicion: lo que haya
+                # pegado a su izquierda es la funcion que nos envuelve.
+                j = i - 1
+                while j >= 0 and mascara[j].isspace():
+                    j -= 1
+                fin = j + 1
+                while j >= 0 and (mascara[j].isalnum() or mascara[j] == "_"):
+                    j -= 1
+                if fin > j + 1:
+                    fuera.append((mascara[j + 1:fin], j + 1))
+        i -= 1
+    return fuera
+
+
+def _agrega(nombre: str) -> bool:
+    funcion = CATALOGO.get(nombre.upper())
+    if funcion is not None:
+        return funcion.agrega
+    return nombre.upper() in AGREGADOS_SQL
+
+
+def _agregaciones_anidadas(expresion: str, mascara: str,
+                           ctx: Contexto) -> list[Fallo]:
+    """
+    Referencias a metricas que ya agregan, metidas dentro de una agregacion.
+
+    Se revisa sobre el texto que se escribio y no sobre el SQL porque el mensaje
+    tiene que hablar de `[utilidad_total]` y de `SUMA`, que es lo que hay en la
+    pantalla. El SQL compilado dice `SUM(SUM(...))`, que no aparece en ningun
+    sitio donde quien escribe pueda mirarlo.
+    """
+    fallos: list[Fallo] = []
+    for m in re.finditer(r"\[([^\]]+)\]", mascara):
+        nombre = expresion[m.start(1):m.end(1)].strip()
+        referida = ctx.metrica(nombre)
+        if referida is None:
+            continue
+        try:
+            if sqlglot.parse_one(compilar(referida, ctx),
+                                 read=DIALECTO).find(exp.AggFunc) is None:
+                continue                      # no agrega: envolverla esta bien
+        except (ErrorFormula, Exception):     # pragma: no cover
+            continue                          # su propio error ya se dira aparte
+        envoltura = next((f for f in _envolturas(mascara, m.start())
+                          if _agrega(f[0])), None)
+        if envoltura is None:
+            continue
+        funcion = envoltura[0].upper()
+        fallos.append(Fallo(
+            f"[{nombre}] ya agrega por si sola, asi que {funcion}([{nombre}]) "
+            f"seria agregar dos veces y eso no se puede calcular. Quitale el "
+            f"{funcion} de fuera y usa [{nombre}] directamente.",
+            m.start(), m.end() - m.start()))
+    return fallos
 
 
 def _contar_argumentos(mascara: str, abre: int) -> int | None:

@@ -214,6 +214,40 @@ def test_metrica_inexistente_se_señala_con_su_posicion(ctx):
     assert fallos[0]["columna"] == 9
 
 
+def test_sumar_una_metrica_que_ya_suma_se_atrapa_antes_de_ejecutar(ctx):
+    """
+    El error real: DuckDB contesta «aggregate function calls cannot be nested»
+    y enseña un SQL con alias `t0` que quien escribio la formula no ha visto.
+    Aqui tiene que decirse en terminos de lo que hay en la pantalla.
+    """
+    fallos = revisar("DIVIDIR(SUMA([venta]), SUMA([utilidad]), 0)", ctx)
+    assert len(fallos) == 2
+    assert all(f["gravedad"] == "error" for f in fallos)
+    assert "[venta] ya agrega" in fallos[0]["mensaje"]
+    assert "SUMA" in fallos[0]["mensaje"]
+    # Señala la referencia, no la formula entera.
+    assert fallos[0]["columna"] == 14
+    assert fallos[0]["largo"] == len("[venta]")
+
+
+def test_la_misma_metrica_sin_envolver_esta_bien(con, ctx):
+    """La correccion que sugiere el mensaje anterior tiene que funcionar."""
+    assert revisar("DIVIDIR([utilidad], [venta], 0)", ctx) == []
+    assert valor(con, ctx, "DIVIDIR([utilidad], [venta], 0)") == pytest.approx(0.25)
+
+
+def test_una_metrica_que_no_agrega_si_se_puede_envolver():
+    """No es el nombre lo que molesta, es agregar dos veces."""
+    ctx = Contexto(campos={"importe"}, metricas={"neto": "importe * 1.16"})
+    assert revisar("SUMA([neto])", ctx) == []
+
+
+def test_agregacion_dentro_de_agregacion_sin_referencias(ctx):
+    fallos = revisar("SUMA(PROMEDIO(importe))", ctx)
+    assert len(fallos) == 1
+    assert "agregacion dentro de otra" in fallos[0]["mensaje"]
+
+
 def test_las_metricas_circulares_se_cortan():
     ctx = Contexto(campos={"importe"},
                    metricas={"a": "[b] + 1", "b": "[a] + 1"})
