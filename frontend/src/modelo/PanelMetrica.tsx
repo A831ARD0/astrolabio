@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFunciones, useProbarMetrica, useRevisarFormula } from '../api/hooks'
 import type { Definicion, FalloFormula, FuncionFormula, Metrica } from '../api/tipos'
 import { Velo } from '../comunes/Velo'
+import { Combo } from '../comunes/Combo'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 import type { Accion } from './estado'
@@ -403,14 +404,15 @@ export function PanelMetrica({
             <div className="fila" style={{ alignItems: 'flex-end' }}>
               <div className="campo">
                 <label>Probar agrupando por (opcional)</label>
-                <select value={agruparPor} onChange={(e) => setAgruparPor(e.target.value)}>
-                  <option value="">(total, sin agrupar)</option>
-                  {dimensiones.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
+                <Combo
+                  opciones={[
+                    { valor: '', etiqueta: '(total, sin agrupar)' },
+                    ...dimensiones.map((d) => ({ valor: d, etiqueta: d })),
+                  ]}
+                  valor={agruparPor}
+                  alElegir={setAgruparPor}
+                  marcador="(total, sin agrupar)"
+                />
               </div>
               <button
                 className="btn"

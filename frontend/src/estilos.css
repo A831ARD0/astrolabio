@@ -1578,3 +1578,38 @@ button.ordenar.en-linea {
   cursor: pointer;
 }
 button.ordenar.en-linea .flecha { margin-left: 0; }
+
+/* ------------------------------------------- desplegable con búsqueda */
+
+.combo { position: relative; }
+.combo-lista {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+}
+.combo-opcion {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 9px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--texto);
+}
+.combo-opcion > .mono { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Resaltada con el teclado y elegida son cosas distintas y se ven distintas:
+   moverse con las flechas no debe parecer que ya se eligió. */
+.combo-opcion.resaltada { background: var(--fondo-alto); }
+.combo-opcion.puesta { color: var(--acento); font-weight: 550; }

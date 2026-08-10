@@ -22,6 +22,7 @@ import { ETIQUETA_ROL } from './estado'
 import { Velo } from '../comunes/Velo'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
+import { Combo } from '../comunes/Combo'
 
 const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
@@ -58,6 +59,28 @@ export function CuerpoEntidad({
     // valor inicial del selector.
     setTipo(/^(fact|hechos?)_/i.test(t) ? 'hecho' : 'dimension')
   }
+
+  /**
+   * Las tablas, agrupadas por origen y en el orden del panel del ETL.
+   *
+   * El grupo va como etiqueta de cada opción y no como cabecera de sección: al
+   * escribir, la lista se mezcla y una cabecera separada dejaría de decir a qué
+   * grupo pertenece cada línea.
+   */
+  const opcionesTabla = useMemo(
+    () =>
+      GRUPOS.flatMap(({ origen, titulo }) =>
+        (tablas.data?.tablas ?? [])
+          .filter((t) => t.origen === origen)
+          .map((t) => ({
+            valor: t.nombre,
+            etiqueta: t.nombre,
+            detalle: `${t.filas.toLocaleString('es-MX')} filas`,
+            grupo: titulo,
+          })),
+      ),
+    [tablas.data],
+  )
 
   const columnas = detalle.data?.columnas ?? []
   const clave = detalle.data?.clave_primaria ?? null
@@ -99,28 +122,18 @@ export function CuerpoEntidad({
       )}
 
       <div className="campo">
-        <label>Tabla</label>
-        <select value={tabla ?? ''} onChange={(e) => elegir(e.target.value)}>
-          <option value="">(elige una)</option>
-          {GRUPOS.map(({ origen, titulo }) => {
-            const suyas = (tablas.data?.tablas ?? []).filter(
-              (t) => t.origen === origen,
-            )
-            if (suyas.length === 0) return null
-            return (
-              <optgroup key={origen} label={titulo}>
-                {suyas.map((t) => (
-                  <option key={t.nombre} value={t.nombre}>
-                    {t.nombre} — {t.filas.toLocaleString('es-MX')} filas
-                  </option>
-                ))}
-              </optgroup>
-            )
-          })}
-        </select>
+        <label htmlFor="tabla-entidad">Tabla</label>
+        <Combo
+          id="tabla-entidad"
+          opciones={opcionesTabla}
+          valor={tabla}
+          alElegir={elegir}
+          marcador="Escribe parte del nombre: «orcamento audi»"
+          autoFocus
+        />
         <span className="chico tenue">
           Lo que cargaste y lo que produjeron tus transformaciones sale aquí igual
-          que las tablas del motor.
+          que las tablas del motor. Se busca por trozos y sin acentos.
         </span>
       </div>
 

@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 
 import { useMuestra, useVistaPrevia } from '../api/hooks'
 import type { Definicion, ResultadoDatos } from '../api/tipos'
+import { Combo } from '../comunes/Combo'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 
@@ -167,22 +168,22 @@ export function PanelDatos({
                       </button>
                     </span>
                   ))}
-                  <select
-                    value=""
-                    style={{ width: 'auto' }}
-                    onChange={(e) =>
-                      e.target.value && setDesglose((v) => [...v, e.target.value])
-                    }
-                  >
-                    <option value="">+ dimensión</option>
-                    {dimensiones
-                      .filter((d) => !desglose.includes(d.clave))
-                      .map((d) => (
-                        <option key={d.clave} value={d.clave}>
-                          {d.clave}
-                        </option>
-                      ))}
-                  </select>
+                  {/* Con cuarenta tablas la lista de dimensiones es tan larga
+                      como el catálogo entero: se busca, no se recorre. */}
+                  <div style={{ minWidth: 240 }}>
+                    <Combo
+                      opciones={dimensiones
+                        .filter((d) => !desglose.includes(d.clave))
+                        .map((d) => ({
+                          valor: d.clave,
+                          etiqueta: d.clave,
+                          detalle: d.etiqueta,
+                        }))}
+                      valor={null}
+                      alElegir={(clave) => setDesglose((v) => [...v, clave])}
+                      marcador="+ dimensión"
+                    />
+                  </div>
                   {desglose.length === 0 && (
                     <span className="chico tenue">sin desglose: el total</span>
                   )}
