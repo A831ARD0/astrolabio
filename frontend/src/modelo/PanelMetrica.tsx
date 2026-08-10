@@ -270,8 +270,15 @@ export function PanelMetrica({
                   placeholder="utilidad_promedio"
                 />
               </div>
+              {/*
+                Dos cosas que antes eran una sola, y confundirlas sale caro: el
+                hecho decide QUÉ SE CALCULA —es el FROM del SQL, y cambiarlo cambia
+                la cifra— y la tabla de medidas solo dice DÓNDE SE VE. Es la
+                separación que hace Power BI, y por eso mover una métrica de cajón
+                no le toca el número.
+              */}
               <div className="campo" style={{ flex: '0 0 150px' }}>
-                <label>Vive en</label>
+                <label>Calcula desde</label>
                 <select
                   value={borrador.entidad}
                   onChange={(e) => setBorrador({ ...borrador, entidad: e.target.value })}
@@ -280,6 +287,25 @@ export function PanelMetrica({
                   {hechos.map((e) => (
                     <option key={e.nombre} value={e.nombre}>
                       {e.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="campo" style={{ flex: '0 0 150px' }}>
+                <label>Aparece en</label>
+                <select
+                  value={borrador.tabla_medidas ?? ''}
+                  onChange={(e) =>
+                    setBorrador({
+                      ...borrador,
+                      tabla_medidas: e.target.value || null,
+                    })
+                  }
+                >
+                  <option value="">(bajo su hecho)</option>
+                  {(definicion.tablas_medidas ?? []).map((t) => (
+                    <option key={t.nombre} value={t.nombre}>
+                      {t.nombre}
                     </option>
                   ))}
                 </select>

@@ -22,6 +22,9 @@
   --acento-suave: #1d3557;
   --hecho: #f0a35e;
   --hecho-suave: #3a2a17;
+  /* Las medidas. Color propio y no el del hecho a proposito: una metrica no es
+     una tabla, y el panel tiene que poder decirlo sin leer el nombre. */
+  --medida: #2dd4bf;
   --critico: #f2545b;
   --critico-suave: #3d1a1e;
   --aviso: #e8b339;
@@ -50,6 +53,7 @@
     --acento-suave: #dbe8ff;
     --hecho: #b45309;
     --hecho-suave: #fdf0dd;
+    --medida: #0f766e;
     --critico: #cf222e;
     --critico-suave: #ffe3e5;
     --aviso: #9a6700;
@@ -1788,3 +1792,64 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
 }
 .aviso-fila + .aviso-fila { margin-top: 3px; }
 .aviso-fila.critico { color: var(--critico); font-weight: 550; }
+
+/* ------------------------------------------- metricas y tablas de medidas */
+
+/* Una metrica no es una columna ni una tabla, y hasta ahora se veia igual que
+   las dos. El signo la distingue de un vistazo, que es justo lo que hace falta
+   cuando el panel tiene treinta renglones. */
+.lista button.metrica { padding-left: 18px; }
+.lista button .sigma {
+  flex: 0 0 10px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--medida);
+}
+
+/* El cajon: su cabecera no es un boton porque no lleva a ninguna parte —no hay
+   nada que abrir— y un renglon que se ilumina al pasar por encima promete algo
+   que no va a pasar. */
+.cajon + .cajon { margin-top: 6px; }
+.cabecera-cajon {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  position: relative;
+}
+.cabecera-cajon .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cabecera-cajon .dcha { margin-left: auto; font-weight: 400; color: var(--texto-tenue); }
+.punto.medidas {
+  background: var(--medida);
+  border-radius: 50%;
+}
+
+.acciones-cajon {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  background: var(--fondo-hover);
+  border-radius: 4px;
+}
+.cabecera-cajon:hover .acciones-cajon { opacity: 1; }
+.acciones-cajon > span {
+  padding: 0 4px;
+  border-radius: 3px;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  font-weight: 400;
+}
+.acciones-cajon > span:hover { background: var(--acento-suave); color: var(--acento); }
+
+.nombre-cajon {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.vacio-cajon { padding: 2px 8px 2px 18px; }

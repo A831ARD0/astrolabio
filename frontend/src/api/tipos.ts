@@ -46,10 +46,27 @@ export interface Relacion {
   [clave: string]: unknown
 }
 
+/**
+ * Un cajón con nombre para guardar métricas, sin datos propios.
+ *
+ * No es una entidad y no puede serlo: una entidad tiene tabla, columnas y
+ * relaciones, y sale en el diagnóstico como huérfana si no se une a nada. Esto es
+ * la «tabla de medidas» de Power BI, y como allí **solo organiza**: de dónde salen
+ * las cifras lo sigue diciendo el hecho de cada métrica.
+ */
+export interface TablaMedidas {
+  nombre: string
+  descripcion?: string | null
+  [clave: string]: unknown
+}
+
 export interface Metrica {
   nombre: string
   etiqueta: string
+  /** El hecho del que se calcula: es lo que decide el FROM del SQL. */
   entidad: string
+  /** En qué tabla de medidas se muestra. Ausente = debajo de su propio hecho. */
+  tabla_medidas?: string | null
   expresion: string
   formato?: string
   [clave: string]: unknown
@@ -59,6 +76,8 @@ export interface Definicion {
   modelo: string
   version: number
   entidades: Entidad[]
+  /** Puede no venir: los modelos guardados antes de que esto existiera no la traen. */
+  tablas_medidas?: TablaMedidas[]
   relaciones: Relacion[]
   metricas: Metrica[]
   politicas: Record<string, unknown>[]

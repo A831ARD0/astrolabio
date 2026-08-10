@@ -620,6 +620,23 @@ es lo que ya estaban leyendo los tableros. Las secciones marcadas como
 modelo, no algo que cada quien reescribe en su tablero. Es lo que hace que dos
 personas no tengan dos utilidades distintas.
 
+### Ordenar las métricas: tablas de medidas
+
+Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una
+tabla ni con una columna. Y se pueden agrupar en **tablas de medidas**: cajones que
+tú inventas —«KPIs de venta», «KPIs de taller»— con **+ Tabla de medidas**. Es lo
+mismo que en Power BI, incluido lo importante:
+
+- **No son entidades.** No tienen datos, no se relacionan con nada y no aparecen en
+  el lienzo ni en el diagnóstico. Solo ordenan.
+- **No cambian ninguna cifra.** En la métrica hay dos campos distintos a propósito:
+  **Calcula desde** es el hecho —lo que decide de dónde sale el número— y **Aparece
+  en** es el cajón. Mover una métrica de cajón no le toca el resultado.
+- Lo que no esté en ningún cajón sigue viéndose **bajo su hecho**, como antes.
+
+Quitar un cajón (`✕`) **no borra sus métricas**: vuelven a verse bajo su hecho.
+Cambiarle el nombre (`✎`) arrastra a las suyas con él.
+
 ### El panel de diagnóstico
 
 Marca los problemas que producen cifras mal sin avisar:

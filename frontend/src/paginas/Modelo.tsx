@@ -35,6 +35,7 @@ import { PanelDatos } from '../modelo/PanelDatos'
 import { PanelDiagnostico } from '../modelo/PanelDiagnostico'
 import { PanelEntidad } from '../modelo/PanelEntidad'
 import { PanelMetrica } from '../modelo/PanelMetrica'
+import { SeccionMetricas, type MetricaAbierta } from '../modelo/PanelMetricas'
 import { PanelRelacion } from '../modelo/PanelRelacion'
 import { PanelRelaciones } from '../modelo/PanelRelaciones'
 import { VistaYaml } from '../modelo/VistaYaml'
@@ -71,7 +72,7 @@ export function Modelo() {
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null)
   const [resaltadas, setResaltadas] = useState<Set<string> | null>(null)
   const [dialogoEntidad, setDialogoEntidad] = useState(false)
-  const [metricaAbierta, setMetricaAbierta] = useState<number | 'nueva' | null>(null)
+  const [metricaAbierta, setMetricaAbierta] = useState<MetricaAbierta | null>(null)
   const [notas, setNotas] = useState('')
   const [confirmarDescarte, setConfirmarDescarte] = useState(false)
 
@@ -180,39 +181,11 @@ export function Modelo() {
           </div>
         </section>
 
-        <section className="seccion">
-          <header>
-            Métricas <span className="cuenta">{d.metricas.length}</span>
-          </header>
-          <div className="contenido">
-            <div className="lista">
-              {d.metricas.map((m, i) => (
-                <button key={m.nombre} onClick={() => setMetricaAbierta(i)}>
-                  <span className="nom">{m.etiqueta || m.nombre}</span>
-                  <span className="dcha">{m.formato}</span>
-                </button>
-              ))}
-            </div>
-            {d.metricas.length === 0 && (
-              <div className="chico tenue" style={{ padding: '2px 8px' }}>
-                Sin métricas todavía.
-              </div>
-            )}
-            <button
-              className="btn chico"
-              style={{ marginTop: 8, width: '100%' }}
-              disabled={d.entidades.every((e) => e.tipo !== 'hecho')}
-              title={
-                d.entidades.every((e) => e.tipo !== 'hecho')
-                  ? 'Una métrica nace en un hecho: agrega primero una entidad de tipo hecho'
-                  : undefined
-              }
-              onClick={() => setMetricaAbierta('nueva')}
-            >
-              + Nueva métrica
-            </button>
-          </div>
-        </section>
+        <SeccionMetricas
+          definicion={d}
+          despachar={despachar}
+          alAbrir={setMetricaAbierta}
+        />
 
         <section className="seccion">
           <header>Versiones</header>
@@ -534,14 +507,17 @@ export function Modelo() {
         <PanelMetrica
           modeloId={modeloId}
           definicion={d}
-          indice={metricaAbierta === 'nueva' ? null : metricaAbierta}
+          indice={typeof metricaAbierta === 'number' ? metricaAbierta : null}
           metrica={
-            metricaAbierta === 'nueva'
-              ? {
+            typeof metricaAbierta === 'number'
+              ? d.metricas[metricaAbierta]!
+              : {
                   ...METRICA_NUEVA,
                   entidad: d.entidades.find((e) => e.tipo === 'hecho')?.nombre ?? '',
+                  // Nace en el cajón desde el que se pulsó «+»: pedirlo otra vez
+                  // dentro del diálogo sería preguntar lo que ya se dijo.
+                  tabla_medidas: metricaAbierta.tablaMedidas,
                 }
-              : d.metricas[metricaAbierta]!
           }
           despachar={despachar}
           alCerrar={() => setMetricaAbierta(null)}

@@ -7,6 +7,28 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Tablas de medidas, y una métrica que se distingue de una tabla.** El panel del
+  modelo listaba las métricas en plano y sin signo propio: con tres se lee, con
+  treinta —lo normal en cuanto un modelo se usa de verdad— es un muro de renglones
+  donde no se encuentra ninguna, y encima una métrica se veía igual que una entidad.
+
+  Ahora cada métrica lleva su **Σ**, y se pueden agrupar en **tablas de medidas**:
+  cajones que el usuario inventa («KPIs de venta»), como en Power BI. **No son
+  entidades**: no tienen datos, no se relacionan con nada y no salen en el lienzo ni
+  en el diagnóstico —una entidad sin uniones se marcaría como huérfana, y con razón—.
+  Solo ordenan.
+
+  Y por eso la métrica tiene ahora **dos campos distintos**: «Calcula desde» es el
+  hecho, que decide el `FROM` del SQL, y «Aparece en» es el cajón. Antes eran uno
+  solo llamado «Vive en», que es justo la confusión que hace pensar que ordenar las
+  métricas puede cambiar una cifra. No puede: hay una prueba que consulta la misma
+  métrica con cajón y sin él y exige el mismo número.
+
+  Lo de antes se ve igual: lo que no está en ningún cajón sigue apareciendo bajo su
+  hecho. Quitar un cajón **no borra sus métricas** —vuelven bajo su hecho—, y
+  renombrarlo arrastra a las suyas, porque la referencia va por nombre y dejarlas
+  apuntando a uno que no existe impediría guardar el modelo.
+
 - **Ya se puede modelar sobre lo que uno cargó y transformó.** Faltaba la mitad del
   camino y no se veía: el modelo semántico solo sabe nombrar tablas, y una carga o el
   resultado de una transformación no son una tabla del motor —son un directorio de

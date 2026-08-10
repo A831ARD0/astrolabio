@@ -91,10 +91,32 @@ class RelacionDef(_Base):
     activa: bool = True
 
 
+class TablaMedidasDef(_Base):
+    """
+    Una tabla que el usuario inventa para guardar metricas, sin datos propios.
+
+    No es una entidad y no puede serlo: una entidad tiene tabla, columnas y
+    relaciones, y sale en el diagnostico como huerfana si no se une a nada. Esto es
+    solo un cajon con nombre — «KPIs de venta», «Indicadores de taller»— para que
+    treinta metricas no sean una lista de treinta renglones donde no se encuentra
+    ninguna.
+
+    Es la «tabla de medidas» de Power BI, y como alli **solo organiza**: de donde
+    salen las cifras lo sigue diciendo el hecho de cada metrica.
+    """
+
+    nombre: str = Field(min_length=1, max_length=120)
+    descripcion: str | None = None
+
+
 class MetricaDef(_Base):
     nombre: str = Field(min_length=1, max_length=120)
     etiqueta: str
+    #: El hecho del que se calcula: es lo que decide el FROM del SQL.
     entidad: str
+    #: En que tabla de medidas se muestra. None = debajo de su propio hecho, que es
+    #: como estaban todas antes de que esto existiera.
+    tabla_medidas: str | None = None
     expresion: str = Field(min_length=1)
     formato: str = "numero"
 
@@ -108,6 +130,7 @@ class Definicion(_Base):
     modelo: str = Field(min_length=1, max_length=120)
     version: int = 1
     entidades: list[EntidadDef] = Field(min_length=1)
+    tablas_medidas: list[TablaMedidasDef] = []
     relaciones: list[RelacionDef] = []
     metricas: list[MetricaDef] = []
     politicas: list[PoliticaDef] = []
@@ -181,8 +204,25 @@ class Definicion(_Base):
         for m in self.metricas:
             if m.entidad not in entidades:
                 errores.append(
-                    f"La metrica '{m.nombre}' vive en la entidad '{m.entidad}', "
-                    f"que no existe.")
+                    f"La metrica '{m.nombre}' se calcula desde la entidad "
+                    f"'{m.entidad}', que no existe.")
+
+        # Las tablas de medidas: nombres unicos, y que no se llamen como una
+        # entidad. Dos cosas distintas con el mismo nombre en el mismo panel no es
+        # un detalle de presentacion — es no saber que se esta mirando.
+        nombres_tm = [t.nombre for t in self.tablas_medidas]
+        for repetido in sorted({n for n in nombres_tm if nombres_tm.count(n) > 1}):
+            errores.append(f"Hay dos tablas de medidas llamadas '{repetido}'.")
+        for choque in sorted(set(nombres_tm) & set(entidades)):
+            errores.append(
+                f"'{choque}' es a la vez una entidad y una tabla de medidas. "
+                f"Cambiale el nombre a una de las dos.")
+
+        for m in self.metricas:
+            if m.tabla_medidas and m.tabla_medidas not in set(nombres_tm):
+                errores.append(
+                    f"La metrica '{m.nombre}' dice mostrarse en la tabla de "
+                    f"medidas '{m.tabla_medidas}', que no existe.")
 
         # Que la formula al menos COMPILE. Lo que no compila no se guarda: una
         # metrica rota no falla al guardarla, falla en el primer tablero que la
@@ -251,8 +291,8 @@ def volcar_yaml(crudo: dict) -> str:
     salieran en orden alfabetico o al azar, cada guardado produciria un diff
     ilegible y nadie revisaria nada.
     """
-    orden = ["modelo", "version", "entidades", "relaciones", "metricas",
-             "politicas", "disposicion"]
+    orden = ["modelo", "version", "entidades", "tablas_medidas", "relaciones",
+             "metricas", "politicas", "disposicion"]
     ordenado = {k: crudo[k] for k in orden if k in crudo and crudo[k] not in ([], {})}
     for k, v in crudo.items():                      # claves futuras al final
         if k not in ordenado and k not in orden:

@@ -51,6 +51,9 @@ export type Accion =
   | { t: 'quitar_relacion'; indice: number }
   | { t: 'guardar_metrica'; indice: number | null; metrica: Metrica }
   | { t: 'quitar_metrica'; nombre: string }
+  | { t: 'agregar_tabla_medidas'; nombre: string }
+  | { t: 'renombrar_tabla_medidas'; antes: string; despues: string }
+  | { t: 'quitar_tabla_medidas'; nombre: string }
 
 export interface Estado {
   /** Lo que se cargó del servidor. Es la referencia para saber qué cambió. */
@@ -215,6 +218,39 @@ function aplicar(d: Definicion, a: Accion): Definicion {
 
     case 'quitar_metrica':
       return { ...d, metricas: d.metricas.filter((m) => m.nombre !== a.nombre) }
+
+    case 'agregar_tabla_medidas':
+      return {
+        ...d,
+        tablas_medidas: [...(d.tablas_medidas ?? []), { nombre: a.nombre }],
+      }
+
+    // Renombrar arrastra a sus métricas: la referencia va por nombre, así que
+    // cambiar el cajón sin tocarlas dejaría a todas apuntando a uno que no existe
+    // y el modelo no se podría guardar.
+    case 'renombrar_tabla_medidas':
+      return {
+        ...d,
+        tablas_medidas: (d.tablas_medidas ?? []).map((t) =>
+          t.nombre === a.antes ? { ...t, nombre: a.despues } : t,
+        ),
+        metricas: d.metricas.map((m) =>
+          m.tabla_medidas === a.antes ? { ...m, tabla_medidas: a.despues } : m,
+        ),
+      }
+
+    // Quitar el cajón NO borra sus métricas: vuelven a verse bajo su hecho. Un
+    // botón de ordenar que borra el trabajo ordenado no se puede pulsar tranquilo.
+    case 'quitar_tabla_medidas':
+      return {
+        ...d,
+        tablas_medidas: (d.tablas_medidas ?? []).filter(
+          (t) => t.nombre !== a.nombre,
+        ),
+        metricas: d.metricas.map((m) =>
+          m.tabla_medidas === a.nombre ? { ...m, tabla_medidas: null } : m,
+        ),
+      }
 
     default:
       return d
