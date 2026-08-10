@@ -31,6 +31,7 @@ export function Combo({
   valor,
   alElegir,
   marcador = 'Escribe para buscar…',
+  vacio,
   autoFocus,
   id,
 }: {
@@ -38,6 +39,8 @@ export function Combo({
   valor: string | null
   alElegir: (valor: string) => void
   marcador?: string
+  /** Qué decir cuando no hay NINGUNA opción, que no es lo mismo que no encontrar. */
+  vacio?: string
   autoFocus?: boolean
   id?: string
 }) {
@@ -138,8 +141,15 @@ export function Combo({
             </button>
           ))}
 
+          {/* Sin nada que ofrecer y sin nada escrito, «ninguna coincide con “”»
+              manda a corregir una búsqueda que no se hizo. Lo que pasa es que la
+              lista está vacía, y eso es otra cosa. */}
           {filtradas.total === 0 && (
-            <div className="vacio chico">Ninguna coincide con «{busca}».</div>
+            <div className="vacio chico">
+              {opciones.length === 0
+                ? (vacio ?? 'No hay nada que elegir todavía.')
+                : `Ninguna coincide con «${busca}».`}
+            </div>
           )}
           {/* Se dice cuántas quedaron fuera. Una lista recortada en silencio se
               lee como «no existe», y entonces se busca donde no hay que buscar. */}

@@ -239,7 +239,7 @@ export function Explorador({
                   </span>
                 </div>
 
-                <div className="tabla-envoltura" style={{ maxHeight: 150 }}>
+                <div className="tabla-envoltura" style={{ maxHeight: '38vh' }}>
                   <table className="datos">
                     <thead>
                       <tr>
@@ -280,7 +280,7 @@ export function Explorador({
                 </div>
 
                 {muestra.data && (
-                  <div className="tabla-envoltura" style={{ maxHeight: 170 }}>
+                  <div className="tabla-envoltura" style={{ maxHeight: '32vh' }}>
                     <table className="datos">
                       <thead>
                         <tr>

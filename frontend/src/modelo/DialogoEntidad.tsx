@@ -129,6 +129,12 @@ export function CuerpoEntidad({
           valor={tabla}
           alElegir={elegir}
           marcador="Escribe parte del nombre: «orcamento audi»"
+          vacio={
+            tablas.isLoading
+              ? 'Leyendo el catálogo…'
+              : 'No hay ninguna tabla todavía. Carga datos en Conexiones o corre '
+                + 'una transformación.'
+          }
           autoFocus
         />
         <span className="chico tenue">
@@ -181,7 +187,7 @@ export function CuerpoEntidad({
             )}
           </div>
 
-          <div className="tabla-envoltura" style={{ maxHeight: 280 }}>
+          <div className="tabla-envoltura columnas-entidad">
             <table className="campos" style={{ margin: 0 }}>
               <thead>
                 <tr>
@@ -238,7 +244,10 @@ export function DialogoEntidad({
 
   return (
     <Velo alCerrar={alCerrar}>
-      <div className="modal">
+      {/* Grande a proposito: aqui se elige una tabla de un catalogo de cientos y
+          se revisa el rol de cada una de sus columnas. Con veintidós columnas y
+          una caja de 560 px, esa revision se hace mirando por una rendija. */}
+      <div className="modal entidad">
         <header>Agregar entidad desde una tabla</header>
 
         <div className="cont">

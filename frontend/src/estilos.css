@@ -1613,3 +1613,15 @@ button.ordenar.en-linea .flecha { margin-left: 0; }
    moverse con las flechas no debe parecer que ya se eligió. */
 .combo-opcion.resaltada { background: var(--fondo-alto); }
 .combo-opcion.puesta { color: var(--acento); font-weight: 550; }
+
+/* ------------------------------------------------ agregar entidad */
+
+/* Se elige una tabla de un catálogo de cientos y se revisa el rol de cada
+   columna. Las dos cosas piden sitio: la lista del buscador tiene que caber
+   abierta sin que la recorte el diálogo, y la tabla de columnas tiene que
+   enseñar más de seis filas de golpe. */
+.modal.entidad { width: min(920px, 94vw); height: min(86vh, 820px); }
+/* `flex: 1` y no solo el alto del diálogo: sin esto el cuerpo se queda del alto
+   de su contenido y el diálogo grande es un marco vacío con la tabla arriba. */
+.modal.entidad > .cont { flex: 1; min-height: 0; }
+.modal.entidad .columnas-entidad { flex: 1; min-height: 220px; }

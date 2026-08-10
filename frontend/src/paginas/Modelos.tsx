@@ -178,7 +178,10 @@ export function Modelos() {
       */}
       {nuevo && (
         <Velo alCerrar={cerrar}>
-          <div className="modal ancho">
+          {/* La misma caja que «Agregar entidad»: dentro va el mismo trabajo
+              —elegir tabla y repasar sus columnas— y verlo en dos tamaños
+              distintos hace pensar que son dos cosas distintas. */}
+          <div className="modal entidad">
             <header>Nuevo modelo</header>
             <div className="cont">
               <div className="fila">
