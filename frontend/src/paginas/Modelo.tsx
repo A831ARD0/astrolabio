@@ -36,6 +36,7 @@ import { PanelDiagnostico } from '../modelo/PanelDiagnostico'
 import { PanelEntidad } from '../modelo/PanelEntidad'
 import { PanelMetrica } from '../modelo/PanelMetrica'
 import { PanelRelacion } from '../modelo/PanelRelacion'
+import { PanelRelaciones } from '../modelo/PanelRelaciones'
 import { VistaYaml } from '../modelo/VistaYaml'
 import {
   deshacer,
@@ -45,7 +46,7 @@ import {
   reducir,
 } from '../modelo/estado'
 
-type Pestana = 'lienzo' | 'datos' | 'yaml'
+type Pestana = 'lienzo' | 'relaciones' | 'datos' | 'yaml'
 type Panel = 'seleccion' | 'diagnostico'
 
 const METRICA_NUEVA: Metrica = {
@@ -260,6 +261,13 @@ export function Modelo() {
               Lienzo
             </button>
             <button
+              className={pestana === 'relaciones' ? 'activo' : ''}
+              onClick={() => setPestana('relaciones')}
+              title="Todas las relaciones en una tabla, para revisarlas de un vistazo"
+            >
+              Relaciones <span className="cuenta">{d.relaciones.length}</span>
+            </button>
+            <button
               className={pestana === 'datos' ? 'activo' : ''}
               onClick={() => setPestana('datos')}
               title="Ejecutar el modelo tal como está en pantalla"
@@ -375,6 +383,19 @@ export function Modelo() {
 
         {pestana === 'datos' ? (
           <PanelDatos modeloId={modeloId} definicion={d} />
+        ) : pestana === 'relaciones' ? (
+          <PanelRelaciones
+            definicion={d}
+            despachar={(a) => {
+              despachar(a)
+              if (a.t === 'quitar_relacion') setSeleccion(null)
+            }}
+            seleccionada={seleccion?.tipo === 'relacion' ? Number(seleccion.id) : null}
+            alSeleccionar={(i) => {
+              setSeleccion({ tipo: 'relacion', id: i })
+              setPanel('seleccion')
+            }}
+          />
         ) : pestana === 'lienzo' ? (
           <Lienzo
             definicion={d}

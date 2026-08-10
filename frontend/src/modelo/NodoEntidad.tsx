@@ -62,25 +62,20 @@ export const NodoEntidad = memo(function NodoEntidad({ data }: { data: DatosNodo
         {entidad.campos.map((c) => (
           <li key={c.nombre} className={c.rol}>
             {/* Un conector por campo y por lado: así se puede arrastrar hacia
-                cualquier dirección sin pensar en cuál está a la izquierda. */}
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={c.nombre}
-              style={{ left: -4 }}
-            />
+                cualquier dirección sin pensar en cuál está a la izquierda.
+
+                El tamaño va en el CSS y a propósito no es el del punto que se
+                ve: la zona que agarra el ratón ocupa el alto entero de la fila.
+                Apuntar a un círculo de ocho píxeles en una lista de treinta
+                columnas era la parte difícil de relacionar dos tablas. */}
+            <Handle type="target" position={Position.Left} id={c.nombre} />
             <span>{c.nombre}</span>
             {c.pii && <span className="pii" title="Dato personal">PII</span>}
             <span className="rol">
               {camposEnRelacion.has(c.nombre) ? '⇄ ' : ''}
               {ETIQUETA_ROL[c.rol]}
             </span>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={c.nombre}
-              style={{ right: -4 }}
-            />
+            <Handle type="source" position={Position.Right} id={c.nombre} />
           </li>
         ))}
       </ul>

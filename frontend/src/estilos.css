@@ -520,10 +520,19 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 
 .nodo ul { list-style: none; margin: 0; padding: 4px 0; max-height: 220px; overflow: auto; }
 .nodo li {
+  /* IMPRESCINDIBLE. Sin esto, el conector de cada columna —que es `position:
+     absolute`— se posicionaba contra el nodo entero y las treinta columnas
+     acababan con su punto EN EL MISMO SITIO, apilados en el centro de la caja.
+     Por eso costaba tanto unir dos tablas: no es que el blanco fuera pequeño,
+     es que no había un blanco por columna, solo uno y siempre el mismo. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 9px;
+  /* 3px arriba y abajo: la fila crece a 22px de alto y eso es lo que puede medir
+     el conector sin pisar al de la fila de al lado. 15px a los lados: es el
+     hueco donde va el punto, y sin él tapaba la primera letra del campo. */
+  padding: 3px 15px;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--texto-suave);
@@ -534,8 +543,56 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 .nodo li .pii { color: var(--aviso); font-size: 10px; }
 .nodo > footer { padding: 3px 9px 5px; font-size: 10.5px; color: var(--texto-tenue); }
 
-.react-flow__handle { width: 8px; height: 8px; background: var(--borde-fuerte); border: 1px solid var(--fondo-panel); }
-.react-flow__handle:hover { background: var(--acento); }
+/*
+ * El conector de cada columna.
+ *
+ * Lo que se ve es un punto pequeño; lo que agarra el ratón es una zona de 26x20
+ * que ocupa el alto de la fila. Son dos cosas distintas a propósito: un punto
+ * grande convierte una tabla de treinta columnas en una hilera de bolas que tapa
+ * los nombres, y un blanco pequeño hace que unir dos tablas sea puntería. Con
+ * `connectionRadius` en el lienzo ni siquiera hace falta acertar dentro.
+ */
+.react-flow__handle {
+  width: 26px;
+  height: 20px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+.react-flow__handle::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--borde-fuerte);
+  border: 1.5px solid var(--fondo-panel);
+  transition: transform 0.1s ease, background 0.1s ease;
+}
+/*
+ * El punto va pegado al borde POR DENTRO, y la zona de agarre crece hacia dentro
+ * de la fila. Sacarlo fuera sería más bonito, pero la lista de columnas tiene
+ * `overflow: auto` para poder desplazarse cuando la tabla trae treinta campos, y
+ * eso recorta cualquier cosa que asome: los puntos desaparecerían.
+ */
+.react-flow__handle-left { left: 13px; place-items: center start; }
+.react-flow__handle-right { right: 13px; place-items: center end; }
+/* Al pasar por la fila se marcan los dos extremos de esa columna: dice de dónde
+   se puede tirar antes de intentarlo. */
+.nodo li:hover .react-flow__handle::after { background: var(--acento-suave); }
+.react-flow__handle:hover::after,
+.react-flow__handle.connectingfrom::after,
+.react-flow__handle.connectingto::after,
+.react-flow__handle.valid::after {
+  background: var(--acento);
+  transform: scale(1.5);
+}
+/* Mientras se arrastra una unión, todos los destinos posibles se hacen visibles:
+   soltar a ciegas y que no pase nada es el otro modo de fallar. */
+.react-flow.conectando .react-flow__handle::after { transform: scale(1.25); }
 .react-flow__edge-path { stroke: var(--borde-fuerte); stroke-width: 1.6; }
 .react-flow__edge.selected .react-flow__edge-path { stroke: var(--acento); stroke-width: 2.4; }
 .react-flow__edge.ambigua .react-flow__edge-path { stroke: var(--critico); stroke-width: 2.2; }
@@ -865,6 +922,10 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   gap: 6px;
   padding: 0 12px 10px;
 }
+/* El aviso de «sin orígenes» ocupa el renglón entero. Como hermano de unos chips
+   que no se encogen, el navegador lo estrujaba hasta dejarlo en una columna de
+   una palabra por línea. */
+.etl-origenes > .vacio { flex: 1 0 100%; text-align: left; padding: 2px 0; }
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1637,3 +1698,93 @@ button.ordenar.en-linea .flecha { margin-left: 0; }
 .react-flow__edge.inactiva text { opacity: 0.7; font-style: italic; }
 
 .problema.informativo { border-left: 3px solid var(--borde-fuerte); }
+
+/* ------------------------------------------------- relaciones en tabla */
+
+/*
+ * Las cuarenta relaciones del modelo, juntas y editables.
+ *
+ * El lienzo enseña la forma; esta vista es la que sirve para revisar. La tabla
+ * se lleva todo el alto que sobre y desplaza sola: con veinte filas, que
+ * desplace la página entera dejaría el encabezado —y con él el orden— fuera de
+ * la vista.
+ */
+.relaciones-vista {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+.relaciones-vista > .tabla-envoltura { flex: 1; min-height: 0; }
+
+.nueva-relacion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 10px;
+  background: var(--fondo-alto);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+}
+.nueva-relacion .campo-en-linea { display: flex; gap: 6px; min-width: 0; }
+.nueva-relacion .campo-en-linea > * { min-width: 170px; }
+
+/*
+ * `fixed` y anchos declarados. Con el reparto automático, cada columna se hacía
+ * tan ancha como su `<select>` más largo —«fecha_emision · clave primaria»— y
+ * entre las cuatro dejaban a «Avisos» en sesenta píxeles y la tabla desbordando:
+ * había que desplazarla en horizontal para llegar a «Estado», que es justo la
+ * columna que se viene a tocar.
+ */
+table.datos.relaciones { table-layout: fixed; width: 100%; }
+table.datos.relaciones th:nth-child(1), table.datos.relaciones td:nth-child(1) { width: 13%; }
+table.datos.relaciones th:nth-child(2), table.datos.relaciones td:nth-child(2) { width: 13%; }
+table.datos.relaciones th:nth-child(3), table.datos.relaciones td:nth-child(3) { width: 13%; }
+table.datos.relaciones th:nth-child(4), table.datos.relaciones td:nth-child(4) { width: 13%; }
+table.datos.relaciones th:nth-child(5), table.datos.relaciones td:nth-child(5) { width: 12%; }
+table.datos.relaciones th:nth-child(6), table.datos.relaciones td:nth-child(6) { width: 8%; }
+table.datos.relaciones th:nth-child(7), table.datos.relaciones td:nth-child(7) { width: 9%; }
+table.datos.relaciones th:nth-child(9), table.datos.relaciones td:nth-child(9) { width: 40px; }
+/* El nombre de la tabla se recorta con puntos suspensivos y el `title` lo dice
+   entero: partirlo en dos renglones descuadra toda la fila. */
+table.datos.relaciones td.mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+table.datos.relaciones td { white-space: normal; vertical-align: top; }
+table.datos.relaciones th, table.datos.relaciones td { padding: 4px 7px; }
+/* Sin ancho mínimo: nueve columnas con 120px cada una desbordaban la tabla y
+   obligaban a desplazarla en horizontal para llegar a «Estado», que es justo la
+   que se viene a tocar. */
+table.datos.relaciones select { width: 100%; min-width: 0; font-size: 11.5px; }
+table.datos.relaciones tr { cursor: pointer; }
+table.datos.relaciones tr:hover { background: var(--fondo-hover); }
+table.datos.relaciones tr.sel { background: var(--acento-suave); }
+/* Apagada y en cursiva, igual que su arista punteada en el lienzo: existe, pero
+   ninguna consulta pasa por ella. */
+table.datos.relaciones tr.inactiva td:not(.avisos-celda) { opacity: 0.55; font-style: italic; }
+table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); }
+
+.estado-relacion {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* La única columna que puede crecer: se lleva el ancho que sobre y es la que
+   hace que la tabla quepa sin desplazarse. */
+.avisos-celda { width: 30%; min-width: 150px; }
+.aviso-fila {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--aviso);
+}
+.aviso-fila + .aviso-fila { margin-top: 3px; }
+.aviso-fila.critico { color: var(--critico); font-weight: 550; }

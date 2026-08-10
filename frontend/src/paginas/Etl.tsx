@@ -172,14 +172,27 @@ export function Etl() {
       : null
   const columnasDerecha = useColumnasOrigen(origenDerecha)
 
+  /**
+   * ¿Hay algo que compilar?
+   *
+   * Con pasos hace falta un origen: no se puede filtrar la nada. Con SQL, no —y
+   * ese caso no es raro, es el calendario. `range(DATE '2020-01-01', …)` fabrica
+   * sus propias filas y no lee de ninguna tabla; exigirle un origen que no usa
+   * obligaba a colgarle una tabla cualquiera de adorno.
+   */
+  const haySustancia = modoSql ? (d.sql ?? '').trim() !== '' : d.origenes.length > 0
+
   // Previsualizar en cuanto hay algo que previsualizar, y al cambiar los pasos.
   useEffect(() => {
-    if (d.origenes.length === 0) return
+    if (!haySustancia) return
     if (!d.nombre.trim()) return
-    const t = setTimeout(() => previa.mutate(d), 350)
+    // El mismo cuerpo que se guardaría. Previsualizar con `sql` puesto mientras
+    // se editan pasos enseñaba el resultado del SQL viejo, no el de los pasos.
+    const cuerpo = { ...d, sql: modoSql ? (d.sql ?? '') : null }
+    const t = setTimeout(() => previa.mutate(cuerpo), 350)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(d)])
+  }, [JSON.stringify(d), modoSql, haySustancia])
 
   const agregarOrigen = (
     tipo: 'tabla' | 'dataset' | 'tabla_en_conexiones',
@@ -483,7 +496,7 @@ export function Etl() {
             </button>
             <button
               className="btn"
-              disabled={!d.nombre.trim() || d.origenes.length === 0 || guardar.isPending}
+              disabled={!d.nombre.trim() || !haySustancia || guardar.isPending}
               onClick={() =>
                 guardar.mutate(
                   {
@@ -566,7 +579,10 @@ export function Etl() {
           <div className="etl-origenes">
             {d.origenes.length === 0 ? (
               <div className="vacio chico">
-                Elige un origen de la lista de la izquierda para empezar.
+                {modoSql
+                  ? 'Sin orígenes: en modo SQL sólo hacen falta si vas a leer de '
+                    + 'ellos. Un calendario con range() se fabrica solo.'
+                  : 'Elige un origen de la lista de la izquierda para empezar.'}
               </div>
             ) : (
               d.origenes.map((o, i) => (
@@ -599,10 +615,20 @@ export function Etl() {
           {modoSql ? (
             <div className="campo" style={{ padding: '0 12px' }}>
               <label>
-                Consulta. Los orígenes están disponibles por su alias:{' '}
-                <span className="mono">
-                  {d.origenes.map((o) => o.nombre).join(', ') || '(agrega uno)'}
-                </span>
+                {d.origenes.length > 0 ? (
+                  <>
+                    Consulta. Los orígenes están disponibles por su alias:{' '}
+                    <span className="mono">
+                      {d.origenes.map((o) => o.nombre).join(', ')}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Consulta. Sin orígenes: sólo puede usar lo que se fabrique
+                    sola, como <span className="mono">range(…)</span> o{' '}
+                    <span className="mono">VALUES</span>.
+                  </>
+                )}
               </label>
               <textarea
                 rows={12}

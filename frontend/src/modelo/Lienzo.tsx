@@ -17,7 +17,7 @@ import {
   ReactFlow,
   useNodesState,
 } from '@xyflow/react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { Definicion, Problema } from '../api/tipos'
 import { type DatosNodo, NodoEntidad } from './NodoEntidad'
@@ -119,6 +119,9 @@ export function Lienzo({
    */
   const [nodos, setNodos, alCambiarNodosRF] = useNodesState<Node<DatosNodo>>([])
 
+  /** Se está arrastrando una unión: los conectores se hacen visibles. */
+  const [conectando, setConectando] = useState(false)
+
   useEffect(() => {
     setNodos((previos) => {
       const antes = new Map(previos.map((n) => [n.id, n]))
@@ -197,6 +200,13 @@ export function Lienzo({
           alSeleccionar({ tipo: 'relacion', id: Number(e.id.slice(1)) })
         }
         onPaneClick={() => alSeleccionar(null)}
+        onConnectStart={() => setConectando(true)}
+        onConnectEnd={() => setConectando(false)}
+        // Suelta en el conector más cercano dentro de este radio. Sin esto hay
+        // que soltar DENTRO del punto, y a un zoom del 60% eso son cinco píxeles
+        // reales: la queja de que cuesta trabajo hacer las uniones era esto.
+        connectionRadius={38}
+        className={conectando ? 'conectando' : undefined}
         fitView
         minZoom={0.2}
         proOptions={{ hideAttribution: true }}

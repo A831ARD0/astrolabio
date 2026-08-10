@@ -213,7 +213,12 @@ def origenes_disponibles(sesion: SesionDep, proyecto_id: int | None = None,
     # El motor analitico puede no estar disponible —archivo bloqueado, disco
     # lleno—. Eso no debe impedir armar una transformacion sobre los Parquet.
     try:
-        tablas = tablas_catalogo(_)["tablas"]
+        # `sesion` y no `_`: el primer parametro de esa funcion es la sesion de
+        # base de datos y el segundo el usuario. Cambiados de sitio, el bloque
+        # del motor fallaba SIEMPRE con «'Usuario' object has no attribute
+        # 'scalars'» y el panel se quedaba solo con los datasets — sin 500 y sin
+        # que se notara que faltaba media lista.
+        tablas = tablas_catalogo(sesion, _)["tablas"]
     except Exception as e:
         log.exception("No se pudieron listar las tablas del motor")
         tablas = []
