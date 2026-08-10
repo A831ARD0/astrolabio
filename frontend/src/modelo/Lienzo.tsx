@@ -25,6 +25,14 @@ import { ETIQUETA_CARDINALIDAD, type Accion, cardinalidadProbable } from './esta
 
 const TIPOS_NODO = { entidad: NodoEntidad }
 
+/**
+ * Hueco mínimo entre dos tablas para que la curva salga limpia.
+ *
+ * Por debajo de esto la curva no tiene sitio para separarse de los bordes y se pega
+ * a las tablas o se enrosca; se usa ruta ortogonal en su lugar.
+ */
+const HUECO_MINIMO = 24
+
 export interface Seleccion {
   tipo: 'entidad' | 'relacion'
   id: string | number
@@ -132,32 +140,77 @@ export function Lienzo({
     })
   }, [calculados, setNodos])
 
+  /**
+   * Dónde empieza y acaba cada tabla, para decidir por qué cara sale cada línea.
+   *
+   * Sale de `nodos` y no de `definicion.disposicion` porque las tablas no miden todas
+   * lo mismo —el ancho lo fija el nombre de columna más largo— y hace falta el ancho
+   * medido, que es el que tiene React Flow. Mientras se arrastra se recalcula, así
+   * que la línea cambia de lado en el momento en que la tabla pasa al otro.
+   */
+  const cajas = useMemo(() => {
+    const m = new Map<string, { izq: number; der: number; centro: number }>()
+    for (const n of nodos) {
+      const ancho = n.measured?.width ?? 0
+      m.set(n.id, {
+        izq: n.position.x,
+        der: n.position.x + ancho,
+        centro: n.position.x + ancho / 2,
+      })
+    }
+    return m
+  }, [nodos])
+
   const aristas: Edge[] = useMemo(
     () =>
-      definicion.relaciones.map((r, i) => ({
-        id: `r${i}`,
-        source: r.desde[0],
-        sourceHandle: r.desde[1],
-        target: r.hasta[0],
-        targetHandle: r.hasta[1],
-        label: r.activa === false
-          ? `${ETIQUETA_CARDINALIDAD[r.cardinalidad]} · inactiva`
-          : ETIQUETA_CARDINALIDAD[r.cardinalidad],
-        labelShowBg: true,
-        selected: seleccion?.tipo === 'relacion' && seleccion.id === i,
-        className: [
-          r.cardinalidad === 'muchos_a_muchos' && 'm2m',
-          // Punteada y apagada: existe, se puede activar, y ninguna consulta
-          // pasa por ella. Verla igual que las demás haría creer que sí.
-          r.activa === false && 'inactiva',
-          // Solo se pinta en rojo la relación que forma parte de la ruta que se
-          // está inspeccionando: pintar todas las sospechosas no dice cuál.
-          resaltadas?.has(r.desde[0]) && resaltadas?.has(r.hasta[0]) && 'ambigua',
-        ]
-          .filter(Boolean)
-          .join(' '),
-      })),
-    [definicion.relaciones, seleccion, resaltadas],
+      definicion.relaciones.map((r, i) => {
+        // Empatados o sin medir todavía: por la derecha, que es como estaba.
+        const origenALaIzquierda =
+          (cajas.get(r.desde[0])?.centro ?? 0) <= (cajas.get(r.hasta[0])?.centro ?? 0)
+        // La línea se dibuja de la columna de la izquierda a la de la derecha,
+        // aunque la relación vaya al contrario. Los conectores son uno por lado
+        // —origen a la derecha, destino a la izquierda—, así que dibujarla siempre
+        // en el sentido de la relación obligaba a las que van hacia la izquierda a
+        // salir por la derecha, cruzar el lienzo entero y volver a entrar por la
+        // izquierda, pasando por dentro de las dos tablas: eran los lazos.
+        //
+        // Invertir el dibujo no cambia la relación —lo que se guarda sigue siendo
+        // `desde` → `hasta`, y de ahí salen la cardinalidad y el SQL—, solo por qué
+        // cara sale la línea. Estas líneas no llevan punta de flecha; si algún día
+        // la llevan, hay que apuntarla según la relación y no según el dibujo.
+        const [izq, der] = origenALaIzquierda ? [r.desde, r.hasta] : [r.hasta, r.desde]
+        // Cuando las dos tablas se solapan horizontalmente no hay orientación que
+        // evite que la línea retroceda, y una curva que retrocede se enrosca sobre
+        // sí misma —el rizo que se veía entre tablas puestas una encima de otra—.
+        // Ahí se cambia a ruta ortogonal, que rodea en ángulo recto y se lee. Es un
+        // trazo distinto para un caso distinto, no una inconsistencia.
+        const hueco = (cajas.get(der[0])?.izq ?? 0) - (cajas.get(izq[0])?.der ?? 0)
+        return {
+          id: `r${i}`,
+          type: hueco < HUECO_MINIMO ? 'smoothstep' : undefined,
+          source: izq[0],
+          sourceHandle: izq[1],
+          target: der[0],
+          targetHandle: der[1],
+          label: r.activa === false
+            ? `${ETIQUETA_CARDINALIDAD[r.cardinalidad]} · inactiva`
+            : ETIQUETA_CARDINALIDAD[r.cardinalidad],
+          labelShowBg: true,
+          selected: seleccion?.tipo === 'relacion' && seleccion.id === i,
+          className: [
+            r.cardinalidad === 'muchos_a_muchos' && 'm2m',
+            // Punteada y apagada: existe, se puede activar, y ninguna consulta
+            // pasa por ella. Verla igual que las demás haría creer que sí.
+            r.activa === false && 'inactiva',
+            // Solo se pinta en rojo la relación que forma parte de la ruta que se
+            // está inspeccionando: pintar todas las sospechosas no dice cuál.
+            resaltadas?.has(r.desde[0]) && resaltadas?.has(r.hasta[0]) && 'ambigua',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        }
+      }),
+    [definicion.relaciones, seleccion, resaltadas, cajas],
   )
 
   function alConectar(c: Connection) {

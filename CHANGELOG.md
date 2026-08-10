@@ -308,6 +308,26 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **Las líneas del lienzo daban la vuelta al modelo entero.** Cada columna tiene el
+  conector de origen a la derecha y el de destino a la izquierda, y la línea se
+  dibujaba siempre en el sentido de la relación. Así que una relación cuyo destino
+  quedaba a la **izquierda** obligaba a la curva a salir por la derecha, cruzar el
+  lienzo, y volver a entrar por la izquierda —pasando por dentro de las dos tablas—.
+  Con dos tablas se disimula; con veinte relaciones el lienzo se vuelve una madeja y
+  no se puede seguir ninguna. El trazo de una de ellas iba de `x=809` a `x=1`
+  **pasando por `x=986` y por `x=-176`**.
+
+  Ahora la línea se dibuja siempre de la tabla de la izquierda a la de la derecha,
+  por las caras que se miran, sea cual sea el sentido de la relación. Invertir el
+  dibujo no cambia nada de lo que se guarda: `desde` → `hasta` sigue igual, y de ahí
+  salen la cardinalidad y el SQL. La misma línea ahora va de `x=189` a `x=621` sin
+  salirse de ese tramo.
+
+  Y cuando las dos tablas **se solapan horizontalmente** no hay orientación que
+  evite el retroceso —una curva que retrocede se enrosca sobre sí misma—, así que
+  esas usan **ruta ortogonal**: rodean en ángulo recto. En el modelo de
+  demostración son 3 de 15.
+
 - **Pegar SQL suponía que toda tabla nombrada era del motor analítico.** `FROM
   cat_zonas` creaba un origen de tipo `tabla` sin comprobar que existiera, y la
   consulta moría con un `Catalog Error: Table with name cat_zonas does not
