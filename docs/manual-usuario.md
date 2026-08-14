@@ -547,6 +547,33 @@ maestro trae las cuarenta sucursales y después llama al proyecto que las transf
 En la pantalla de *Flujos*, los proyectos salen en su propia lista y solo se pueden
 encadenar — editarlos se hace aquí, donde sus pasos son secciones.
 
+### Qué es cada grupo de orígenes
+
+No son cuatro vistas de lo mismo: de cada grupo sale un origen distinto, y eso cambia
+lo que la transformación acaba leyendo.
+
+| Grupo | Qué es | Cómo se lee |
+|---|---|---|
+| **Tablas del motor** | Tablas que viven dentro del archivo del motor analítico | Directo, como tabla |
+| **Datos cargados** | Los datasets que trajo una conexión. No están en el motor: cada uno es un directorio de Parquet | Como Parquet, **más las etiquetas de su conexión** |
+| **La misma tabla en varias conexiones** | Esa tabla traída por todas las conexiones que la tienen, apilada | Como arriba, pero de todas a la vez |
+| **Secciones de este proyecto** / **Resultados de otras** | Lo que produjo otra transformación | Como Parquet |
+
+Lo que de verdad los separa no es el formato, son tres cosas prácticas:
+
+1. **Las etiquetas de la conexión.** Al leer un dataset se le añaden como columnas las
+   constantes de su conexión —`id_sucursal`, la marca, lo que hayas puesto—. Se añaden
+   *al leer*, no se escriben en el Parquet, para que renumerar una sucursal no obligue
+   a volver a extraer cuarenta tablas. Una tabla del motor no trae nada de eso.
+2. **Tienen actualización detrás.** Un dataset lo refresca una carga, y una carga se
+   programa en *Flujos*. Una tabla del motor no tiene nada que la refresque.
+3. **Apilar sucursales sólo funciona con datasets.** El grupo «La misma tabla en varias
+   conexiones» —el que sustituye al bucle sobre sucursales del script de Qlik— se
+   construye sobre ellos.
+
+Lo que tú cargas y lo que tú transformas **nunca** aparece en «Tablas del motor». Si
+ves ahí un nombre tuyo, es un fallo: repórtalo.
+
 ### Encontrar algo entre mil orígenes
 
 Los orígenes están agrupados y **cada grupo se pliega** pulsando su título, con su

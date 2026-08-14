@@ -218,7 +218,21 @@ def origenes_disponibles(sesion: SesionDep, proyecto_id: int | None = None,
         # del motor fallaba SIEMPRE con «'Usuario' object has no attribute
         # 'scalars'» y el panel se quedaba solo con los datasets — sin 500 y sin
         # que se notara que faltaba media lista.
-        tablas = tablas_catalogo(sesion, _)["tablas"]
+        #
+        # Y SOLO las del motor. Esa funcion devuelve todo lo que el modelo puede
+        # nombrar —motor, cargas y resultados—, cada cosa con su procedencia, y
+        # aqui se metia la lista entera en el grupo «Tablas del motor»: de 49
+        # entradas, 12 eran del motor y 37 eran cargas y resultados repetidos que
+        # ya salen en su propio grupo.
+        #
+        # No era cosmetico. Pulsar uno de esos nombres desde este grupo crea un
+        # origen de tipo "tabla", que se resuelve como `motor."nombre"` — y esa
+        # tabla no existe en el motor. La transformacion revienta al ejecutarse con
+        # «Table with name X does not exist», mientras el mismo nombre tomado de
+        # «Datos cargados» funciona. Dos caminos con el mismo nombre, uno bueno y
+        # otro roto, sin forma de distinguirlos mirando.
+        tablas = [t for t in tablas_catalogo(sesion, _)["tablas"]
+                  if t["origen"] == "motor"]
     except Exception as e:
         log.exception("No se pudieron listar las tablas del motor")
         tablas = []

@@ -191,6 +191,33 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **«Tablas del motor» ya sólo trae tablas del motor.** El panel de orígenes del ETL
+  metía en ese grupo **todo** lo que se puede nombrar como tabla —las del motor, las
+  cargas y los resultados—, así que cada dataset y cada sección salía **dos veces**,
+  con el mismo nombre, en dos grupos distintos. Medido sobre los datos de
+  demostración: el grupo decía 49 y sólo **12** eran del motor; las otras 37 eran
+  cargas y resultados repetidos.
+
+  Y no era cosmético. Cada grupo crea un tipo de origen distinto: del grupo del motor
+  sale uno que se lee como tabla del motor, y de los otros uno que se lee como Parquet
+  **añadiéndole las etiquetas de su conexión** —`id_sucursal`, la marca—. Tomando una
+  carga del grupo de arriba se creaba un origen que apunta a una tabla que no existe
+  en el motor, y la transformación reventaba al ejecutarse:
+
+  ```
+  Catalog Error: Table with name KIA_SERDAN__ventas does not exist!
+  ```
+
+  El mismo nombre tomado de «Datos cargados» funcionaba. Dos caminos con el mismo
+  nombre, uno bueno y otro roto, y nada que los distinguiera mirando. El convertidor a
+  SQL sí filtraba bien por procedencia; el panel no.
+
+  La prueba que lo fija no comprueba la etiqueta —sería comprobar lo que pone el mismo
+  código que se prueba—: **lee cada nombre del grupo como tabla del motor** y exige
+  que se pueda. Lo que sí sigue siendo correcto es que una carga se llame igual que
+  una tabla del motor y salga en los dos sitios: ahí son dos cosas distintas con el
+  mismo nombre, y las dos se pueden leer. Eso es un problema de nombres, no de grupos.
+
 - **Renombrar una columna en la transformación y que el modelo lo siga.** El botón
   «Actualizar columnas desde el origen» **no terminaba el trabajo**: añadía las
   columnas nuevas, ponía los tipos al día, y las que ya no existían las dejaba ahí.
