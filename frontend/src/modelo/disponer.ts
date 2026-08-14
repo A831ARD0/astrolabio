@@ -45,7 +45,7 @@ const HUECO_X = 140
 /** Hueco entre tablas de la misma columna. */
 const HUECO_Y = 40
 /** Por si una tabla todavía no se ha medido. */
-const ANCHO_SUPUESTO = 230
+const ANCHO_SUPUESTO = 260
 const ALTO_SUPUESTO = 220
 /** Pasadas de baricentro. Más de esto ya no mueve nada en modelos de este tamaño. */
 const PASADAS = 6
@@ -54,13 +54,16 @@ const PASADAS = 6
  * El tamaño que tendrá una tabla antes de dibujarla.
  *
  * Se usa al abrir un modelo que no traía disposición —uno escrito a mano en YAML—,
- * cuando todavía no hay nada medido. Los números salen del CSS del nodo: cabecera,
- * una fila por columna, y el pie del grano cuando lo hay.
+ * cuando todavía no hay nada medido. Los números salen de medir el nodo en el
+ * navegador —cabecera con su borde y el relleno de la lista, una fila por columna, y
+ * el pie del grano cuando lo hay—, y **se redondean hacia arriba** a propósito: pasarse
+ * deja un hueco de más entre dos tablas, quedarse corto las solapa, que es el defecto
+ * que esto existe para evitar.
  */
 export function medidaSupuesta(e: Entidad): Medida {
-  const ALTO_CABECERA = 30
-  const ALTO_FILA = 19
-  const ALTO_PIE = 22
+  const ALTO_CABECERA = 44
+  const ALTO_FILA = 23
+  const ALTO_PIE = 27
   return {
     ancho: ANCHO_SUPUESTO,
     alto:

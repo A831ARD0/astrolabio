@@ -365,7 +365,7 @@ export function Tablero() {
       </div>
 
       {editando && (
-        <aside className="der">
+        <PanelLateral clave="tablero-der" lado="derecha" porOmision={380}>
           <div className="barra-editor">
             <div className="pestanas">
               <button className="activo">
@@ -407,7 +407,7 @@ export function Tablero() {
               }}
             />
           )}
-        </aside>
+        </PanelLateral>
       )}
     </div>
   )

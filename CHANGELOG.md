@@ -191,6 +191,47 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **La tabla del lienzo enseña todos sus campos, y se puede unir por cualquiera.** La
+  lista de columnas tenía `max-height: 220px` con barra por dentro, así que un catálogo
+  de veintidós columnas mostraba diez. Las otras doce no se podían agarrar para
+  arrastrar una relación — **y arrastrar es la forma de crearla**. Y la barra tampoco
+  servía: la rueda del ratón dentro de un nodo se la queda el lienzo para hacer zoom.
+
+  Había una segunda consecuencia, más callada: el conector de un campo recortado sigue
+  existiendo, pero cae fuera de la caja visible. La línea de esa relación **nacía de un
+  punto donde no hay nada**.
+
+  Ahora la lista no se recorta. Para que un catálogo largo no se coma el lienzo, la
+  cabecera de cada tabla lleva un botón que la deja en **solo los campos unidos** —los
+  de sus relaciones y su clave— y de vuelta; dice cuántos esconde (`+9`). En los dos
+  estados **todo conector que existe se ve**, que es la propiedad que hacía falta.
+
+  Compactar es una preferencia de la vista y **no toca el modelo**: no marca el
+  borrador como sucio, no sale en el YAML y no obliga a publicar una versión. Se
+  recuerda por modelo en el navegador, como el ancho de los paneles.
+
+  Comprobado en el navegador sobre el modelo de demostración: con `fact_venta`
+  compactada de 13 campos a 4, las **15** relaciones siguen naciendo y muriendo en el
+  conector del campo que les toca, y ninguna queda fuera de su caja.
+
+- **El panel de la derecha se ensancha arrastrando, como el de la izquierda.** Era fijo
+  de 380px, y ahí la tabla de campos de un catálogo de veintidós columnas sale con
+  «Nombre…» cortado en todas las filas: no se distingue `Nombre_Conexion` de
+  `Nombre_DB`, que es justo lo que hay que leer para elegir por dónde unir dos tablas.
+  Se recuerda por pantalla, y con doble clic en el borde vuelve a su ancho normal. Vale
+  para los cuatro sitios donde hay panel derecho: modelo, transformar, flujos y tablero.
+
+  De paso, el ancho de más ahora se lo lleva **el nombre del campo**. La tabla es de
+  columnas fijas y la de «PII» no tenía ancho declarado, así que `table-layout: fixed`
+  le daba la mitad del sitio nuevo a una casilla de trece píxeles y el nombre seguía
+  saliendo cortado. Medido: a 380px, 5 de 13 nombres cortados; a 600px, **0 de 13**.
+
+- **Una tabla nueva se coloca donde de verdad cabe.** El alto que se suponía para una
+  tabla sin dibujar salía de números viejos del CSS —19px por fila— y la fila mide 23.
+  En una tabla de veintidós columnas eso son casi noventa píxeles de menos, suficiente
+  para que dos tablas se toquen. Ahora los números salen de medir el nodo, y se
+  redondean **hacia arriba**: pasarse deja un hueco de más, quedarse corto las solapa.
+
 - **Una tabla de MySQL que el catálogo no describe ya se puede traer.** El selector
   listaba `FACTURAS_PR`, en cualquier cliente SQL se consultaba sin problema, y
   Astrolabio contestaba «La tabla 'ventas_origen.FACTURAS_PR' no existe» — mandando a

@@ -701,7 +701,7 @@ export function Etl() {
       </div>
 
       {/* ------------------------------------------------------ derecha */}
-      <aside className="der">
+      <PanelLateral clave="etl-der" lado="derecha" porOmision={380}>
         <div className="barra-editor">
           <div className="pestanas">
             <button className="activo">Vista previa</button>
@@ -803,7 +803,7 @@ export function Etl() {
             </div>
           )}
         </div>
-      </aside>
+      </PanelLateral>
 
       {/* ------------------------------------------------------- modal */}
       {pegarSql && (

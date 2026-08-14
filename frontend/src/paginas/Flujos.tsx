@@ -594,7 +594,7 @@ export function Flujos() {
       </div>
 
       {/* ------------------------------------------------------ derecha */}
-      <aside className="der">
+      <PanelLateral clave="flujos-der" lado="derecha" porOmision={380}>
         <div className="barra-editor">
           <div className="pestanas">
             <button className="activo">Horario e historial</button>
@@ -801,7 +801,7 @@ export function Flujos() {
             </>
           )}
         </div>
-      </aside>
+      </PanelLateral>
     </div>
   )
 }

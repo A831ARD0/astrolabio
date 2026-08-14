@@ -356,14 +356,19 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
   gap: 4px;
   padding: 0 8px 6px;
 }
+/* El de la derecha se ensancha igual que el de la izquierda, y por el mismo
+   motivo: es donde se inspecciona lo seleccionado. En 380px, la tabla de campos de
+   un catalogo de veintidos columnas sale con «Id_Suc…» y «Nombre…» cortados en
+   todas las filas, y ahi no se puede distinguir `Nombre_Conexion` de `Nombre_DB`
+   — que es justo lo que hay que leer para elegir por donde unir.
+
+   En fila y sin desplazamiento propio: el tirador es un hermano del cuerpo, y el
+   que se desplaza por dentro es `.panel-cuerpo`. */
 .der {
-  width: 380px;
-  flex: 0 0 380px;
   border-left: 1px solid var(--borde);
   background: var(--fondo-panel);
-  overflow: auto;
   display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 .centro { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -522,7 +527,41 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
   cursor: help;
 }
 
-.nodo ul { list-style: none; margin: 0; padding: 4px 0; max-height: 220px; overflow: auto; }
+/* Deja la tabla en solo los campos unidos, y de vuelta. Hereda el color de la
+   cabecera —naranja en un hecho, azul en una dimension— para que se lea como
+   parte de la tabla y no como un boton pegado encima. */
+.nodo > header .plegar-campos {
+  flex: 0 0 auto;
+  margin: -2px -4px -2px 0;
+  padding: 0 4px;
+  min-width: 20px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 16px;
+  opacity: 0.65;
+  cursor: pointer;
+}
+.nodo > header .plegar-campos:hover {
+  opacity: 1;
+  border-color: currentColor;
+}
+
+/* Sin alto maximo y sin barra por dentro, a proposito.
+ *
+ * Tenia `max-height: 220px; overflow: auto`, y un catalogo de veintidos columnas
+ * mostraba diez. Las otras doce no se podian agarrar para arrastrar una relacion
+ * —que es como se crea—, y la rueda del raton dentro del nodo la caza el lienzo
+ * para hacer zoom, asi que la lista tampoco se desplazaba. Ademas el conector de
+ * un campo recortado sigue existiendo pero cae fuera de la caja visible: la linea
+ * de esa relacion nacia de un punto donde no hay nada.
+ *
+ * Para que un catalogo largo no se coma el lienzo esta el boton de la cabecera,
+ * que lo deja en solo los campos unidos. */
+.nodo ul { list-style: none; margin: 0; padding: 4px 0; }
 .nodo li {
   /* IMPRESCINDIBLE. Sin esto, el conector de cada columna —que es `position:
      absolute`— se posicionaba contra el nodo entero y las treinta columnas
@@ -635,7 +674,16 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 table.campos { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 table.campos th:nth-child(2) { width: 58px; }
 table.campos th:nth-child(3) { width: 104px; }
-table.campos th:nth-child(4), table.campos th:nth-child(5) { width: 30px; }
+/* Las tres casillas llevan ancho declarado, la sexta incluida. Sin el de la
+   sexta, `table-layout: fixed` reparte lo que sobra entre las columnas SIN ancho
+   —que eran «campo» y «PII»—, asi que ensanchar el panel le daba la mitad del
+   sitio nuevo a una casilla de 13 pixeles y el nombre del campo seguia saliendo
+   como «Nombre…». Con las seis declaradas menos la primera, todo lo que sobra va
+   al nombre, que es lo que hay que leer para distinguir `Nombre_Conexion` de
+   `Nombre_DB` y elegir por donde unir. */
+table.campos th:nth-child(4),
+table.campos th:nth-child(5),
+table.campos th:nth-child(6) { width: 34px; }
 table.campos select { width: 100%; }
 table.campos td:first-child { overflow: hidden; text-overflow: ellipsis; }
 table.campos th {

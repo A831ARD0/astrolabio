@@ -1,6 +1,12 @@
 /**
  * El panel lateral: se ensancha arrastrando y sus secciones se pliegan.
  *
+ * Vale para los dos lados. El de la derecha —donde se inspecciona lo que está
+ * seleccionado— era fijo de 380px, y ahí la tabla de campos de un catálogo de
+ * veintidós columnas sale con «Nombre…» cortado en todas las filas: no se puede
+ * distinguir `Nombre_Conexion` de `Nombre_DB`, que es lo que hay que leer para
+ * elegir por dónde unir dos tablas.
+ *
  * Nace de un nombre: `SUC_SUR__Orcamento_Produtos`. Con cuarenta sucursales,
  * el nombre de un dataset es el de la conexión más el de la tabla, y en 232
  * píxeles no cabe ni la mitad — se lee «SUC_SUR__Orcament…», que no distingue

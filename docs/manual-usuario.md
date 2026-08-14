@@ -655,6 +655,34 @@ que dejarlo desordenado. Se deshace con **un** «Deshacer».
 Y para seguir una relación concreta en un modelo con muchas: **pasa el ratón por una
 tabla** y se apagan todas las líneas que no son suyas.
 
+### Tablas con muchas columnas
+
+Cada tabla del lienzo enseña **todas** sus columnas, para que puedas arrastrar desde
+cualquiera de ellas: una relación se crea arrastrando de un campo a otro, así que un
+campo que no se ve es un campo por el que no se puede unir.
+
+Un catálogo de veintidós columnas ocupa sitio, claro. Para quitarlo de en medio sin
+perderlo, el botón de su cabecera la deja en **solo los campos unidos** —los de sus
+relaciones y su clave— y te dice cuántos esconde: `+9`. Pulsándolo otra vez vuelven
+todos. Los conectores de los campos que quedan siguen funcionando igual, así que las
+relaciones que ya tenía se ven perfectamente.
+
+Compactar una tabla **no cambia el modelo**: no marca cambios sin guardar, no sale en
+el YAML y no hay que publicar nada. Es como el ancho de los paneles — se guarda en tu
+navegador, por modelo, y cada quien la ve como la dejó.
+
+### Los paneles se ensanchan
+
+Los dos paneles laterales —el de la izquierda y el de la derecha— se ensanchan
+**arrastrando su borde**, y con **doble clic** vuelven a su ancho normal. El ancho se
+recuerda por pantalla y en tu navegador: es una preferencia de este monitor, no algo
+que viaje con tu usuario.
+
+Merece la pena para el de la derecha cuando inspeccionas una tabla de muchas columnas:
+en su ancho normal los nombres salen cortados, y ahí no se distingue
+`Nombre_Conexion` de `Nombre_DB` — que es lo que necesitas leer para elegir por dónde
+unirla.
+
 ### El panel de diagnóstico
 
 Marca los problemas que producen cifras mal sin avisar:

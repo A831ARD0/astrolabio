@@ -404,7 +404,9 @@ export function Modelo() {
       </div>
 
       {/* -------------------------------------------------------- derecha */}
-      <aside className="der">
+      {/* Ensanchable como el de la izquierda: aquí se lee la tabla de campos, y en
+          380px un catálogo de veintidós columnas sale con los nombres cortados. */}
+      <PanelLateral clave="modelo-der" lado="derecha" porOmision={380}>
         <div className="barra-editor">
           <div className="pestanas">
             <button
@@ -464,7 +466,7 @@ export function Modelo() {
             Para relacionar dos tablas, arrastra de un campo a otro.
           </div>
         )}
-      </aside>
+      </PanelLateral>
 
       {dialogoEntidad && (
         <DialogoEntidad

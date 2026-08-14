@@ -19,7 +19,7 @@ import {
   useNodesState,
   useReactFlow,
 } from '@xyflow/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { Definicion, Problema } from '../api/tipos'
 import { type DatosNodo, NodoEntidad } from './NodoEntidad'
@@ -35,6 +35,25 @@ const TIPOS_NODO = { entidad: NodoEntidad }
  * a las tablas o se enrosca; se usa ruta ortogonal en su lugar.
  */
 const HUECO_MINIMO = 24
+
+/**
+ * Qué tablas están en «solo los campos unidos», recordado en el navegador.
+ *
+ * NO va en la definición y no puede ir: la disposición viaja con la versión del
+ * modelo y se publica, y esconder unos campos mientras trabajas no es un cambio del
+ * modelo — no debería marcar el borrador como sucio ni salir en el YAML ni obligar a
+ * publicar una versión. Es del mismo tipo que el ancho de los paneles: preferencia de
+ * esta pantalla y este monitor.
+ */
+function compactasRecordadas(modelo: string): Set<string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(`astrolabio.compactas.${modelo}`) ?? '[]')
+    return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [])
+  } catch {
+    // Un valor corrupto no puede impedir abrir el modelo.
+    return new Set()
+  }
+}
 
 /**
  * El botón de reorganizar, dentro del lienzo para poder ajustar la vista.
@@ -118,6 +137,24 @@ export function Lienzo({
     return m
   }, [definicion.relaciones])
 
+  const [compactas, setCompactas] = useState(() => compactasRecordadas(definicion.modelo))
+
+  const alCompactar = useCallback(
+    (entidad: string, compacta: boolean) => {
+      setCompactas((previas) => {
+        const s = new Set(previas)
+        if (compacta) s.add(entidad)
+        else s.delete(entidad)
+        localStorage.setItem(
+          `astrolabio.compactas.${definicion.modelo}`,
+          JSON.stringify([...s]),
+        )
+        return s
+      })
+    },
+    [definicion.modelo],
+  )
+
   const calculados: Node<DatosNodo>[] = useMemo(
     () =>
       definicion.entidades.map((e) => ({
@@ -131,6 +168,8 @@ export function Lienzo({
           conProblema: conProblema.has(e.nombre),
           huerfana: huerfanas.has(e.nombre),
           camposEnRelacion: camposRelacionados.get(e.nombre) ?? new Set(),
+          compacta: compactas.has(e.nombre),
+          alCompactar,
         },
       })),
     [
@@ -141,6 +180,8 @@ export function Lienzo({
       conProblema,
       huerfanas,
       camposRelacionados,
+      compactas,
+      alCompactar,
     ],
   )
 
