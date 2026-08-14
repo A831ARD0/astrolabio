@@ -7,6 +7,26 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Los grupos de métricas se pliegan, como los de Flujos y Transformar.** Cada cajón
+  —una tabla de medidas, o un hecho con sus métricas sueltas— se pliega desde su
+  cabecera. Con cinco cajones de seis métricas, llegar al último pedía atravesar
+  treinta renglones que en ese momento no interesan.
+
+  Lo que se pulsa es **toda la cabecera** y no sólo el triángulo, que es la misma
+  decisión que ya estaba tomada en el panel del ETL: acertarle a nueve píxeles
+  cuarenta veces al día es trabajo de verdad. Las acciones que viven dentro de la
+  cabecera —`+`, renombrar, quitar— paran el clic, así que renombrar un cajón no lo
+  pliega de paso.
+
+  El mecanismo es **el mismo**, no uno parecido: se extrajo a `usePlegado` y ahora lo
+  comparten los grupos del ETL y los cajones de métricas. Misma clave, mismo sitio,
+  así que plegar significa lo mismo en las dos pantallas. Lo que no se comparte es la
+  cabecera: la del cajón lleva su punto de color y sus acciones, y la gris pequeña de
+  `Grupo` no le sirve.
+
+  Se recuerda por modelo y por cajón, en el navegador. **No es un cambio del modelo**:
+  no marca el borrador como sucio ni obliga a publicar nada.
+
 - **«Reorganizar» el lienzo, y las tablas dejan de solaparse.** Lo que colocaba las
   tablas era `(i % 4) * 300, floor(i / 4) * 340`: una cuadrícula ciega. Con nodos de
   hasta 260 de ancho separados 300, y filas de 340 cuando una tabla de veintidós

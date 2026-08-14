@@ -21,11 +21,73 @@
 
 import { useState } from 'react'
 
+import { usePlegado } from '../comunes/plegado'
 import type { Definicion } from '../api/tipos'
 import type { Accion } from './estado'
 
 /** Qué métrica está abierta: un índice, o una nueva y en qué cajón nace. */
 export type MetricaAbierta = number | { nueva: true; tablaMedidas: string | null }
+
+/**
+ * Un cajón que se pliega desde su cabecera, como los grupos de Flujos.
+ *
+ * Con cinco cajones de seis métricas, llegar al último pide atravesar treinta
+ * renglones que en ese momento no interesan. Se pliega el que no estás usando y se
+ * queda plegado — se recuerda por modelo y por cajón, en el navegador, con el mismo
+ * mecanismo que los grupos del ETL (`usePlegado`).
+ *
+ * Lo que se pulsa es **toda la cabecera** y no solo el triángulo: acertarle a nueve
+ * píxeles cuarenta veces al día es trabajo de verdad. Las acciones que van dentro
+ * —`+`, renombrar, quitar— paran el clic para que no plieguen de paso.
+ */
+function Cajon({
+  clave,
+  punto,
+  nombre,
+  ayuda,
+  cuenta,
+  acciones,
+  enRenombre,
+  children,
+}: {
+  clave: string
+  punto: string
+  nombre: string
+  ayuda: string
+  cuenta: number
+  acciones?: React.ReactNode
+  /** El campo de texto, mientras se le está cambiando el nombre. */
+  enRenombre?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const [plegado, alternar] = usePlegado(clave)
+  return (
+    <div className="cajon">
+      {enRenombre ?? (
+        <div
+          className="cabecera-cajon plegable"
+          role="button"
+          tabIndex={0}
+          title={plegado ? 'Abrir' : 'Plegar'}
+          onClick={alternar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              alternar()
+            }
+          }}
+        >
+          <span className="plegar" aria-hidden="true">{plegado ? '▸' : '▾'}</span>
+          <span className={`punto ${punto}`} />
+          <span className="nom" title={ayuda}>{nombre}</span>
+          <span className="dcha">{cuenta}</span>
+          {acciones}
+        </div>
+      )}
+      {!plegado && children}
+    </div>
+  )
+}
 
 export function SeccionMetricas({
   definicion: d,
@@ -101,77 +163,85 @@ export function SeccionMetricas({
       <div className="contenido">
         <div className="lista">
           {cajones.map((c) => (
-            <div key={c.nombre} className="cajon">
-              {renombrando === c.nombre ? (
-                <input
-                  className="mono nombre-cajon"
-                  autoFocus
-                  value={nombreEditado}
-                  onChange={(e) => setNombreEditado(e.target.value)}
-                  onBlur={() => renombrar(c.nombre)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') renombrar(c.nombre)
-                    if (e.key === 'Escape') setRenombrando(null)
-                  }}
-                />
-              ) : (
-                <div className="cabecera-cajon">
-                  <span className="punto medidas" />
-                  <span className="nom" title="Tabla de medidas">
-                    {c.nombre}
+            <Cajon
+              key={c.nombre}
+              clave={`metricas.${d.modelo}.${c.nombre}`}
+              punto="medidas"
+              nombre={c.nombre}
+              ayuda="Tabla de medidas"
+              cuenta={metricas(c.nombre).length}
+              enRenombre={
+                renombrando === c.nombre ? (
+                  <input
+                    className="mono nombre-cajon"
+                    autoFocus
+                    value={nombreEditado}
+                    onChange={(e) => setNombreEditado(e.target.value)}
+                    onBlur={() => renombrar(c.nombre)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') renombrar(c.nombre)
+                      if (e.key === 'Escape') setRenombrando(null)
+                    }}
+                  />
+                ) : undefined
+              }
+              acciones={
+                /* Las acciones aparecen al pasar por encima: con cinco cajones,
+                   tres iconos fijos en cada uno se comen el ancho del nombre, que
+                   es lo único que hay que leer.
+
+                   El clic se para aquí: van DENTRO de la cabecera, que ahora
+                   pliega, y sin esto renombrar plegaría el cajón de paso. */
+                <span
+                  className="acciones-cajon"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="Nueva métrica aquí"
+                    onClick={() => alAbrir({ nueva: true, tablaMedidas: c.nombre })}
+                    onKeyDown={(e) =>
+                      e.key === 'Enter' &&
+                      alAbrir({ nueva: true, tablaMedidas: c.nombre })
+                    }
+                  >
+                    +
                   </span>
-                  <span className="dcha">{metricas(c.nombre).length}</span>
-                  {/* Las acciones aparecen al pasar por encima: con cinco cajones,
-                      tres iconos fijos en cada uno se comen el ancho del nombre,
-                      que es lo único que hay que leer. */}
-                  <span className="acciones-cajon">
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      title="Nueva métrica aquí"
-                      onClick={() =>
-                        alAbrir({ nueva: true, tablaMedidas: c.nombre })
-                      }
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' &&
-                        alAbrir({ nueva: true, tablaMedidas: c.nombre })
-                      }
-                    >
-                      +
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      title="Cambiar el nombre"
-                      onClick={() => {
-                        setNombreEditado(c.nombre)
-                        setRenombrando(c.nombre)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return
-                        setNombreEditado(c.nombre)
-                        setRenombrando(c.nombre)
-                      }}
-                    >
-                      ✎
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      title="Quitar el cajón. Sus métricas no se borran: vuelven a verse bajo su hecho."
-                      onClick={() =>
-                        despachar({ t: 'quitar_tabla_medidas', nombre: c.nombre })
-                      }
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' &&
-                        despachar({ t: 'quitar_tabla_medidas', nombre: c.nombre })
-                      }
-                    >
-                      ✕
-                    </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="Cambiar el nombre"
+                    onClick={() => {
+                      setNombreEditado(c.nombre)
+                      setRenombrando(c.nombre)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return
+                      setNombreEditado(c.nombre)
+                      setRenombrando(c.nombre)
+                    }}
+                  >
+                    ✎
                   </span>
-                </div>
-              )}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="Quitar el cajón. Sus métricas no se borran: vuelven a verse bajo su hecho."
+                    onClick={() =>
+                      despachar({ t: 'quitar_tabla_medidas', nombre: c.nombre })
+                    }
+                    onKeyDown={(e) =>
+                      e.key === 'Enter' &&
+                      despachar({ t: 'quitar_tabla_medidas', nombre: c.nombre })
+                    }
+                  >
+                    ✕
+                  </span>
+                </span>
+              }
+            >
               {metricas(c.nombre)}
               {metricas(c.nombre).length === 0 && (
                 <div className="chico tenue vacio-cajon">
@@ -179,21 +249,21 @@ export function SeccionMetricas({
                   exista y elige este cajón en «Aparece en».
                 </div>
               )}
-            </div>
+            </Cajon>
           ))}
 
           {/* Lo que no está en ningún cajón, bajo su hecho: es donde estaba antes. */}
           {hechosConMetricas.map((hecho) => (
-            <div key={hecho} className="cajon">
-              <div className="cabecera-cajon">
-                <span className="punto hecho" />
-                <span className="nom" title="Métricas sin tabla de medidas">
-                  {hecho}
-                </span>
-                <span className="dcha">{metricas(null, hecho).length}</span>
-              </div>
+            <Cajon
+              key={hecho}
+              clave={`metricas.${d.modelo}.${hecho}`}
+              punto="hecho"
+              nombre={hecho}
+              ayuda="Métricas sin tabla de medidas"
+              cuenta={metricas(null, hecho).length}
+            >
               {metricas(null, hecho)}
-            </div>
+            </Cajon>
           ))}
         </div>
 

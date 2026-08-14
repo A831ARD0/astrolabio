@@ -24,6 +24,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { usePlegado } from './plegado'
+
 const MINIMO = 180
 const MAXIMO = 640
 
@@ -195,16 +197,8 @@ export function Grupo({
   forzarAbierto?: boolean
   children: React.ReactNode
 }) {
-  const [plegado, setPlegado] = useState(
-    () => localStorage.getItem(`astrolabio.grupo.${clave}`) === '1',
-  )
+  const [plegado, alternar] = usePlegado(clave)
   const abierto = forzarAbierto || !plegado
-
-  function alternar() {
-    const v = !plegado
-    setPlegado(v)
-    localStorage.setItem(`astrolabio.grupo.${clave}`, v ? '1' : '0')
-  }
 
   return (
     <div className="grupo">

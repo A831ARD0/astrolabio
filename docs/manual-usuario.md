@@ -664,6 +664,13 @@ mismo que en Power BI, incluido lo importante:
 Quitar un cajón (`✕`) **no borra sus métricas**: vuelven a verse bajo su hecho.
 Cambiarle el nombre (`✎`) arrastra a las suyas con él.
 
+**Cada grupo se pliega** pulsando su cabecera, igual que los grupos de *Transformar*
+y *Flujos*: lo que se pulsa es toda la cabecera, no sólo el triángulo. Con cinco
+cajones de seis métricas, llegar al último pide atravesar treinta renglones que en
+ese momento no te interesan; pliegas el que no estás usando y **se queda plegado**.
+Se recuerda por modelo y por cajón, en tu navegador, así que no es un cambio del
+modelo: no marca cambios sin guardar ni hay que publicar nada.
+
 ### Ordenar el lienzo
 
 Con más de media docena de tablas, colocarlas a mano deja de ser posible. El botón

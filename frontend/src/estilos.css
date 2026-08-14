@@ -1855,9 +1855,9 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
   color: var(--medida);
 }
 
-/* El cajon: su cabecera no es un boton porque no lleva a ninguna parte —no hay
-   nada que abrir— y un renglon que se ilumina al pasar por encima promete algo
-   que no va a pasar. */
+/* El cajon. Su cabecera SI hace algo: pliega, como los grupos del ETL. Antes no, y
+   por eso no se iluminaba al pasar por encima —un renglon que se ilumina sin llevar
+   a ninguna parte promete algo que no va a pasar—. Ahora lleva, asi que se ilumina. */
 .cajon + .cajon { margin-top: 6px; }
 .cabecera-cajon {
   display: flex;
@@ -1869,6 +1869,13 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
   color: var(--texto-suave);
   position: relative;
 }
+.cabecera-cajon.plegable { cursor: pointer; user-select: none; }
+.cabecera-cajon.plegable:hover { color: var(--texto); background: var(--fondo-hover); }
+/* Ancho fijo para que los nombres queden alineados entre cajones. El tamano es el
+   de base y NO el de los grupos del ETL: alli la cabecera es de 11px y el triangulo
+   de 9 le queda proporcionado, pero esta es de 11.5 en negrita y con 9px el
+   triangulo se lee como un punto suelto. */
+.cabecera-cajon .plegar { flex: 0 0 10px; padding: 0; }
 .cabecera-cajon .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cabecera-cajon .dcha { margin-left: auto; font-weight: 400; color: var(--texto-tenue); }
 .punto.medidas {
