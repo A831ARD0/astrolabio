@@ -27,6 +27,8 @@ export type Accion =
   | { t: 'quitar_entidad'; nombre: string }
   | { t: 'cambiar_entidad'; nombre: string; cambios: Partial<Entidad> }
   | { t: 'cambiar_campo'; entidad: string; campo: string; cambios: Partial<Campo> }
+  | { t: 'renombrar_campo'; entidad: string; antes: string; despues: string }
+  | { t: 'quitar_campos'; entidad: string; campos: string[] }
   | {
       t: 'agregar_relacion'
       desde: [string, string]
@@ -156,6 +158,98 @@ function aplicar(d: Definicion, a: Accion): Definicion {
               },
         ),
       }
+
+    /*
+     * Renombrar una columna en la transformación y que el modelo lo siga.
+     *
+     * Es el caso que destapó el defecto: se renombra una columna a `id_sucursal` en la
+     * transformación, el modelo avisa de que una columna «ya no está» y no había
+     * ninguna forma de decirle que es la misma con otro nombre. Pulsar «actualizar»
+     * añadía la nueva y dejaba la vieja, así que el aviso no se iba nunca y el botón
+     * parecía roto.
+     *
+     * La referencia a una columna va por su nombre en cuatro sitios estructurados, y
+     * los cuatro se arrastran aquí: el campo, la clave primaria, el grano y las
+     * relaciones. Lo que NO se toca son las fórmulas de las métricas: ahí el nombre
+     * es texto dentro de un lenguaje con variables, y reescribirlo a ciegas podría
+     * cambiar una `VAR` que se llame igual. Se avisa —ver `usosDeCampo`— y las
+     * arregla quien las escribió, que es el único que sabe qué quiso decir.
+     */
+    case 'renombrar_campo': {
+      if (a.antes === a.despues) return d
+      const e = d.entidades.find((x) => x.nombre === a.entidad)
+      if (!e) return d
+      const viejo = e.campos.find((c) => c.nombre === a.antes)
+      if (!viejo) return d
+      const nuevo = e.campos.find((c) => c.nombre === a.despues)
+
+      // El tipo sale del origen —es un hecho, no una decisión—; el rol, la
+      // etiqueta, «ver», PII y «única» son trabajo hecho a mano y viajan con el
+      // nombre. Eso es todo el sentido de renombrar en vez de quitar y añadir.
+      const heredado: Campo = {
+        ...(nuevo ?? viejo),
+        nombre: a.despues,
+        rol: viejo.rol,
+        etiqueta: viejo.etiqueta,
+        visible: viejo.visible,
+        pii: viejo.pii,
+        unico: viejo.unico,
+      }
+
+      const renombraCol = (par: [string, string]): [string, string] =>
+        par[0] === a.entidad && par[1] === a.antes ? [par[0], a.despues] : par
+
+      return {
+        ...d,
+        entidades: d.entidades.map((x) =>
+          x.nombre !== a.entidad
+            ? x
+            : {
+                ...x,
+                // Si la columna nueva ya estaba —porque se pulsó «actualizar» antes—
+                // se queda en su sitio y se le pega lo heredado; si no, el campo
+                // viejo se renombra donde está. En los dos casos el viejo desaparece.
+                campos: nuevo
+                  ? x.campos
+                      .filter((c) => c.nombre !== a.antes)
+                      .map((c) => (c.nombre === a.despues ? heredado : c))
+                  : x.campos.map((c) => (c.nombre === a.antes ? heredado : c)),
+                clave_primaria:
+                  x.clave_primaria === a.antes ? a.despues : x.clave_primaria,
+                grano: x.grano?.map((g) => (g === a.antes ? a.despues : g)),
+              },
+        ),
+        relaciones: d.relaciones.map((r) => ({
+          ...r,
+          desde: renombraCol(r.desde),
+          hasta: renombraCol(r.hasta),
+        })),
+      }
+    }
+
+    // Quitar columnas que el origen ya no tiene. Quien llama comprueba antes que
+    // nada las use: aquí no se puede decidir eso sin la definición entera a la
+    // vista, y quitar una columna con una relación encima rompe el modelo lejos de
+    // este botón — en la primera consulta.
+    case 'quitar_campos': {
+      const fuera = new Set(a.campos)
+      if (fuera.size === 0) return d
+      return {
+        ...d,
+        entidades: d.entidades.map((e) =>
+          e.nombre !== a.entidad
+            ? e
+            : {
+                ...e,
+                campos: e.campos.filter((c) => !fuera.has(c.nombre)),
+                clave_primaria: fuera.has(e.clave_primaria ?? '')
+                  ? null
+                  : e.clave_primaria,
+                grano: e.grano?.filter((g) => !fuera.has(g)),
+              },
+        ),
+      }
+    }
 
     case 'agregar_relacion': {
       const repetida = d.relaciones.some(
@@ -289,6 +383,69 @@ export function cardinalidadProbable(
 }
 
 /**
+ * Quién usa una columna. Es lo que decide si se puede quitar sin romper nada.
+ *
+ * El aviso decía «no se quitan solas por si alguna relación o métrica las usa», y
+ * «por si» no es una respuesta: obligaba a repasar a mano las veinticuatro
+ * relaciones y las treinta métricas para saber si esa columna importaba. Aquí se
+ * mira, y lo que se encuentra se puede nombrar.
+ *
+ * Las métricas se buscan por texto en su fórmula, con límite de palabra. Es una
+ * aproximación **por exceso** y a propósito: la fórmula es un lenguaje con
+ * variables, así que una `VAR` que se llame igual que la columna sale en la lista
+ * sin serlo. Pasarse nombrando a un sospechoso de más es barato; no nombrar a la
+ * métrica que se va a romper, no.
+ */
+export function usosDeCampo(
+  d: Definicion,
+  entidad: string,
+  campo: string,
+): { relaciones: string[]; metricas: string[]; esClave: boolean; enGrano: boolean } {
+  const e = d.entidades.find((x) => x.nombre === entidad)
+  const relaciones = d.relaciones
+    .filter(
+      (r) =>
+        (r.desde[0] === entidad && r.desde[1] === campo) ||
+        (r.hasta[0] === entidad && r.hasta[1] === campo),
+    )
+    .map((r) => `${r.desde[0]}.${r.desde[1]} → ${r.hasta[0]}.${r.hasta[1]}`)
+
+  // Se escapa el nombre: una columna puede llevar puntos o paréntesis, y sin
+  // escapar se convertirían en comodines del propio patrón.
+  const suelto = new RegExp(
+    `(^|[^\\w])${campo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w])`,
+  )
+  const metricas = d.metricas
+    .filter((m) => m.entidad === entidad && suelto.test(m.expresion))
+    .map((m) => m.etiqueta || m.nombre)
+
+  return {
+    relaciones,
+    metricas,
+    esClave: e?.clave_primaria === campo,
+    enGrano: (e?.grano ?? []).includes(campo),
+  }
+}
+
+/** Los usos de una columna en una línea, o `null` si no la usa nadie. */
+export function describirUsos(
+  usos: ReturnType<typeof usosDeCampo>,
+): string | null {
+  const partes: string[] = []
+  if (usos.esClave) partes.push('es la clave primaria')
+  if (usos.enGrano) partes.push('está en el grano')
+  if (usos.relaciones.length) {
+    partes.push(
+      `${usos.relaciones.length} relación(es): ${usos.relaciones.join('; ')}`,
+    )
+  }
+  if (usos.metricas.length) {
+    partes.push(`la nombran ${usos.metricas.length} métrica(s): ${usos.metricas.join(', ')}`)
+  }
+  return partes.length ? partes.join(' · ') : null
+}
+
+/**
  * Volver a leer las columnas del origen y ponerlas al día en la entidad.
  *
  * La entidad guarda su propia copia de los campos, tomada el día que se agregó al
@@ -307,9 +464,12 @@ export function cardinalidadProbable(
  *   tomadas a mano; volver a adivinarlas borraría el trabajo de clasificar
  *   catorce campos.
  * - **Las columnas nuevas se añaden** con su rol sugerido.
- * - **Las que desaparecieron NO se borran.** Puede haber relaciones o métricas
+ * - **Las que desaparecieron NO se borran aquí.** Puede haber relaciones o métricas
  *   apuntando a ellas, y borrarlas en silencio dejaría el modelo roto lejos de
- *   aquí. Se devuelven en `desaparecidas` para poder decirlo.
+ *   aquí. Se devuelven en `desaparecidas`, y quien llama mira con `usosDeCampo`
+ *   cuáles no las usa nadie —esas sí se quitan, con `quitar_campos`— y cuáles hay
+ *   que resolver a mano. Que se queden TODAS, como pasaba antes, hacía que el aviso
+ *   no se fuera nunca por más veces que se pulsara el botón.
  */
 export function resincronizar(
   entidad: Entidad,

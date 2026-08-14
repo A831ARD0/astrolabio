@@ -191,6 +191,50 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **Renombrar una columna en la transformación y que el modelo lo siga.** El botón
+  «Actualizar columnas desde el origen» **no terminaba el trabajo**: añadía las
+  columnas nuevas, ponía los tipos al día, y las que ya no existían las dejaba ahí.
+  El aviso amarillo no se iba por más veces que se pulsara, así que el botón parecía
+  roto — y no había ninguna forma de decirle que `vr_base_icms` y `monto_base` son la
+  misma columna con otro nombre.
+
+  Ahora el aviso separa dos casos que no son el mismo:
+
+  - **Las que no usa nadie se quitan al actualizar.** Antes se quedaban «por si
+    alguna relación o métrica las usa», y ese «por si» no era una respuesta:
+    obligaba a repasar a mano veinticuatro relaciones y treinta métricas.
+  - **Las que algo usa se nombran, con qué las usa.** «`vr_pis` — 1 relación:
+    `fact_venta.vr_pis` → `cat_sucursal.sucursal_id` · la nombran 1 métrica:
+    Utilidad». Esas no se tocan solas: quitar una columna con una relación encima
+    rompe el modelo lejos de este botón, en la primera consulta.
+
+  Y hay un **«es la misma, renombrada»** por columna. Al confirmarlo, la referencia
+  se arrastra por los cuatro sitios donde va por nombre —el campo con su rol,
+  etiqueta, «ver», PII y «única»; la clave primaria; el grano; y las relaciones—.
+  Cuando hay exactamente una columna que desapareció y una candidata, se propone
+  sola; con dos y dos no, porque emparejarlas al azar movería una relación de sitio
+  sin que nadie lo pidiera.
+
+  Lo que **no** se reescribe es la fórmula de una métrica: ahí el nombre es texto
+  dentro de un lenguaje con variables, y cambiarlo a ciegas podría pisar una `VAR`
+  que se llame igual. Se dice qué métricas lo nombran para que las arregle quien las
+  escribió.
+
+  De paso, el desplegable de «Nueva relación» ya no ofrece una columna que el origen
+  no tiene. Ofrecerla era una trampa: la relación se creaba y fallaba al consultar.
+
+  Comprobado en el navegador sobre el modelo de demostración, que tiene este desfase
+  de verdad —`fact_venta` perdió cinco columnas y ganó seis—: el aviso nombra las
+  cinco con sus métricas, actualizar deja 19 campos, y renombrar `vr_base_icms` a
+  `monto_base` mueve la clave primaria, el grano y la relación al nombre nuevo,
+  conserva el rol `medida_base` y avisa de que hay que revisar «Venta» y «Utilidad».
+  Funciona igual en los dos órdenes: renombrando antes de actualizar y después.
+
+- **El resultado de esos botones se ve aunque quede desfase.** Salía solo cuando ya
+  no quedaba nada por resolver, o sea justo cuando ya no hacía falta: el aviso de
+  «revisa la fórmula de Utilidad» aparece después de renombrar una columna de tres,
+  con desfase pendiente, así que no se veía nunca.
+
 - **La tabla del lienzo enseña todos sus campos, y se puede unir por cualquiera.** La
   lista de columnas tenía `max-height: 220px` con barra por dentro, así que un catálogo
   de veintidós columnas mostraba diez. Las otras doce no se podían agarrar para

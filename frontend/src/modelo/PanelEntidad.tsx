@@ -11,7 +11,14 @@ import { useState } from 'react'
 
 import type { Campo, Definicion, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
 import { useTabla } from '../api/hooks'
-import { ETIQUETA_ROL, type Accion, confirmarClave, resincronizar } from './estado'
+import {
+  ETIQUETA_ROL,
+  type Accion,
+  confirmarClave,
+  describirUsos,
+  resincronizar,
+  usosDeCampo,
+} from './estado'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 
@@ -46,6 +53,39 @@ export function PanelEntidad({
   const hayDesfase = !!desfase
     && (desfase.retipados.length > 0 || desfase.nuevas.length > 0
       || desfase.desaparecidas.length > 0)
+
+  // Una columna que ya no existe se puede quitar sin más si no la usa nadie. Las que
+  // sí, no: quitar una con una relación encima rompería el modelo lejos de este
+  // botón, en la primera consulta. Se separan para poder decir cada cosa.
+  const desaparecidas = (desfase?.desaparecidas ?? []).map((campo) => ({
+    campo,
+    usos: describirUsos(usosDeCampo(definicion, entidad.nombre, campo)),
+  }))
+  const sueltas = desaparecidas.filter((x) => x.usos === null).map((x) => x.campo)
+  const ocupadas = desaparecidas.filter(
+    (x): x is { campo: string; usos: string } => x.usos !== null,
+  )
+
+  /**
+   * A qué columna se renombró cada una que desapareció, cuando se puede adivinar.
+   *
+   * Solo con una desaparecida y una candidata del mismo tipo: con dos y dos ya no hay
+   * forma de saber cuál va con cuál, y emparejarlas al azar movería las relaciones de
+   * sitio sin que nadie lo pidiera. Se propone, y confirma quien sabe.
+   */
+  const sugerencias: Record<string, string> = {}
+  if (desfase && desfase.desaparecidas.length === 1) {
+    const ida = desfase.desaparecidas[0]!
+    const tipoIda = entidad.campos.find((c) => c.nombre === ida)?.tipo
+    // Candidatas: las que llegaron nuevas, o —si ya se pulsó «actualizar» antes— las
+    // del origen que no estaban en la entidad cuando se agregó.
+    const candidatas = desfase.nuevas.length
+      ? enOrigen.filter((c) => desfase.nuevas.includes(c.nombre))
+      : enOrigen.filter((c) => c.tipo === tipoIda)
+    if (candidatas.length === 1) sugerencias[ida] = candidatas[0]!.nombre
+  }
+
+  const [renombres, setRenombres] = useState<Record<string, string>>({})
 
   const orden = useOrden(entidad.campos, (c, clave) =>
     clave === 'nombre' ? c.nombre
@@ -154,14 +194,95 @@ export function PanelEntidad({
                 <span className="mono">{desfase!.nuevas.join(', ')}</span>
               </li>
             )}
-            {desfase!.desaparecidas.length > 0 && (
+            {sueltas.length > 0 && (
               <li>
-                ya no está(n):{' '}
-                <span className="mono">{desfase!.desaparecidas.join(', ')}</span>
-                {' '}— no se quitan solas por si alguna relación o métrica las usa.
+                ya no está(n) y no las usa nadie:{' '}
+                <span className="mono">{sueltas.join(', ')}</span>
+                {' '}— se quitan al actualizar.
+              </li>
+            )}
+            {ocupadas.length > 0 && (
+              <li>
+                ya no está(n) pero <b>algo las usa</b>, así que hay que decidir:
+                <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+                  {ocupadas.map(({ campo, usos }) => (
+                    <li key={campo} style={{ marginBottom: 2 }}>
+                      <span className="mono">{campo}</span> — {usos}
+                    </li>
+                  ))}
+                </ul>
               </li>
             )}
           </ul>
+
+          {/*
+            Renombrar es el caso normal y no había forma de decirlo. Se renombra una
+            columna en la transformación y el modelo ve dos cosas: una que desapareció
+            y otra nueva. Pulsar «actualizar» añadía la nueva y dejaba la vieja, así
+            que el aviso no se iba NUNCA por más veces que se pulsara — y el botón
+            parecía roto. Aquí se dice que son la misma, y el rol, la clave, el grano
+            y las relaciones se van con el nombre nuevo.
+          */}
+          {desfase!.desaparecidas.length > 0 && enOrigen.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div className="chico" style={{ marginBottom: 4 }}>
+                ¿Alguna es la misma con otro nombre?
+              </div>
+              {desfase!.desaparecidas.map((campo) => (
+                <div
+                  key={campo}
+                  style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}
+                >
+                  <span className="mono chico" style={{ flex: '0 1 auto', minWidth: 0 }}>
+                    {campo}
+                  </span>
+                  <span className="chico tenue">→</span>
+                  <select
+                    className="chico"
+                    style={{ flex: 1, minWidth: 0 }}
+                    value={renombres[campo] ?? sugerencias[campo] ?? ''}
+                    onChange={(e) =>
+                      setRenombres((r) => ({ ...r, [campo]: e.target.value }))
+                    }
+                  >
+                    <option value="">(no, es otra cosa)</option>
+                    {enOrigen.map((c) => (
+                      <option key={c.nombre} value={c.nombre}>
+                        {c.nombre} · {c.tipo}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn chico"
+                    disabled={!(renombres[campo] ?? sugerencias[campo])}
+                    onClick={() => {
+                      const despues = renombres[campo] ?? sugerencias[campo]!
+                      despachar({
+                        t: 'renombrar_campo',
+                        entidad: entidad.nombre,
+                        antes: campo,
+                        despues,
+                      })
+                      const usos = usosDeCampo(definicion, entidad.nombre, campo)
+                      setResultado(
+                        `'${campo}' pasó a ser '${despues}'.`
+                        + (usos.relaciones.length
+                          ? ` ${usos.relaciones.length} relación(es) apuntan ya al nombre nuevo.`
+                          : '')
+                        + (usos.metricas.length
+                          ? ` Revisa la fórmula de: ${usos.metricas.join(', ')} —`
+                            + ' el nombre viejo sigue escrito ahí y eso no se toca solo.'
+                          : ''),
+                      )
+                    }}
+                  >
+                    Es la misma
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ marginTop: 8 }}>
             <button
               className="btn chico"
@@ -169,9 +290,24 @@ export function PanelEntidad({
                 // El rol, la etiqueta, «ver» y «PII» se conservan: son trabajo
                 // hecho a mano y volver a adivinarlos sería tirarlo.
                 cambiar({ campos: desfase!.campos })
+                // Y las que ya no existen y no usa nadie se van. Dejarlas era lo que
+                // hacía que el aviso no se fuera nunca: se pulsaba el botón, se
+                // añadía la columna nueva, y el mismo aviso seguía ahí.
+                if (sueltas.length) {
+                  despachar({
+                    t: 'quitar_campos',
+                    entidad: entidad.nombre,
+                    campos: sueltas,
+                  })
+                }
                 setResultado(
                   `${desfase!.retipados.length} tipo(s) al día, `
-                  + `${desfase!.nuevas.length} columna(s) agregada(s).`,
+                  + `${desfase!.nuevas.length} columna(s) agregada(s), `
+                  + `${sueltas.length} quitada(s).`
+                  + (ocupadas.length
+                    ? ` Quedan ${ocupadas.length} que algo usa: dile a qué se`
+                      + ' renombraron, o quita antes lo que las usa.'
+                    : ''),
                 )
               }}
             >
@@ -180,7 +316,12 @@ export function PanelEntidad({
           </div>
         </div>
       )}
-      {resultado && !hayDesfase && (
+      {/* Se muestra HAYA O NO desfase todavía. Solo cuando ya no quedaba nada por
+          resolver era peor que no mostrarlo: el aviso más importante que sale de aquí
+          —«revisa la fórmula de Utilidad, el nombre viejo sigue escrito ahí»— aparece
+          justo después de renombrar una columna de tres, o sea con desfase pendiente,
+          y así no se veía nunca. */}
+      {resultado && (
         <div className="chico tenue">{resultado} Los roles se conservaron.</div>
       )}
 

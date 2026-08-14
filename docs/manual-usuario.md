@@ -683,6 +683,32 @@ en su ancho normal los nombres salen cortados, y ahí no se distingue
 `Nombre_Conexion` de `Nombre_DB` — que es lo que necesitas leer para elegir por dónde
 unirla.
 
+### Cuando cambias la transformación por debajo
+
+El modelo guarda su propia copia de las columnas, tomada el día que agregaste la
+tabla. Es a propósito: así el modelo se abre y compila sin tocar la base. El precio es
+que si luego cambias la transformación, esa copia se queda vieja — y el inspector de
+la entidad te lo dice en un aviso amarillo en cuanto la seleccionas.
+
+El aviso separa tres cosas, porque no se arreglan igual:
+
+| Lo que pasó | Qué hacer |
+|---|---|
+| Cambió el tipo de una columna, o hay columnas nuevas | **Actualizar columnas desde el origen**. Tu trabajo se conserva: el rol, la etiqueta, «ver» y «PII» no se vuelven a adivinar |
+| Una columna ya no está **y no la usa nadie** | Se quita al actualizar, sin más |
+| Una columna ya no está **y algo la usa** | El aviso te dice exactamente qué la usa —qué relación, qué métrica, si es la clave o está en el grano— y lo decides tú |
+
+**Si lo que hiciste fue renombrar**, que es el caso normal, díselo: cada columna que
+desapareció tiene al lado un desplegable y un botón **«Es la misma»**. Al confirmarlo,
+el nombre nuevo se lleva consigo el rol, la etiqueta, «ver», «PII», «única», la clave
+primaria, el grano y **las relaciones**. Si hay una sola columna que desapareció y una
+sola candidata, te la propone ya elegida.
+
+Lo único que no se arregla solo es la **fórmula de una métrica** que nombre la columna
+vieja. Ahí el nombre es texto dentro de una fórmula que puede tener variables, y
+cambiarlo por ti podría pisar una `VAR` que se llame igual. Astrolabio te dice qué
+métricas hay que revisar, y las revisas tú.
+
 ### El panel de diagnóstico
 
 Marca los problemas que producen cifras mal sin avisar:
