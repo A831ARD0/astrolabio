@@ -78,6 +78,8 @@ class Campo:
     etiqueta: str | None = None
     visible: bool = True
     pii: bool = False
+    #: No se repite, aunque no sea la clave primaria. Ver `CampoDef.unico`.
+    unico: bool = False
 
 
 @dataclass
@@ -123,7 +125,7 @@ class Modelo:
                 c["nombre"]: Campo(
                     nombre=c["nombre"], tipo=c["tipo"], rol=c["rol"],
                     etiqueta=c.get("etiqueta"), visible=c.get("visible", True),
-                    pii=c.get("pii", False),
+                    pii=c.get("pii", False), unico=c.get("unico", False),
                 )
                 for c in e["campos"]
             }
@@ -320,6 +322,33 @@ class Modelo:
                                f"se usa. Manda la relacion activa entre esas dos "
                                f"tablas.",
                 })
+
+        # El lado «uno» tiene que ser de verdad uno. Es el aviso mas util del
+        # modelo y hasta ahora solo existia en la pantalla: quien abre el YAML a
+        # mano, o mira el diagnostico, no se enteraba. No basta con ser la clave
+        # primaria —una entidad tiene una sola y suele haber varios
+        # identificadores que tampoco se repiten—, asi que vale cualquiera de las
+        # dos declaraciones.
+        for r in self.relaciones:
+            if r.cardinalidad != "muchos_a_uno" or not r.activa:
+                continue
+            destino = self.entidades.get(r.entidad_b)
+            if destino is None:
+                continue
+            campo = destino.campos.get(r.campo_b)
+            if destino.clave_primaria == r.campo_b or (campo and campo.unico):
+                continue
+            problemas.append({
+                "tipo": "uno_sin_garantia",
+                "gravedad": "advertencia",
+                "entidad": f"{r.entidad_a} → {r.entidad_b}",
+                "mensaje": f"'{r.entidad_b}.{r.campo_b}' esta del lado 'uno' de "
+                           f"una relacion muchos-a-uno, pero no consta que sea "
+                           f"unica: no es la clave primaria de '{r.entidad_b}' "
+                           f"ni esta marcada como unica. Si se repitiera, esta "
+                           f"union multiplicaria filas y los totales saldrian "
+                           f"inflados.",
+            })
 
         for r in self.relaciones:
             if r.cardinalidad == "muchos_a_muchos":

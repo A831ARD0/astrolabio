@@ -9,9 +9,9 @@
 
 import { useState } from 'react'
 
-import type { Campo, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
+import type { Campo, Definicion, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
 import { useTabla } from '../api/hooks'
-import { ETIQUETA_ROL, type Accion, resincronizar } from './estado'
+import { ETIQUETA_ROL, type Accion, confirmarClave, resincronizar } from './estado'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 
@@ -19,10 +19,13 @@ const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
 export function PanelEntidad({
   entidad,
+  definicion,
   despachar,
   enRelaciones,
 }: {
   entidad: Entidad
+  /** El borrador entero: hace falta para contar a quién afecta cambiar la clave. */
+  definicion: Definicion
   despachar: (a: Accion) => void
   /** Cuántas relaciones la usan: borrarla se las lleva. */
   enRelaciones: number
@@ -49,6 +52,7 @@ export function PanelEntidad({
     : clave === 'tipo' ? c.tipo
     : clave === 'rol' ? c.rol
     : clave === 'ver' ? c.visible !== false
+    : clave === 'unico' ? c.nombre === entidad.clave_primaria || c.unico === true
     : c.pii === true)
 
   const cambiarCampo = (campo: string, cambios: Partial<Campo>) =>
@@ -85,7 +89,14 @@ export function PanelEntidad({
           <label>Clave primaria</label>
           <select
             value={entidad.clave_primaria ?? ''}
-            onChange={(e) => cambiar({ clave_primaria: e.target.value || null })}
+            // Cambiarla no añade: sustituye. Las relaciones que unían contra la
+            // anterior se quedan sin la garantía de que su columna no se repite,
+            // y el aviso que alguien venía a quitar reaparece en otras ocho.
+            onChange={(e) => {
+              const nueva = e.target.value || null
+              if (nueva && !confirmarClave(definicion, entidad.nombre, nueva)) return
+              cambiar({ clave_primaria: nueva })
+            }}
           >
             <option value="">(ninguna)</option>
             {orden.filas.map((c) => (
@@ -189,6 +200,13 @@ export function PanelEntidad({
               <Th orden={orden} clave="ver" titulo="Visible en la interfaz para quien explora">
                 ver
               </Th>
+              <Th
+                orden={orden}
+                clave="unico"
+                titulo="No se repite: es lo que una relación muchos-a-uno necesita del lado «uno»"
+              >
+                única
+              </Th>
               <Th orden={orden} clave="pii" titulo="Dato personal">PII</Th>
             </tr>
           </thead>
@@ -218,6 +236,20 @@ export function PanelEntidad({
                     onChange={(e) =>
                       cambiarCampo(c.nombre, { visible: e.target.checked })
                     }
+                  />
+                </td>
+                <td>
+                  {/* La clave primaria es única por definición: la casilla sale
+                      marcada y bloqueada, porque desmarcarla no significaría
+                      nada y sí confundiría. */}
+                  <input
+                    type="checkbox"
+                    checked={c.nombre === entidad.clave_primaria || !!c.unico}
+                    disabled={c.nombre === entidad.clave_primaria}
+                    title={c.nombre === entidad.clave_primaria
+                      ? 'Es la clave primaria: única por definición'
+                      : 'Marcar si esta columna no tiene valores repetidos'}
+                    onChange={(e) => cambiarCampo(c.nombre, { unico: e.target.checked })}
                   />
                 </td>
                 <td>

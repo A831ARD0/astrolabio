@@ -11,7 +11,7 @@
  */
 
 import type { Cardinalidad, DireccionFiltro, Definicion } from '../api/tipos'
-import { ETIQUETA_CARDINALIDAD, type Accion, confirmarClave } from './estado'
+import { ETIQUETA_CARDINALIDAD, type Accion, marcarUnica, sinClave } from './estado'
 
 const CARDINALIDADES: Cardinalidad[] = ['muchos_a_uno', 'uno_a_uno', 'muchos_a_muchos']
 
@@ -28,7 +28,10 @@ export function PanelRelacion({
   if (!r) return <div className="vacio">Esa relación ya no existe.</div>
 
   const destino = definicion.entidades.find((e) => e.nombre === r.hasta[0])
+  // Clave primaria O marcada como unica: lo que la relacion necesita del lado
+  // «uno» es que la columna no se repita, y eso puede constar de las dos formas.
   const apuntaAClave = destino?.clave_primaria === r.hasta[1]
+    || destino?.campos.find((c) => c.nombre === r.hasta[1])?.unico === true
 
   const tipoDe = (entidad: string, campo: string) =>
     definicion.entidades
@@ -155,28 +158,26 @@ export function PanelRelacion({
 
       {r.cardinalidad === 'muchos_a_uno' && !apuntaAClave && (
         <div className="aviso-caja">
-          <b>{r.hasta[1]}</b> no es la clave primaria de <b>{r.hasta[0]}</b>.
+          No consta que <b>{r.hasta[1]}</b> sea única en <b>{r.hasta[0]}</b>.
           Dices que muchas filas de <b>{r.desde[0]}</b> apuntan a una sola de{' '}
-          <b>{r.hasta[0]}</b>, pero nadie ha declarado que esa columna no se
-          repita. Si se repitiera, cada fila del origen casaría con varias del
-          destino, la unión devolvería más filas de las que hay y las sumas
-          saldrían infladas — sin ningún error, solo con la cifra mal.
+          <b>{r.hasta[0]}</b>, pero esa columna ni es la clave primaria ni está
+          marcada como única. Si se repitiera, cada fila del origen casaría con
+          varias del destino, la unión devolvería más filas de las que hay y las
+          sumas saldrían infladas — sin ningún error, solo con la cifra mal.
           {/* El arreglo casi siempre es este y estaba a tres pantallas de aquí:
               ir a la entidad, buscar el campo y marcarlo. Poder resolverlo donde
               se lee el aviso es la diferencia entre corregirlo y convivir con él. */}
           <div style={{ marginTop: 8 }}>
             <button
               className="btn chico"
-              onClick={() => {
-                if (!confirmarClave(definicion, r.hasta[0], r.hasta[1])) return
-                despachar({
-                  t: 'cambiar_entidad',
-                  nombre: r.hasta[0],
-                  cambios: { clave_primaria: r.hasta[1] },
-                })
-              }}
+              onClick={() =>
+                marcarUnica(definicion, r.hasta[0], r.hasta[1], despachar)
+              }
             >
-              {r.hasta[1]} no se repite: declararla clave primaria
+              {r.hasta[1]} no se repite:{' '}
+              {sinClave(definicion, r.hasta[0])
+                ? 'declararla clave primaria'
+                : 'marcarla como única'}
             </button>
           </div>
         </div>

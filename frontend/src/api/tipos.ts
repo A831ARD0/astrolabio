@@ -20,6 +20,16 @@ export interface Campo {
   etiqueta?: string | null
   visible?: boolean
   pii?: boolean
+  /**
+   * No se repite, aunque no sea la clave primaria.
+   *
+   * Una entidad tiene UNA clave primaria, pero un catálogo suele traer varios
+   * identificadores que tampoco se repiten —el propio, el del sistema de origen,
+   * el del CRM— y cada uno es por donde se une un hecho distinto. Lo que una
+   * relación muchos-a-uno necesita del lado «uno» no es ser la clave primaria:
+   * es no repetirse.
+   */
+  unico?: boolean
 }
 
 export interface Entidad {

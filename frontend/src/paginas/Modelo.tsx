@@ -440,6 +440,7 @@ export function Modelo() {
         ) : entidadSel ? (
           <PanelEntidad
             entidad={entidadSel}
+            definicion={d}
             despachar={(a) => {
               despachar(a)
               if (a.t === 'quitar_entidad') setSeleccion(null)

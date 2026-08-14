@@ -345,6 +345,37 @@ export function resincronizar(
   return { campos, retipados, nuevas: nuevas.map((c) => c.nombre), desaparecidas }
 }
 
+/** ¿La entidad no declara todavía ninguna clave primaria? */
+export function sinClave(d: Definicion, entidad: string): boolean {
+  return !d.entidades.find((e) => e.nombre === entidad)?.clave_primaria
+}
+
+/**
+ * Dejar constancia de que una columna no se repite.
+ *
+ * Hay dos maneras y la buena depende de si la entidad ya tiene clave primaria:
+ *
+ * - **No la tiene**: se declara esta. Es lo que identifica la fila y hacía falta
+ *   de todos modos.
+ * - **Ya tiene otra**: se marca esta como `unico`. Una entidad tiene UNA clave
+ *   primaria, así que sustituirla para callar un aviso encendía el mismo aviso en
+ *   todas las relaciones que unían contra la anterior — ocho, en un catálogo de
+ *   sucursales con varios identificadores. Marcarla única no le quita el sitio a
+ *   nadie y es exactamente lo que la relación necesita saber.
+ */
+export function marcarUnica(
+  d: Definicion,
+  entidad: string,
+  campo: string,
+  despachar: (a: Accion) => void,
+): void {
+  if (sinClave(d, entidad)) {
+    despachar({ t: 'cambiar_entidad', nombre: entidad, cambios: { clave_primaria: campo } })
+  } else {
+    despachar({ t: 'cambiar_campo', entidad, campo, cambios: { unico: true } })
+  }
+}
+
 /**
  * Preguntar antes de cambiarle la clave primaria a una entidad.
  *

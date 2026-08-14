@@ -47,6 +47,18 @@ class CampoDef(_Base):
     etiqueta: str | None = None
     visible: bool = True
     pii: bool = False
+    #: La columna no se repite, aunque no sea la clave primaria.
+    #:
+    #: Una entidad tiene UNA clave primaria: es la que la identifica. Pero un
+    #: catalogo de sucursales suele traer varios identificadores que tampoco se
+    #: repiten —el propio, el del sistema de origen, el del CRM—, y cada uno es
+    #: por donde se une un hecho distinto. Lo que una relacion muchos-a-uno
+    #: necesita del lado «uno» no es ser la clave primaria: es no repetirse.
+    #:
+    #: Sin esto, la unica forma de quitar el aviso «no es clave primaria» era
+    #: cambiar la clave primaria de la entidad —y entonces el aviso aparecia en
+    #: las otras ocho relaciones que unian contra la anterior—.
+    unico: bool = False
 
 
 class OrigenDef(_Base):

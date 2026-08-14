@@ -67,7 +67,7 @@ npm run dev
 ### Las pruebas
 
 ```bash
-cd backend && ./venv/bin/python -m pytest -q          # 535 pasando, 47 saltadas
+cd backend && ./venv/bin/python -m pytest -q          # 547 pasando, 47 saltadas
 ```
 
 Si la base de demostración no existe, `pytest` la genera solo. Con

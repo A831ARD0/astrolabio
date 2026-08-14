@@ -26,7 +26,8 @@ import {
   ETIQUETA_CARDINALIDAD,
   type Accion,
   cardinalidadProbable,
-  confirmarClave,
+  marcarUnica,
+  sinClave,
 } from './estado'
 
 const CARDINALIDADES: Cardinalidad[] = ['muchos_a_uno', 'uno_a_uno', 'muchos_a_muchos']
@@ -87,11 +88,18 @@ export function PanelRelaciones({
       if (tDesde && tHasta && tDesde !== tHasta) {
         avisos.push(`Une ${tDesde} contra ${tHasta}: puede no casar ninguna fila`)
       }
-      const faltaClave =
-        r.cardinalidad === 'muchos_a_uno' && destino?.clave_primaria !== r.hasta[1]
+      // Lo que importa del lado «uno» es que no se repita, y eso puede constar
+      // de dos maneras: siendo la clave primaria, o estando marcada como única.
+      // Una entidad tiene una sola clave primaria y suele traer varios
+      // identificadores irrepetibles —el propio, el de Quiter, el del CRM—, uno
+      // por cada hecho que se une contra ella.
+      const campoDestino = destino?.campos.find((c) => c.nombre === r.hasta[1])
+      const consta =
+        destino?.clave_primaria === r.hasta[1] || campoDestino?.unico === true
+      const faltaClave = r.cardinalidad === 'muchos_a_uno' && !consta
       if (faltaClave) {
-        avisos.push(`${r.hasta[1]} no es clave primaria de ${r.hasta[0]}: si se `
-          + 'repite, esta unión infla los totales')
+        avisos.push(`No consta que ${r.hasta[1]} sea única en ${r.hasta[0]}: si `
+          + 'se repite, esta unión infla los totales')
       }
       if (r.cardinalidad === 'muchos_a_muchos') {
         avisos.push('Muchos a muchos: multiplica filas al agregar')
@@ -312,17 +320,17 @@ export function PanelRelaciones({
                       <button
                         className="btn chico"
                         style={{ marginTop: 4 }}
+                        title={`Dice que ${f.hastaCampo} no se repite en `
+                          + `${f.hastaEntidad}. Es lo que la relación necesita.`}
                         onClick={(e) => {
                           e.stopPropagation()
-                          if (!confirmarClave(definicion, f.hastaEntidad, f.hastaCampo)) return
-                          despachar({
-                            t: 'cambiar_entidad',
-                            nombre: f.hastaEntidad,
-                            cambios: { clave_primaria: f.hastaCampo },
-                          })
+                          marcarUnica(definicion, f.hastaEntidad, f.hastaCampo,
+                                      despachar)
                         }}
                       >
-                        Declararla clave primaria
+                        {sinClave(definicion, f.hastaEntidad)
+                          ? 'Declararla clave primaria'
+                          : 'Marcarla como única'}
                       </button>
                     )}
                     {!conflictiva(f) && f.avisos.length === 0 && (
@@ -421,7 +429,9 @@ function NuevaRelacion({
   const [cardinalidad, setCardinalidad] = useState<Cardinalidad | null>(null)
 
   const destino = definicion.entidades.find((e) => e.nombre === a)
-  const esClave = !!destino && destino.clave_primaria === aCampo
+  const esClave = !!destino
+    && (destino.clave_primaria === aCampo
+      || destino.campos.find((c) => c.nombre === aCampo)?.unico === true)
   const sugerida: Cardinalidad =
     a && aCampo ? cardinalidadProbable(definicion.entidades, a, aCampo) : 'muchos_a_uno'
   const elegida = cardinalidad ?? sugerida
@@ -517,21 +527,15 @@ function NuevaRelacion({
           que saberse la regla para entender de dónde salió. */}
       {a && aCampo && !esClave && (
         <span className="chico tenue" style={{ flexBasis: '100%' }}>
-          <b className="mono">{aCampo}</b> no está declarada clave primaria de{' '}
-          <b className="mono">{a}</b>, así que no consta que sea única y la
-          sugerencia es la prudente. Si de verdad no se repite:{' '}
+          No consta que <b className="mono">{aCampo}</b> sea única en{' '}
+          <b className="mono">{a}</b> —ni es su clave primaria ni está marcada
+          como única—, así que la sugerencia es la prudente. Si de verdad no se
+          repite:{' '}
           <button
             className="btn chico"
-            onClick={() => {
-              if (!confirmarClave(definicion, a, aCampo)) return
-              despachar({
-                t: 'cambiar_entidad',
-                nombre: a,
-                cambios: { clave_primaria: aCampo },
-              })
-            }}
+            onClick={() => marcarUnica(definicion, a, aCampo, despachar)}
           >
-            declararla clave primaria
+            {sinClave(definicion, a) ? 'declararla clave primaria' : 'marcarla como única'}
           </button>
         </span>
       )}
