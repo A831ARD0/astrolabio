@@ -43,7 +43,11 @@ entidades:
       - {nombre: fecha,      tipo: fecha,  rol: clave}
       - {nombre: anio,       tipo: entero, rol: dimension, etiqueta: Año}
       - {nombre: mes,        tipo: entero, rol: dimension, etiqueta: Mes}
-      - {nombre: anio_mes,   tipo: entero, rol: dimension, etiqueta: Año-Mes}
+      # `grano_tiempo` es lo que permite escribir «el mes anterior»: dice que esta
+      # columna nombra UN mes concreto. `mes` (1..12) no lo lleva a proposito —se
+      # repite cada año, y correrla un mes hacia atras no significa nada—.
+      - {nombre: anio_mes,   tipo: entero, rol: dimension, etiqueta: Año-Mes,
+         grano_tiempo: mes}
       - {nombre: trimestre,  tipo: entero, rol: dimension, etiqueta: Trimestre}
       - {nombre: es_habil,   tipo: booleano, rol: dimension, etiqueta: Es hábil}
     jerarquias:

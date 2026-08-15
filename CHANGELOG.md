@@ -7,6 +7,38 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Comparar contra otro periodo: el mes anterior, el acumulado del año, el año
+  pasado.** Cuatro funciones nuevas, que sólo valen dentro de una métrica compuesta:
+  `MESANTERIOR`, `MISMOMESANIOANTERIOR`, `ACUMANIO` y `PROMEDIOMESES`. Son el
+  `PREVIOUSMONTH`, `SAMEPERIODLASTYEAR`, `DATESYTD` y `DATESINPERIOD` de DAX.
+
+  **El marco va en meses, no en filas.** La forma fácil de escribir «el mes
+  anterior» en SQL es `LAG(1)`, que significa «la fila anterior del resultado»: si
+  marzo no tiene ventas, el mes anterior de abril sale siendo febrero, sin una sola
+  señal de que lo es. Aquí el marco compara el **valor** del periodo (`RANGE`), así
+  que un mes que falta deja el resultado **vacío**, que es la verdad. Hay una prueba
+  que quita un mes a propósito y falla si eso deja de cumplirse.
+
+  **La ventana se aplica a cada cifra, no al resultado.**
+  `PROMEDIOMESES(DIVIDIR([Utilidad], [Unidades]), 3)` sale como utilidad de tres
+  meses entre unidades de tres meses, no como el promedio de tres cocientes. Son
+  números distintos y el primero es el que significa en DAX.
+
+  **No se acumula lo que no se puede sumar.** El acumulado del año de un conteo de
+  clientes distintos contaría dos veces a quien compró en enero y en marzo: se
+  rechaza al consultar. Contra un solo mes sí vale, porque sumar un valor suelto es
+  ese valor.
+
+  Para que «el mes anterior» signifique algo hay que decir qué columna nombra un
+  mes: es la casilla **mes** nueva en la tabla de campos de una entidad. Se marca
+  `Periodo_YYYYMM` o una fecha, nunca un `Mes` de 1 a 12 —se repite cada año, y
+  correrlo un mes hacia atrás no significa nada—. Se aceptan las dos formas en que
+  suele venir, entero `202601` y fecha, para no tener que tocar el ETL.
+
+  Una función de tiempo **dentro de otra** —el `SAMEPERIODLASTYEAR(DATESYTD(…))` de
+  DAX— se rechaza al guardar: el marco tendría que ensancharse conforme avanza el
+  mes, y eso ya no es un marco fijo. Está pendiente.
+
 - **Métricas compuestas: una cifra que sale de dividir dos hechos distintos.** El
   porcentaje de logro es lo vendido entre lo presupuestado, y lo vendido está en las
   facturas mientras que el presupuesto está en otra tabla, a otro grano. Hasta ahora
@@ -239,6 +271,10 @@ versionado es [semántico](https://semver.org/lang/es/).
   por volumen.
 
 ### Corregido
+
+- **Una columna de periodo ya no sale con separador de miles.** `202601` se leía
+  como «201,601», o sea como doscientos mil y pico. Ya pasaba antes; ahora se nota
+  más, porque comparar contra otro mes obliga a poner esa columna en el desglose.
 
 - **«Tablas del motor» ya sólo trae tablas del motor.** El panel de orígenes del ETL
   metía en ese grupo **todo** lo que se puede nombrar como tabla —las del motor, las

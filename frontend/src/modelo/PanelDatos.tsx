@@ -102,6 +102,18 @@ export function PanelDatos({
       .map((c) => c.nombre) ?? [],
   )
 
+  /**
+   * Columnas de periodo, por lo mismo: `202601` no es doscientos mil.
+   *
+   * Aquí las claves llevan el prefijo de la entidad porque así vienen en el
+   * resultado de una consulta agregada, que es otra tabla distinta de la muestra.
+   */
+  const periodos = new Set(
+    definicion.entidades.flatMap((e) =>
+      e.campos.filter((c) => c.grano_tiempo).map((c) => `${e.nombre}.${c.nombre}`),
+    ),
+  )
+
   return (
     <div className="datos-vista">
       <div className="barra-datos">
@@ -246,7 +258,7 @@ export function PanelDatos({
         <Tabla
           resultado={activa.data}
           etiquetas={etiquetas}
-          crudas={vista === 'muestra' ? identificadores : new Set()}
+          crudas={vista === 'muestra' ? identificadores : periodos}
         />
       )}
     </div>

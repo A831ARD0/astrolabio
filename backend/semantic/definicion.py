@@ -31,6 +31,7 @@ from semantic.politica import PoliticaDef, revisar_politicas
 
 TIPOS_CAMPO = ("entero", "decimal", "texto", "fecha", "booleano")
 ROLES_CAMPO = ("clave", "clave_externa", "dimension", "medida_base")
+GRANOS_TIEMPO = ("dia", "mes", "trimestre", "anio")
 CARDINALIDADES = ("muchos_a_uno", "uno_a_uno", "muchos_a_muchos")
 DIRECCIONES = ("ambas", "una")
 
@@ -60,6 +61,16 @@ class CampoDef(_Base):
     #: cambiar la clave primaria de la entidad —y entonces el aviso aparecia en
     #: las otras ocho relaciones que unian contra la anterior—.
     unico: bool = False
+    #: Que periodo identifica esta columna, si es que identifica alguno.
+    #:
+    #: Es lo que permite escribir «el mes anterior». Sin esto el motor no puede
+    #: distinguir `Periodo_YYYYMM` —que nombra un mes concreto— de `Mes`, que va
+    #: de 1 a 12 y se repite cada año: correr una un mes hacia atras significa
+    #: algo, correr la otra no significa nada.
+    #:
+    #: Solo se marca una columna que identifique el periodo POR COMPLETO: una
+    #: fecha, un `202601`, un año. Nunca `Mes`, `Trimestre` ni `Dia_Semana`.
+    grano_tiempo: Literal[GRANOS_TIEMPO] | None = None   # type: ignore[valid-type]
 
 
 class OrigenDef(_Base):

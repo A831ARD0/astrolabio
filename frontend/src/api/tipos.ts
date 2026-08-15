@@ -30,6 +30,14 @@ export interface Campo {
    * es no repetirse.
    */
   unico?: boolean
+  /**
+   * Qué periodo nombra esta columna, si nombra alguno.
+   *
+   * Es lo que permite escribir «el mes anterior». `Periodo_YYYYMM` nombra un mes
+   * concreto; `Mes`, de 1 a 12, se repite cada año y correrla un mes hacia atrás
+   * no significa nada — por eso se marca una y no la otra.
+   */
+  grano_tiempo?: 'dia' | 'mes' | 'trimestre' | 'anio' | null
 }
 
 export interface Entidad {

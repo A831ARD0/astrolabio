@@ -332,6 +332,24 @@ CATALOGO: dict[str, Funcion] = {
         _f("FORMATOFECHA", "FORMATOFECHA(fecha, patron)", "fecha",
            "La fecha como texto con el patron dado.",
            "FORMATOFECHA(Fecha_Factura, '%Y-%m')", 2, 2),
+
+        # ---- tiempo ---------------------------------------------------------
+        # Solo valen en una metrica COMPUESTA, y solo si el desglose lleva una
+        # columna de periodo. Las dos cosas se comprueban al compilar la consulta.
+        _f("MESANTERIOR", "MESANTERIOR([metrica])", "tiempo",
+           "La misma cifra, del mes anterior. Si ese mes no tiene datos sale "
+           "vacio, no el del mes de antes.",
+           "MESANTERIOR([Unidades Vendidas])", 1, 1),
+        _f("MISMOMESANIOANTERIOR", "MISMOMESANIOANTERIOR([metrica])", "tiempo",
+           "La misma cifra, del mismo mes del año pasado.",
+           "MISMOMESANIOANTERIOR([Unidades Vendidas])", 1, 1),
+        _f("ACUMANIO", "ACUMANIO([metrica])", "tiempo",
+           "Lo que va del año: suma desde enero hasta el mes de la fila.",
+           "ACUMANIO([Unidades Vendidas])", 1, 1),
+        _f("PROMEDIOMESES", "PROMEDIOMESES([metrica], meses)", "tiempo",
+           "Promedio de los meses ANTERIORES, sin contar el de la fila. Divide "
+           "entre los meses pedidos, asi que un mes sin datos cuenta como cero.",
+           "PROMEDIOMESES([Unidades Vendidas], 3)", 2, 2),
     ]
 }
 
@@ -951,6 +969,42 @@ class ContextoCompuesta:
 _MARCA_METRICA = "__met_{}__"
 
 
+@dataclass(frozen=True)
+class Ventana:
+    """
+    Una funcion de tiempo, ya resuelta a un marco de ventana en meses.
+
+    `desde`/`hasta` son cuantos meses hacia atras abarca, contando el mes de la
+    propia fila como 0. `MESANTERIOR` es (1, 1) —solo el mes de antes—, el
+    promedio de tres meses es (3, 1), y el acumulado del año es (None, 0), donde
+    `None` significa «desde el principio».
+
+    `reinicia_anio` marca el acumulado del año, que es el unico que ademas
+    particiona por año para volver a empezar cada enero.
+
+    `divisor` sale de DAX: el promedio de tres meses de Power BI divide entre 3
+    fijo, aunque falte alguno. Se respeta eso y no un AVG, porque cambiar el
+    denominador cambiaria la cifra que ya estan mirando.
+    """
+
+    nombre: str
+    desde: int | None
+    hasta: int
+    reinicia_anio: bool = False
+    divisor: int | None = None
+
+
+#: Las funciones de tiempo. No se traducen a SQL aqui: lo que las convierte en
+#: una ventana es el compilador de consultas, que es el unico que sabe por que
+#: columna se esta desglosando y cual de ellas es el periodo.
+VENTANAS: dict[str, Ventana] = {
+    "MESANTERIOR": Ventana("MESANTERIOR", 1, 1),
+    "MISMOMESANIOANTERIOR": Ventana("MISMOMESANIOANTERIOR", 12, 12),
+    "ACUMANIO": Ventana("ACUMANIO", None, 0, reinicia_anio=True),
+    "PROMEDIOMESES": Ventana("PROMEDIOMESES", 0, 1),   # el 0 lo pone el argumento
+}
+
+
 def _referencias_compuesta(
     tramo: Tramo, ctx: ContextoCompuesta, fallos: list[Fallo],
     en_curso: tuple[str, ...],
@@ -1006,6 +1060,102 @@ def _referencias_compuesta(
     return "".join(piezas), apunta, dependencias
 
 
+#: La columna por la que se ordena una ventana de tiempo, y la que reinicia el
+#: acumulado del año. Las pone `compilar_compuesta` y las resuelve el compilador
+#: de consultas, que es el unico que sabe por que columna se esta desglosando.
+COL_PERIODO = "__periodo__"
+COL_ANIO = "__anio__"
+
+
+def _marco(v: Ventana, desde: int | None) -> exp.WindowSpec:
+    """
+    El marco en MESES, no en filas.
+
+    `RANGE` y no `ROWS` es toda la diferencia: `ROWS 1 PRECEDING` significa «la
+    fila anterior del resultado», asi que si un mes se queda sin ventas te da el
+    de dos meses atras sin avisar. `RANGE` compara el VALOR del periodo, asi que
+    un mes que falta deja el marco vacio y sale en blanco — que es la verdad.
+    """
+    return exp.WindowSpec(
+        kind="RANGE",
+        start="UNBOUNDED" if desde is None else str(desde),
+        start_side="PRECEDING",
+        end="CURRENT ROW" if v.hasta == 0 else str(v.hasta),
+        end_side=None if v.hasta == 0 else "PRECEDING",
+    )
+
+
+def _en_ventana(arbol: exp.Expression, v: Ventana,
+                desde: int | None) -> exp.Expression:
+    """
+    Mete cada metrica del arbol en la ventana, en vez de meter el arbol entero.
+
+    Es la diferencia entre el promedio de tres cocientes y el cociente de tres
+    meses, y no son el mismo numero. `ACUMANIO(DIVIDIR([Utilidad], [Unidades]))`
+    tiene que ser `DIVIDIR(acumulado de Utilidad, acumulado de Unidades)`, que es
+    lo que significa en DAX: el filtro de periodo se aplica al calculo entero, o
+    sea a cada cifra que lo compone.
+    """
+    def envolver(n: exp.Expression) -> exp.Expression:
+        if not isinstance(n, exp.Column) or n.table:
+            return n
+        # Las marcas de una ventana de mas adentro no son metricas: envolverlas
+        # daba `PARTITION BY SUM("__anio__") OVER (…)`, que no significa nada.
+        if n.name in (COL_PERIODO, COL_ANIO):
+            return n
+        return exp.Window(
+            this=exp.func("SUM", n.copy()),
+            partition_by=([exp.column(COL_ANIO, quoted=True)]
+                          if v.reinicia_anio else []),
+            order=exp.Order(expressions=[
+                exp.Ordered(this=exp.column(COL_PERIODO, quoted=True))]),
+            spec=_marco(v, desde),
+        )
+
+    return arbol.transform(envolver, copy=True)
+
+
+def _reescribir_ventanas(nodo: exp.Expression) -> exp.Expression:
+    if not isinstance(nodo, exp.Anonymous):
+        return nodo
+    v = VENTANAS.get(str(nodo.name).upper())
+    if v is None:
+        return nodo
+    args = list(nodo.expressions)
+
+    # Una funcion de tiempo dentro de otra —«el acumulado del año pasado»— no es
+    # una ventana con otro marco: el marco tendria que ser mas ancho cuanto mas
+    # avanzado el mes, y eso ya no es un marco fijo. Se dice, en vez de generar
+    # SQL que compila y devuelve cualquier cosa.
+    if args and args[0].find(exp.Window) is not None:
+        raise ErrorFormula([Fallo(
+            f"{v.nombre} no puede llevar otra funcion de tiempo dentro. Cada una "
+            f"mira una ventana de meses, y una dentro de otra no define ninguna "
+            f"ventana concreta. Calcula la de dentro en su propia metrica y "
+            f"nombrala aqui.")])
+
+    desde = v.desde
+    divisor = v.divisor
+    if v.nombre == "PROMEDIOMESES":
+        cuantos = args[1] if len(args) > 1 else None
+        if not (isinstance(cuantos, exp.Literal) and cuantos.is_int
+                and int(cuantos.name) > 0):
+            raise ErrorFormula([Fallo(
+                "PROMEDIOMESES necesita saber cuantos meses, y tiene que ser un "
+                "numero escrito ahi mismo: PROMEDIOMESES([Unidades], 3).")])
+        desde = int(cuantos.name)
+        divisor = desde
+
+    salida = _en_ventana(args[0], v, desde)
+    if divisor:
+        # Se divide entre los meses PEDIDOS y no entre los que trajeron datos,
+        # que es lo que hace DAX. Un mes sin ventas cuenta como cero, no se
+        # descuenta del denominador: si no, un mes malo subiria el promedio.
+        salida = exp.Div(this=exp.Paren(this=salida),
+                         expression=exp.Literal.number(divisor))
+    return exp.Paren(this=salida)
+
+
 def compilar_compuesta(
     expresion: str, ctx: ContextoCompuesta,
     _en_curso: tuple[str, ...] = (),
@@ -1037,6 +1187,9 @@ def compilar_compuesta(
         arbol = _parsear(texto, tramo)
         arbol = _sustituir_nombres(arbol, {**definidas, **referencias})
         arbol = _mapear(arbol.copy(), _reescribir)
+        # Las ventanas van DESPUES: envuelven columnas, y hasta aqui las
+        # referencias a metricas no se habian vuelto columnas todavia.
+        arbol = _mapear(arbol, _reescribir_ventanas)
         return sqlglot.parse_one(arbol.sql(dialect=DIALECTO), read=DIALECTO)
 
     for nombre, tramo, _pos in variables:
@@ -1046,7 +1199,7 @@ def compilar_compuesta(
     # Lo que quede como columna y no sea una de las metricas nombradas es un
     # campo suelto, y aqui no hay tabla de donde sacarlo. Se para al compilar y no
     # como aviso: no es una formula discutible, es uno que no se puede ejecutar.
-    esperadas = {d.lower() for d in dependencias}
+    esperadas = {d.lower() for d in dependencias} | {COL_PERIODO, COL_ANIO}
     sueltas = sorted({c.name for c in arbol.find_all(exp.Column)
                       if c.name.lower() not in esperadas})
     if sueltas:
@@ -1058,7 +1211,10 @@ def compilar_compuesta(
             f"calculo a una metrica del hecho donde vive esa columna.",
             0, len(expresion.split("\n")[0])))
 
-    if arbol.find(exp.AggFunc) is not None:
+    # El SUMA que lleva dentro una ventana de tiempo no cuenta: no vuelve a
+    # agrupar, suma los meses que el marco abarca.
+    if any(a.find_ancestor(exp.Window) is None
+           for a in arbol.find_all(exp.AggFunc)):
         fallos.append(Fallo(
             "Una metrica compuesta no puede agregar: lo que recibe ya viene "
             "sumado por cada hecho. Quita el SUMA / PROMEDIO / CONTAR de fuera y "

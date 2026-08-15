@@ -686,6 +686,49 @@ pero no se enseñan.
 En el panel aparecen bajo **Compuestas**, con el punto hueco: los puntos rellenos
 marcan algo que existe —una tabla—, y esto es un cálculo encima de lo que existe.
 
+### Comparar contra otro mes
+
+«Cuánto crecí respecto al mes pasado» se escribe con cuatro funciones, y las cuatro
+van dentro de una **compuesta**:
+
+| | |
+|---|---|
+| `MESANTERIOR([Unidades])` | la misma cifra, del mes de antes |
+| `MISMOMESANIOANTERIOR([Unidades])` | del mismo mes del año pasado |
+| `ACUMANIO([Unidades])` | lo que va del año, desde enero |
+| `PROMEDIOMESES([Unidades], 3)` | promedio de los 3 meses anteriores, sin contar el de la fila |
+
+Así queda el crecimiento mensual:
+
+```
+DIVIDIR([Unidades] - MESANTERIOR([Unidades]), MESANTERIOR([Unidades]), 0)
+```
+
+**Antes hay que decir cuál es la columna del mes.** En la tabla de campos de la
+entidad del calendario hay una casilla **mes**: se marca la columna que nombra un
+mes concreto —`Periodo_YYYYMM`, o una fecha—. **No** se marca un `Mes` de 1 a 12:
+ese se repite todos los años, y correrlo un mes hacia atrás no significa nada. Por
+eso la casilla sólo se puede marcar donde el tipo lo permite.
+
+Y en la consulta, esa columna tiene que estar en el desglose. Sin meses no hay «mes
+anterior», y en vez de repetirte el total —que parecería una comparación— te lo
+dice.
+
+Tres cosas que conviene saber, porque son decisiones y no accidentes:
+
+- **Un mes sin datos sale vacío**, no el de dos meses atrás. Si en marzo no se
+  facturó, el crecimiento de abril queda en blanco. Es lo correcto: la alternativa
+  es enseñar una comparación falsa sin ninguna señal.
+- **El promedio de 3 meses divide entre 3**, aunque alguno de esos meses no tenga
+  datos. Es lo que hace Power BI, y es a propósito: un mes malo tiene que bajar el
+  promedio, no desaparecer del denominador.
+- **Lo que no se puede sumar, no se acumula.** El acumulado del año de un conteo de
+  clientes distintos contaría dos veces a quien compró en enero y en marzo, así que
+  se rechaza. Contra un solo mes sí vale.
+
+Lo que todavía **no** se puede es meter una función de tiempo dentro de otra, como
+el acumulado del año pasado. Se avisa al guardar.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

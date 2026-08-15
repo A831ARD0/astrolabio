@@ -31,6 +31,7 @@ import sqlglot
 import sqlglot.expressions as exp
 import yaml
 
+from semantic.formula import COL_ANIO, COL_PERIODO
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
 from semantic.formula import compilar_compuesta
@@ -82,6 +83,8 @@ class Campo:
     pii: bool = False
     #: No se repite, aunque no sea la clave primaria. Ver `CampoDef.unico`.
     unico: bool = False
+    #: Que periodo identifica, si identifica alguno. Ver `CampoDef.grano_tiempo`.
+    grano_tiempo: str | None = None
 
 
 @dataclass
@@ -135,6 +138,7 @@ class Modelo:
                     nombre=c["nombre"], tipo=c["tipo"], rol=c["rol"],
                     etiqueta=c.get("etiqueta"), visible=c.get("visible", True),
                     pii=c.get("pii", False), unico=c.get("unico", False),
+                    grano_tiempo=c.get("grano_tiempo"),
                 )
                 for c in e["campos"]
             }
@@ -491,6 +495,95 @@ def _calificar_metricas(expresion: str, donde: dict[str, str],
     return arbol.sql(dialect=dialecto, identify=True)
 
 
+def _indice_de_mes(columna: str, tipo: str) -> tuple[str, str]:
+    """
+    `(indice de mes, año)` a partir de la columna de periodo del desglose.
+
+    El indice es un numero que crece de uno en uno por mes y no se reinicia en
+    enero —`2026*12 + 3`—, que es lo que hace que «tres meses atras» cruce el
+    cambio de año sin un caso especial. Es tambien lo que permite usar `RANGE` en
+    la ventana: como el marco compara VALORES, un mes que falta sale vacio en vez
+    de correr la cuenta una posicion.
+
+    Se aceptan las dos formas en que suele venir un mes: una fecha, y el entero
+    `202601`, que es como lo trae casi cualquier calendario heredado.
+    """
+    if tipo == "fecha":
+        return (f"(YEAR({columna}) * 12 + MONTH({columna}))", f"YEAR({columna})")
+    # `202601` -> año 2026, mes 1. `//` y no `/`: en DuckDB la barra sencilla es
+    # division REAL, asi que `201601 / 100` da 2016.01 y el indice sale con
+    # decimales — entonces `RANGE 1 PRECEDING` no encuentra nunca el mes de antes
+    # y cada mes queda ademas en su propio año. Sale todo vacio, sin error.
+    return (f"((CAST({columna} AS BIGINT) // 100) * 12 + "
+            f"(CAST({columna} AS BIGINT) % 100))",
+            f"(CAST({columna} AS BIGINT) // 100)")
+
+
+def _resolver_ventanas(expresion: str, periodo: str, anio: str,
+                       otras_dims: list[str], dialecto: str = "duckdb") -> str:
+    """
+    Rellena las ventanas de tiempo: por que se ordenan y dentro de que grupo.
+
+    La formula llega con `__periodo__` y `__anio__` de relleno porque quien la
+    escribio no sabe —ni tiene por que— por que columna se va a desglosar la
+    consulta. El `PARTITION BY` de las demas dimensiones es lo que hace que el
+    mes anterior de una sucursal sea el mes anterior DE ESA SUCURSAL, y no la
+    fila que le tocara al lado.
+    """
+    arbol = sqlglot.parse_one(expresion, read=dialecto)
+    marcas = {COL_PERIODO: periodo, COL_ANIO: anio}
+
+    for ventana in arbol.find_all(exp.Window):
+        previas = list(ventana.args.get("partition_by") or [])
+        ventana.set("partition_by",
+                    [sqlglot.parse_one(d, read=dialecto) for d in otras_dims]
+                    + previas)
+    for col in arbol.find_all(exp.Column):
+        if col.name in marcas and not col.table:
+            col.replace(sqlglot.parse_one(marcas[col.name], read=dialecto))
+    return arbol.sql(dialect=dialecto, identify=True)
+
+
+def _abarca_varios_meses(sql: str, dialecto: str = "duckdb") -> bool:
+    """
+    Si alguna ventana suma mas de un mes.
+
+    `MESANTERIOR` es `RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING`: un mes suelto,
+    y sumar un solo valor no cambia nada. El acumulado del año y el promedio de
+    tres meses si suman varios, y ahi la cifra tiene que poder sumarse.
+    """
+    for ventana in sqlglot.parse_one(sql, read=dialecto).find_all(exp.Window):
+        spec = ventana.args.get("spec")
+        if spec is None:
+            continue
+        inicio, fin = spec.args.get("start"), spec.args.get("end")
+        if str(inicio).upper() == "UNBOUNDED" or str(inicio) != str(fin):
+            return True
+    return False
+
+
+def _es_aditiva(sql: str, dialecto: str = "duckdb") -> bool:
+    """
+    Si sumar los valores de varios meses da el valor del conjunto.
+
+    Una suma si; un conteo de valores distintos no —el mismo cliente en enero y
+    en febrero es UN cliente, no dos— y un promedio tampoco. Importa solo para
+    las ventanas que abarcan mas de un mes: `MESANTERIOR` mira un mes suelto, y
+    sumar un solo valor es ese valor.
+    """
+    arbol = sqlglot.parse_one(sql, read=dialecto)
+    agregados = list(arbol.find_all(exp.AggFunc))
+    if not agregados:
+        return False
+    for a in agregados:
+        if isinstance(a, exp.Sum):
+            continue
+        if isinstance(a, exp.Count) and a.find(exp.Distinct) is None:
+            continue
+        return False
+    return True
+
+
 @dataclass
 class Consulta:
     """Peticion en terminos del modelo, no en SQL."""
@@ -701,6 +794,60 @@ class Compilador:
             sql += "\n  GROUP BY " + ", ".join(grupo)
         return sql, params
 
+    def _con_tiempo(self, nombre: str, sql: str, deps: list[str],
+                    dims: list[tuple[str, str]]) -> str:
+        """
+        Resuelve las ventanas de tiempo de una compuesta contra ESTE desglose.
+
+        Una metrica de tiempo no significa nada sin una columna de periodo en el
+        desglose: «el mes anterior» de un total sin meses no existe. Se exige, y
+        se dice cual falta — devolver el total repetido seria dar un numero que
+        parece una comparacion.
+        """
+        periodos = [(e, col) for e, col in dims
+                    if self.m.entidades[e].campos[col].grano_tiempo == "mes"]
+        if len(periodos) != 1:
+            candidatas = [f"{e.nombre}.{c.nombre}"
+                          for e in self.m.entidades.values()
+                          for c in e.campos.values()
+                          if c.grano_tiempo == "mes"]
+            if not periodos:
+                raise ErrorModelo(
+                    f"La metrica '{nombre}' compara contra otro mes, asi que el "
+                    f"desglose tiene que llevar una columna de meses. "
+                    + (f"Agrega {' o '.join(candidatas)}." if candidatas else
+                       "Ninguna columna del modelo esta marcada como mes: "
+                       "marca la del calendario con grano de tiempo «mes»."))
+            raise ErrorModelo(
+                f"La metrica '{nombre}' compara contra otro mes y el desglose "
+                f"lleva {len(periodos)} columnas de meses "
+                f"({', '.join(f'{e}.{col}' for e, col in periodos)}). "
+                f"Deja una sola: con dos no se sabe cual manda.")
+
+        ent, col = periodos[0]
+        columna = f"e.{_cita(f'{ent}.{col}')}"
+        periodo, anio = _indice_de_mes(
+            columna, self.m.entidades[ent].campos[col].tipo)
+        otras = [f"e.{_cita(f'{e2}.{c2}')}" for e2, c2 in dims
+                 if (e2, c2) != (ent, col)]
+
+        # Sumar varios meses solo vale si la cifra se puede sumar. El caso que
+        # importa es un conteo de clientes distintos: el mismo cliente en enero y
+        # en febrero es UNO, y el acumulado del año lo contaria dos veces.
+        if _abarca_varios_meses(sql):
+            for d in deps:
+                met = self.m.metricas[d]
+                if met.compuesta or _es_aditiva(self.m.sql_de(met)):
+                    continue
+                raise ErrorModelo(
+                    f"'{nombre}' suma varios meses de '{d}', y '{d}' no se puede "
+                    f"sumar asi: cuenta valores distintos o promedia, y el mismo "
+                    f"valor en dos meses no son dos. Compara contra un solo mes "
+                    f"(MESANTERIOR, MISMOMESANIOANTERIOR) o calcula el acumulado "
+                    f"desde una metrica que sume.")
+
+        return _resolver_ventanas(sql, periodo, anio, otras)
+
     def compilar(self, c: Consulta,
                  predicados: list | None = None) -> ConsultaCompilada:
         dims = [tuple(d.split(".")) for d in c.dimensiones]
@@ -768,9 +915,11 @@ class Compilador:
             for nombre in c.metricas:
                 met = self.m.metricas[nombre]
                 if met.compuesta:
-                    sql_c, _ = self.m.sql_compuesta(met)
-                    salida.append(
-                        f"{_calificar_metricas(sql_c, donde)} AS {_cita(nombre)}")
+                    sql_c, deps = self.m.sql_compuesta(met)
+                    sql_c = _calificar_metricas(sql_c, donde)
+                    if COL_PERIODO in sql_c:
+                        sql_c = self._con_tiempo(nombre, sql_c, deps, dims)
+                    salida.append(f"{sql_c} AS {_cita(nombre)}")
                 else:
                     salida.append(f"{donde[nombre]}.{_cita(nombre)}")
             return salida

@@ -683,7 +683,8 @@ table.campos th:nth-child(3) { width: 104px; }
    `Nombre_DB` y elegir por donde unir. */
 table.campos th:nth-child(4),
 table.campos th:nth-child(5),
-table.campos th:nth-child(6) { width: 34px; }
+table.campos th:nth-child(6),
+table.campos th:nth-child(7) { width: 34px; }
 table.campos select { width: 100%; }
 table.campos td:first-child { overflow: hidden; text-overflow: ellipsis; }
 table.campos th {

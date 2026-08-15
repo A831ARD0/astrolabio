@@ -93,6 +93,7 @@ export function PanelEntidad({
     : clave === 'rol' ? c.rol
     : clave === 'ver' ? c.visible !== false
     : clave === 'unico' ? c.nombre === entidad.clave_primaria || c.unico === true
+    : clave === 'mes' ? c.grano_tiempo === 'mes'
     : c.pii === true)
 
   const cambiarCampo = (campo: string, cambios: Partial<Campo>) =>
@@ -349,6 +350,13 @@ export function PanelEntidad({
                 única
               </Th>
               <Th orden={orden} clave="pii" titulo="Dato personal">PII</Th>
+              <Th
+                orden={orden}
+                clave="mes"
+                titulo="Esta columna nombra un mes concreto, como 202601. Es lo que permite comparar contra el mes anterior"
+              >
+                mes
+              </Th>
             </tr>
           </thead>
           <tbody>
@@ -398,6 +406,27 @@ export function PanelEntidad({
                     type="checkbox"
                     checked={!!c.pii}
                     onChange={(e) => cambiarCampo(c.nombre, { pii: e.target.checked })}
+                  />
+                </td>
+                <td>
+                  {/* Sólo tiene sentido en una columna que identifique UN mes
+                      —`202601`, o una fecha—. En `mes` de 1 a 12 no: se repite
+                      cada año, y correrla un mes atrás no significa nada. Por eso
+                      se ofrece únicamente donde el tipo lo permite. */}
+                  <input
+                    type="checkbox"
+                    checked={c.grano_tiempo === 'mes'}
+                    disabled={c.tipo !== 'entero' && c.tipo !== 'fecha'}
+                    title={
+                      c.tipo !== 'entero' && c.tipo !== 'fecha'
+                        ? 'Un mes se nombra con un entero (202601) o con una fecha'
+                        : 'Marcar si cada valor nombra un mes concreto, como 202601'
+                    }
+                    onChange={(e) =>
+                      cambiarCampo(c.nombre, {
+                        grano_tiempo: e.target.checked ? 'mes' : null,
+                      })
+                    }
                   />
                 </td>
               </tr>

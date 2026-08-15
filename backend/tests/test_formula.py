@@ -10,7 +10,8 @@ import duckdb
 import pytest
 
 from semantic.formula import (
-    CATALOGO, Contexto, ErrorFormula, catalogo_para_pantalla, compilar, revisar,
+    CATALOGO, Contexto, ContextoCompuesta, ErrorFormula, catalogo_para_pantalla,
+    compilar, compilar_compuesta, revisar,
 )
 
 CAMPOS = {"importe", "costo", "unidades", "tipo", "fecha", "folio"}
@@ -334,14 +335,21 @@ def test_todas_las_funciones_del_catalogo_tienen_un_ejemplo_que_compila():
     """
     El ejemplo sale en la pantalla y en el autocompletado. Uno que no compilara
     seria peor que ninguno: se copia y no funciona.
+
+    Las de la categoria `tiempo` se compilan con el compilador de compuestas
+    porque es el unico donde valen: no leen columnas, envuelven metricas.
     """
     ctx = Contexto(campos={
         "Importe_Venta", "Costo_Venta", "Unidades", "Tipo_Venta", "Fecha_Factura",
         "Numero_Factura", "ID_Vehiculo", "ID_Sucursal", "Utilidad", "Folio",
     })
+    ctx_tiempo = ContextoCompuesta(metricas={"Unidades Vendidas": None})
     for f in CATALOGO.values():
         try:
-            compilar(f.ejemplo, ctx)
+            if f.categoria == "tiempo":
+                compilar_compuesta(f.ejemplo, ctx_tiempo)
+            else:
+                compilar(f.ejemplo, ctx)
         except ErrorFormula as e:                        # pragma: no cover
             pytest.fail(f"El ejemplo de {f.nombre} no compila: {e}")
 
