@@ -932,7 +932,7 @@ def revisar_formula_ruta(modelo_id: int, cuerpo: RevisarFormula, sesion: SesionD
                 _version_vigente(sesion, modelo_id).yaml).contexto_compuesta()
         fallos = revisar_compuesta(cuerpo.expresion, ctx_c)
         try:
-            sql = compilar_compuesta(cuerpo.expresion, ctx_c)[0]
+            sql = compilar_compuesta(cuerpo.expresion, ctx_c).sql
         except Exception:
             sql = None
         return {"fallos": fallos,

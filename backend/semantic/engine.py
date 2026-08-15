@@ -34,7 +34,7 @@ import yaml
 from semantic.formula import COL_ANIO, COL_PERIODO
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
-from semantic.formula import compilar_compuesta
+from semantic.formula import Compuesta, MARCA_CAPA, compilar_compuesta
 from semantic.formula import revisar as revisar_formula
 from semantic.formula import revisar_compuesta
 
@@ -197,7 +197,7 @@ class Modelo:
         # con seis metricas encima de la misma base lo haria seis veces.
         self._sql_formula: dict[str, str] = {}
         #: Lo mismo para las compuestas, por nombre: su SQL y de que dependen.
-        self._sql_compuesta: dict[str, tuple[str, list[str]]] = {}
+        self._sql_compuesta: dict[str, Compuesta] = {}
         #: Grafos alternos, por juego de uniones pedidas. Ver `grafo_con`.
         self._grafos: dict[tuple[str, ...], dict] = {}
 
@@ -237,8 +237,8 @@ class Modelo:
                       for m in self.metricas.values()},
         )
 
-    def sql_compuesta(self, metrica: Metrica) -> tuple[str, list[str]]:
-        """`(sql, metricas de las que depende)` de una metrica compuesta."""
+    def sql_compuesta(self, metrica: Metrica) -> Compuesta:
+        """El SQL de una compuesta, de que depende, y que hay que calcular antes."""
         if metrica.nombre not in self._sql_compuesta:
             try:
                 self._sql_compuesta[metrica.nombre] = compilar_compuesta(
@@ -260,7 +260,7 @@ class Modelo:
         metrica = self.metricas[nombre]
         if not metrica.compuesta:
             return [nombre]
-        return self.sql_compuesta(metrica)[1]
+        return self.sql_compuesta(metrica).dependencias
 
     def sql_de(self, metrica: Metrica) -> str:
         """La formula de la metrica, ya como SQL de DuckDB."""
@@ -860,7 +860,7 @@ class Compilador:
         return sql, params
 
     def _con_tiempo(self, nombre: str, sql: str, deps: list[str],
-                    dims: list[tuple[str, str]]) -> str:
+                    dims: list[tuple[str, str]], prefijo: str = "e.") -> str:
         """
         Resuelve las ventanas de tiempo de una compuesta contra ESTE desglose.
 
@@ -890,10 +890,10 @@ class Compilador:
                 f"Deja una sola: con dos no se sabe cual manda.")
 
         ent, col = periodos[0]
-        columna = f"e.{_cita(f'{ent}.{col}')}"
+        columna = f"{prefijo}{_cita(f'{ent}.{col}')}"
         periodo, anio = _indice_de_mes(
             columna, self.m.entidades[ent].campos[col].tipo)
-        otras = [f"e.{_cita(f'{e2}.{c2}')}" for e2, c2 in dims
+        otras = [f"{prefijo}{_cita(f'{e2}.{c2}')}" for e2, c2 in dims
                  if (e2, c2) != (ent, col)]
 
         # Sumar varios meses solo vale si la cifra se puede sumar. El caso que
@@ -972,7 +972,33 @@ class Compilador:
         # Donde quedo cada metrica base, para poder nombrarla desde fuera.
         donde = {m: n for n, _, ms in ctes for m in ms}
 
-        def columnas_pedidas() -> list[str]:
+        # Lo que hay que calcular una capa antes: las ventanas de tiempo metidas
+        # dentro de otras. Se juntan las de todas las metricas pedidas, porque la
+        # capa es una sola para la consulta entera.
+        # Se guarda tambien de que depende cada una: la capa de abajo tambien
+        # suma meses, asi que le toca la misma revision —no se acumula un conteo
+        # de valores distintos— y sin las dependencias esa revision no puede
+        # correr.
+        intermedias: dict[str, tuple[str, list[str], str]] = {}
+        for nombre in c.metricas:
+            met = self.m.metricas[nombre]
+            if met.compuesta:
+                comp = self.m.sql_compuesta(met)
+                for marca, sql_i in comp.intermedias.items():
+                    intermedias[marca] = (sql_i, comp.dependencias, nombre)
+
+        def expresion(nombre: str, sitio: dict[str, str], prefijo: str) -> str:
+            met = self.m.metricas[nombre]
+            if not met.compuesta:
+                return f"{sitio[nombre]}.{_cita(nombre)}"
+            comp = self.m.sql_compuesta(met)
+            sql_c = _calificar_metricas(comp.sql, sitio)
+            if COL_PERIODO in sql_c:
+                sql_c = self._con_tiempo(nombre, sql_c, comp.dependencias, dims,
+                                         prefijo)
+            return sql_c
+
+        def columnas_pedidas(sitio: dict[str, str], prefijo: str) -> list[str]:
             """
             Solo lo que se pidio, en el orden en que se pidio.
 
@@ -980,25 +1006,20 @@ class Compilador:
             quedan dentro: quien pide el porcentaje de logro pidio una columna, no
             tres.
             """
-            salida = []
-            for nombre in c.metricas:
-                met = self.m.metricas[nombre]
-                if met.compuesta:
-                    sql_c, deps = self.m.sql_compuesta(met)
-                    sql_c = _calificar_metricas(sql_c, donde)
-                    if COL_PERIODO in sql_c:
-                        sql_c = self._con_tiempo(nombre, sql_c, deps, dims)
-                    salida.append(f"{sql_c} AS {_cita(nombre)}")
-                else:
-                    salida.append(f"{donde[nombre]}.{_cita(nombre)}")
-            return salida
+            return [f"{expresion(n, sitio, prefijo)} AS {_cita(n)}"
+                    if self.m.metricas[n].compuesta
+                    else expresion(n, sitio, prefijo)
+                    for n in c.metricas]
 
         if not dims:
-            # Sin desglose: los CTE tienen una sola fila cada uno.
+            # Sin desglose: los CTE tienen una sola fila cada uno. Una metrica con
+            # capa intermedia no llega aqui: `_con_tiempo` ya exige una columna de
+            # meses en el desglose, y sin desglose no hay ninguna.
             froms = ", ".join(n for n, _, _ in ctes)
             partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
             return ConsultaCompilada(
-                f"WITH {partes}\nSELECT " + ", ".join(columnas_pedidas()) +
+                f"WITH {partes}\nSELECT "
+                + ", ".join(columnas_pedidas(donde, "e.")) +
                 f"\nFROM {froms}", parametros
             )
 
@@ -1014,9 +1035,37 @@ class Compilador:
                 f"e.{_cita(cd)} IS NOT DISTINCT FROM {n}.{_cita(cd)}" for cd in cols_dim
             )
             joins.append(f"LEFT JOIN {n} ON {cond}")
-        sel = [f"e.{_cita(cd)}" for cd in cols_dim] + columnas_pedidas()
 
         partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
+
+        if intermedias:
+            # Dos capas. Abajo se calcula el acumulado de cada mes; arriba se
+            # desplaza doce meses. En una sola no cabe: una ventana no puede ir
+            # dentro de otra, y ensanchar el marco no vale porque el ancho
+            # dependeria del mes de cada fila.
+            sel_capa = (
+                [f"e.{_cita(cd)} AS {_cita(cd)}" for cd in cols_dim]
+                + [f"{n}.{_cita(m)} AS {_cita(m)}" for n, _, ms in ctes for m in ms]
+                + [f"{self._con_tiempo(duena, _calificar_metricas(sql_i, donde), deps, dims)}"
+                   f" AS {_cita(k)}"
+                   for k, (sql_i, deps, duena) in intermedias.items()]
+            )
+            arriba = {**{m: "b" for _n, _b, ms in ctes for m in ms},
+                      **{k: "b" for k in intermedias}}
+            sel = ([f"b.{_cita(cd)}" for cd in cols_dim]
+                   + columnas_pedidas(arriba, "b."))
+            sql = (
+                f"WITH {partes},\nespina AS (\n  {espina}\n),\n"
+                f"capa1 AS (\n  SELECT\n    " + ",\n    ".join(sel_capa) +
+                f"\n  FROM espina AS e\n  " + "\n  ".join(joins) + "\n)\n"
+                f"SELECT\n  " + ",\n  ".join(sel) +
+                f"\nFROM capa1 AS b"
+                f"\nORDER BY " + ", ".join(f"b.{_cita(cd)}" for cd in cols_dim) +
+                f"\nLIMIT {int(c.limite)}"
+            )
+            return ConsultaCompilada(sql, parametros)
+
+        sel = [f"e.{_cita(cd)}" for cd in cols_dim] + columnas_pedidas(donde, "e.")
         sql = (
             f"WITH {partes},\nespina AS (\n  {espina}\n)\n"
             f"SELECT\n  " + ",\n  ".join(sel) +

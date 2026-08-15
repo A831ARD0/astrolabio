@@ -58,8 +58,12 @@ versionado es [semántico](https://semver.org/lang/es/).
   suele venir, entero `202601` y fecha, para no tener que tocar el ETL.
 
   Una función de tiempo **dentro de otra** —el `SAMEPERIODLASTYEAR(DATESYTD(…))` de
-  DAX— se rechaza al guardar: el marco tendría que ensancharse conforme avanza el
-  mes, y eso ya no es un marco fijo. Está pendiente.
+  DAX, o sea el acumulado del año pasado— se calcula en **dos capas**: abajo el
+  acumulado de cada mes, y encima el desplazamiento de doce. En una sola ventana no
+  cabe: para marzo habría que sumar tres meses del año pasado y para noviembre once,
+  así que el marco tendría que ensancharse fila a fila y entonces ya no es un marco.
+  La capa de abajo pasa la misma revisión que la de arriba, así que partir el
+  cálculo en dos no es una forma de colar un acumulado de lo que no se suma.
 
 - **Métricas compuestas: una cifra que sale de dividir dos hechos distintos.** El
   porcentaje de logro es lo vendido entre lo presupuestado, y lo vendido está en las

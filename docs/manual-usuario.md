@@ -757,8 +757,15 @@ Tres cosas que conviene saber, porque son decisiones y no accidentes:
   clientes distintos contaría dos veces a quien compró en enero y en marzo, así que
   se rechaza. Contra un solo mes sí vale.
 
-Lo que todavía **no** se puede es meter una función de tiempo dentro de otra, como
-el acumulado del año pasado. Se avisa al guardar.
+Una función de tiempo puede ir **dentro de otra**, que es como se escribe el
+acumulado del año pasado:
+
+```
+MISMOMESANIOANTERIOR(ACUMANIO([Unidades]))
+```
+
+Se calcula en dos pasos —primero el acumulado de cada mes, luego el salto de doce—
+y da exactamente el acumulado del mismo mes del año anterior.
 
 ### Ordenar las métricas: tablas de medidas
 

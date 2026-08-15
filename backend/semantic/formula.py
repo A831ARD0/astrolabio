@@ -1021,7 +1021,7 @@ VENTANAS: dict[str, Ventana] = {
 def _referencias_compuesta(
     tramo: Tramo, ctx: ContextoCompuesta, fallos: list[Fallo],
     en_curso: tuple[str, ...],
-) -> tuple[str, dict[str, exp.Expression], set[str]]:
+) -> tuple[str, dict[str, exp.Expression], set[str], dict[str, str]]:
     """
     Cambia cada `[metrica]` por una marca, y dice a que arbol apunta cada una.
 
@@ -1034,6 +1034,7 @@ def _referencias_compuesta(
     mascara = enmascarar(tramo.texto)
     apunta: dict[str, exp.Expression] = {}
     dependencias: set[str] = set()
+    intermedias: dict[str, str] = {}
     piezas: list[str] = []
     ultimo = 0
     for i, m in enumerate(_REFERENCIA.finditer(mascara)):
@@ -1062,15 +1063,16 @@ def _referencias_compuesta(
                 dependencias.add(real)
                 arbol = exp.column(real, quoted=True)
             else:
-                sql, deps = compilar_compuesta(expresion, ctx, (*en_curso, real))
-                dependencias.update(deps)
-                arbol = sqlglot.parse_one(sql, read=DIALECTO)
+                dentro = compilar_compuesta(expresion, ctx, (*en_curso, real))
+                dependencias.update(dentro.dependencias)
+                intermedias.update(dentro.intermedias)
+                arbol = sqlglot.parse_one(dentro.sql, read=DIALECTO)
         apunta[marca.lower()] = arbol
         piezas.append(tramo.texto[ultimo:m.start()])
         piezas.append(marca)
         ultimo = m.end()
     piezas.append(tramo.texto[ultimo:])
-    return "".join(piezas), apunta, dependencias
+    return "".join(piezas), apunta, dependencias, intermedias
 
 
 #: La columna por la que se ordena una ventana de tiempo, y la que reinicia el
@@ -1078,6 +1080,28 @@ def _referencias_compuesta(
 #: de consultas, que es el unico que sabe por que columna se esta desglosando.
 COL_PERIODO = "__periodo__"
 COL_ANIO = "__anio__"
+
+#: Como se llama una ventana que hay que calcular una capa antes. Ver `Compuesta`.
+MARCA_CAPA = "__capa1_{}__"
+
+
+@dataclass
+class Compuesta:
+    """
+    Una compuesta ya compilada.
+
+    `intermedias` sale de meter una funcion de tiempo dentro de otra —«el
+    acumulado del año pasado»—. Eso no es una ventana con otro marco: para el mes
+    de marzo habria que sumar tres meses del año pasado y para el de noviembre
+    once, asi que el marco tendria que ensancharse fila a fila y ya no seria un
+    marco. Lo que si se puede es calcularlo en DOS pasos —primero el acumulado de
+    cada mes, y encima el desplazamiento de doce— y eso es lo que hay aqui: lo
+    que va en la capa de abajo, con el nombre por el que la de arriba lo llama.
+    """
+
+    sql: str
+    dependencias: list[str]
+    intermedias: dict[str, str] = field(default_factory=dict)
 
 
 def _marco(v: Ventana, desde: int | None) -> exp.WindowSpec:
@@ -1128,7 +1152,8 @@ def _en_ventana(arbol: exp.Expression, v: Ventana,
     return arbol.transform(envolver, copy=True)
 
 
-def _reescribir_ventanas(nodo: exp.Expression) -> exp.Expression:
+def _reescribir_ventanas(nodo: exp.Expression,
+                         intermedias: dict[str, str]) -> exp.Expression:
     if not isinstance(nodo, exp.Anonymous):
         return nodo
     v = VENTANAS.get(str(nodo.name).upper())
@@ -1136,16 +1161,14 @@ def _reescribir_ventanas(nodo: exp.Expression) -> exp.Expression:
         return nodo
     args = list(nodo.expressions)
 
-    # Una funcion de tiempo dentro de otra —«el acumulado del año pasado»— no es
-    # una ventana con otro marco: el marco tendria que ser mas ancho cuanto mas
-    # avanzado el mes, y eso ya no es un marco fijo. Se dice, en vez de generar
-    # SQL que compila y devuelve cualquier cosa.
+    # Una funcion de tiempo dentro de otra se calcula en dos pasos: la de dentro
+    # baja a una capa previa con un nombre, y aqui arriba se la nombra. Meterla
+    # dentro de esta ventana no valdria — `SUM(SUM(x) OVER (…)) OVER (…)` no es
+    # SQL— y ensanchar el marco tampoco, porque el ancho dependeria del mes.
     if args and args[0].find(exp.Window) is not None:
-        raise ErrorFormula([Fallo(
-            f"{v.nombre} no puede llevar otra funcion de tiempo dentro. Cada una "
-            f"mira una ventana de meses, y una dentro de otra no define ninguna "
-            f"ventana concreta. Calcula la de dentro en su propia metrica y "
-            f"nombrala aqui.")])
+        marca = MARCA_CAPA.format(len(intermedias))
+        intermedias[marca] = args[0].sql(dialect=DIALECTO)
+        args = [exp.column(marca, quoted=True), *args[1:]]
 
     desde = v.desde
     divisor = v.divisor
@@ -1172,11 +1195,10 @@ def _reescribir_ventanas(nodo: exp.Expression) -> exp.Expression:
 def compilar_compuesta(
     expresion: str, ctx: ContextoCompuesta,
     _en_curso: tuple[str, ...] = (),
-) -> tuple[str, list[str]]:
+) -> Compuesta:
     """
-    Compila una metrica compuesta a SQL. Devuelve `(sql, metricas de las que
-    depende)`, donde cada dependencia aparece en el SQL como una columna con su
-    nombre.
+    Compila una metrica compuesta a SQL. Cada metrica de la que depende aparece
+    en el SQL como una columna con su nombre.
 
     Una compuesta no lee ninguna tabla: se calcula DESPUES de agrupar, sobre las
     cifras que ya dejo cada hecho en su propio grano. Eso es lo que permite
@@ -1192,17 +1214,19 @@ def compilar_compuesta(
     variables, tramo_return = partir(expresion)
     definidas: dict[str, exp.Expression] = {}
     dependencias: set[str] = set()
+    intermedias: dict[str, str] = {}
 
     def preparar(tramo: Tramo) -> exp.Expression:
-        texto, referencias, deps = _referencias_compuesta(
+        texto, referencias, deps, dentro = _referencias_compuesta(
             tramo, ctx, fallos, _en_curso)
         dependencias.update(deps)
+        intermedias.update(dentro)
         arbol = _parsear(texto, tramo)
         arbol = _sustituir_nombres(arbol, {**definidas, **referencias})
         arbol = _mapear(arbol.copy(), _reescribir)
         # Las ventanas van DESPUES: envuelven columnas, y hasta aqui las
         # referencias a metricas no se habian vuelto columnas todavia.
-        arbol = _mapear(arbol, _reescribir_ventanas)
+        arbol = _mapear(arbol, lambda n: _reescribir_ventanas(n, intermedias))
         return sqlglot.parse_one(arbol.sql(dialect=DIALECTO), read=DIALECTO)
 
     for nombre, tramo, _pos in variables:
@@ -1212,7 +1236,8 @@ def compilar_compuesta(
     # Lo que quede como columna y no sea una de las metricas nombradas es un
     # campo suelto, y aqui no hay tabla de donde sacarlo. Se para al compilar y no
     # como aviso: no es una formula discutible, es uno que no se puede ejecutar.
-    esperadas = {d.lower() for d in dependencias} | {COL_PERIODO, COL_ANIO}
+    esperadas = ({d.lower() for d in dependencias} | {COL_PERIODO, COL_ANIO}
+                 | {m.lower() for m in intermedias})
     sueltas = sorted({c.name for c in arbol.find_all(exp.Column)
                       if c.name.lower() not in esperadas})
     if sueltas:
@@ -1236,7 +1261,8 @@ def compilar_compuesta(
 
     if fallos:
         raise ErrorFormula(fallos)
-    return arbol.sql(dialect=DIALECTO), sorted(dependencias)
+    return Compuesta(arbol.sql(dialect=DIALECTO), sorted(dependencias),
+                     intermedias)
 
 
 def revisar_compuesta(expresion: str, ctx: ContextoCompuesta,

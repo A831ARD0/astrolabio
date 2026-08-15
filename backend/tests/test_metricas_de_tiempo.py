@@ -252,21 +252,77 @@ def test_no_se_acumula_lo_que_no_se_puede_sumar(cliente, cab_editor, modelo):
             assert f["clientes_mes_ant"] == clientes[f[MES] - 1]
 
 
-def test_una_funcion_de_tiempo_dentro_de_otra_no_se_guarda(cliente, cab_editor,
-                                                           modelo):
+def test_el_acumulado_del_anio_pasado(cliente, cab_editor, modelo):
     """
-    `SAMEPERIODLASTYEAR(DATESYTD(...))` de DAX. No es una ventana con otro marco:
-    el marco tendria que ensancharse conforme avanza el mes. Se dice en vez de
-    generar SQL que compila y devuelve cualquier cosa.
+    `SAMEPERIODLASTYEAR(DATESYTD(...))` de DAX: una función de tiempo dentro de
+    otra.
+
+    No cabe en una sola ventana. Para marzo habría que sumar tres meses del año
+    pasado y para noviembre once, así que el marco tendría que ensancharse fila a
+    fila — y entonces ya no es un marco. Se calcula en DOS capas: abajo el
+    acumulado de cada mes, y encima el desplazamiento de doce.
+
+    Se comprueba contra el acumulado del mismo mes del año anterior, que es lo
+    que tiene que dar exactamente.
     """
     d = con_tiempo(cliente, cab_editor, modelo)
     d["metricas"].append({
         "nombre": "acum_anio_pasado", "etiqueta": "Acumulado del año pasado",
+        "expresion": "MISMOMESANIOANTERIOR([acum_anio])", "formato": "entero"})
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["acum_anio", "acum_anio_pasado"], [MES])
+    assert r.status_code == 200, r.text
+    filas = sorted(r.json()["filas"], key=lambda f: f[MES])
+    acum = por_mes(filas, "acum_anio")
+
+    comparadas = 0
+    for f in filas:
+        hace_un_anio = f[MES] - 100
+        assert f["acum_anio_pasado"] == acum.get(hace_un_anio)
+        comparadas += hace_un_anio in acum
+    assert comparadas > 10, "hacen falta dos años para que esto pruebe algo"
+
+
+def test_el_acumulado_del_anio_pasado_escrito_de_una_vez(cliente, cab_editor,
+                                                         modelo):
+    """Lo mismo, sin métrica intermedia: la de dentro también se resuelve sola."""
+    d = con_tiempo(cliente, cab_editor, modelo)
+    d["metricas"].append({
+        "nombre": "acum_pasado_directo", "etiqueta": "Acum. año pasado",
         "expresion": "MISMOMESANIOANTERIOR(ACUMANIO([unidades_vendidas]))",
         "formato": "entero"})
-    r = guardar(cliente, cab_editor, modelo, d)
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["acum_anio", "acum_pasado_directo"], [MES])
+    assert r.status_code == 200, r.text
+    filas = sorted(r.json()["filas"], key=lambda f: f[MES])
+    acum = por_mes(filas, "acum_anio")
+    for f in filas:
+        assert f["acum_pasado_directo"] == acum.get(f[MES] - 100)
+
+
+def test_no_se_acumula_el_anio_pasado_de_lo_que_no_se_suma(cliente, cab_editor,
+                                                           modelo):
+    """
+    La capa de abajo también suma meses, así que le toca la misma revisión. Sin
+    esto, meter la ventana en dos pasos era la forma de saltarse el control.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    d["metricas"] += [
+        {"nombre": "clientes", "etiqueta": "Clientes", "entidad": "fact_venta",
+         "expresion": "CONTARUNICOS(cliente_id)", "formato": "entero"},
+        {"nombre": "clientes_acum_pasado", "etiqueta": "Clientes, año pasado",
+         "expresion": "MISMOMESANIOANTERIOR(ACUMANIO([clientes]))",
+         "formato": "entero"},
+    ]
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["clientes_acum_pasado"], [MES])
     assert r.status_code == 422, r.text
-    assert "otra funcion de tiempo dentro" in r.text
+    assert "no se puede sumar" in r.text
 
 
 def test_la_ventana_se_aplica_a_cada_cifra_y_no_al_cociente(cliente, cab_editor,
