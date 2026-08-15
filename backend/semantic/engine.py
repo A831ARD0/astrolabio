@@ -740,6 +740,19 @@ class Compilador:
             ctes.append((f"m{i}", cuerpo, [m.nombre for m in mets]))
             parametros.extend(params)          # el orden importa: CTE por CTE
 
+        # Sin un solo CTE no hay ninguna tabla que leer, y el SQL saldria como
+        # `WITH  SELECT … FROM`, que no es SQL. Pasa con una compuesta que no
+        # depende de nada —`0.05`, un objetivo escrito a mano— pedida sola: es
+        # una constante, y una constante no tiene filas propias. Acompañada de
+        # cualquier otra metrica funciona sin mas, porque entonces si hay CTE.
+        if not ctes:
+            sueltas = ", ".join(c.metricas)
+            raise ErrorModelo(
+                f"Esta consulta no pide ninguna cifra que salga de una tabla"
+                + (f": {sueltas} no depende de ninguna metrica de un hecho. "
+                   f"Pidela junto a la cifra con la que se compara."
+                   if c.metricas else ". Elige al menos una metrica."))
+
         # Donde quedo cada metrica base, para poder nombrarla desde fuera.
         donde = {m: n for n, _, ms in ctes for m in ms}
 

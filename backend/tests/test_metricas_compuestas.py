@@ -215,6 +215,35 @@ def test_dos_compuestas_que_se_llaman_entre_si_no_se_guardan(
     assert "sin final" in r.text
 
 
+def test_una_constante_vale_acompañada(cliente, cab_editor, modelo):
+    """
+    `% Conv Leads Generado = 0.05` — un objetivo escrito a mano — es una metrica
+    de Power BI perfectamente normal, y aqui es una compuesta que no depende de
+    nada.
+
+    Junto a otra cifra funciona: se repite en cada fila, que es lo que se quiere
+    para compararla. Sola no puede: no hay ninguna tabla que leer, asi que
+    tampoco hay filas. Antes de esto salia un `WITH  SELECT … FROM` sin nada, que
+    ni siquiera es SQL, y el error hablaba de sintaxis en vez de decir esto.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    d["metricas"].append({"nombre": "objetivo_conversion",
+                          "etiqueta": "Objetivo de conversión",
+                          "expresion": "0.05", "formato": "porcentaje"})
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    junta = consultar(cliente, cab_editor, modelo,
+                      ["unidades_vendidas", "objetivo_conversion"], [DIM])
+    assert junta.status_code == 200, junta.text
+    filas = junta.json()["filas"]
+    assert filas and all(f["objetivo_conversion"] == pytest.approx(0.05)
+                         for f in filas)
+
+    sola = consultar(cliente, cab_editor, modelo, ["objetivo_conversion"], [DIM])
+    assert sola.status_code == 422, sola.text
+    assert "no depende de ninguna metrica de un hecho" in sola.text
+
+
 def test_se_revisa_mientras_se_escribe(cliente, cab_editor, modelo):
     """
     La ruta que subraya en rojo. Sin entidad, y con las metricas que hay EN LA
