@@ -34,8 +34,8 @@ def test_solo_la_primera_linea_del_detalle():
 
 
 def test_columna_inexistente_dice_cual():
-    dicho = en_castellano('Binder Error: Referenced column "Id_Quiter" not found')
-    assert "'Id_Quiter'" in dicho
+    dicho = en_castellano('Binder Error: Referenced column "Id_Externo" not found')
+    assert "'Id_Externo'" in dicho
 
 
 def test_tabla_inexistente_apunta_a_la_carga():

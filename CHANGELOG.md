@@ -7,6 +7,28 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Una métrica puede elegir por qué relación se une.** Un hecho toca el calendario
+  por más de una fecha mucho más a menudo de lo que parece: un contacto tiene fecha
+  de primera visita, de asignación y de prueba de manejo, y **cada indicador cuenta
+  por la suya**. Es el `USERELATIONSHIP` de DAX.
+
+  Sólo una relación puede seguir activa —si mandaran dos, cada consulta tendría dos
+  caminos igual de válidos y el total dependería de cuál eligiera el compilador—.
+  Las demás se dejan dibujadas e **inactivas**, y en el editor de la métrica hay una
+  casilla por cada una: **Se une por**. Sin marcar nada, se une por la activa, como
+  siempre.
+
+  Elegir una no sólo la enciende: **apaga la que estaba activa entre ese mismo par
+  de tablas**. Si no, quedarían dos caminos a la vez y el modelo volvería a ser
+  ambiguo justo donde se quería precisión.
+
+  Dos métricas del mismo hecho con uniones distintas salen en la misma consulta,
+  cada una por su fecha: se agrupan en CTE distintos: por entidad **y** por unión.
+
+  Se comprueba al guardar que la relación exista y que toque al hecho de la métrica.
+  Nombrar una que no lo toca no fallaría al compilar —el grafo simplemente no
+  cambiaría por ahí— y la cifra saldría por la relación activa sin avisar.
+
 - **Comparar contra otro periodo: el mes anterior, el acumulado del año, el año
   pasado.** Cuatro funciones nuevas, que sólo valen dentro de una métrica compuesta:
   `MESANTERIOR`, `MISMOMESANIOANTERIOR`, `ACUMANIO` y `PROMEDIOMESES`. Son el

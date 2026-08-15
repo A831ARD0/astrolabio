@@ -19,6 +19,7 @@ el texto, que la interfaz tambien permite.
 
 from __future__ import annotations
 
+import difflib
 from typing import Literal
 
 import yaml
@@ -149,6 +150,15 @@ class MetricaDef(_Base):
     tabla_medidas: str | None = None
     expresion: str = Field(min_length=1)
     formato: str = "numero"
+    #: Relaciones que esta metrica usa en vez de la activa, como
+    #: `"entidad.campo -> entidad.campo"`.
+    #:
+    #: Un hecho toca el calendario por mas de una fecha mas a menudo de lo que
+    #: parece: el contacto tiene fecha de primera visita, de asignacion y de
+    #: prueba de manejo, y cada indicador cuenta por la suya. Solo una puede estar
+    #: activa; las demas se dejan dibujadas e inactivas y la metrica dice cual es
+    #: la suya. Es el `USERELATIONSHIP` de DAX.
+    uniones: list[str] = []
 
 
 class Definicion(_Base):
@@ -247,6 +257,35 @@ class Definicion(_Base):
             errores.append(
                 f"'{choque}' es a la vez una entidad y una tabla de medidas. "
                 f"Cambiale el nombre a una de las dos.")
+
+        # Las uniones alternas: que nombren una relacion que existe, y que esa
+        # relacion toque al hecho de la metrica. Nombrar una que no la toca no
+        # falla al compilar —el grafo simplemente no cambia por ahi— y entonces la
+        # metrica devuelve la cifra de la relacion activa como si nada.
+        claves = {f"{r.desde[0]}.{r.desde[1]} -> {r.hasta[0]}.{r.hasta[1]}": r
+                  for r in self.relaciones}
+        for m in self.metricas:
+            for u in m.uniones:
+                rel = claves.get(u)
+                if rel is None:
+                    parecidas = difflib.get_close_matches(u, list(claves), 3, 0.5)
+                    errores.append(
+                        f"La metrica '{m.nombre}' dice unirse por '{u}', que no "
+                        f"es ninguna relacion del modelo."
+                        + (f" ¿Alguna de estas? {'; '.join(parecidas)}"
+                           if parecidas else ""))
+                elif m.entidad is not None and m.entidad not in (rel.desde[0],
+                                                                 rel.hasta[0]):
+                    errores.append(
+                        f"La metrica '{m.nombre}' se calcula desde "
+                        f"'{m.entidad}' y dice unirse por '{u}', que no toca esa "
+                        f"entidad. Elegirla no cambiaria nada y la cifra saldria "
+                        f"por la relacion activa sin avisar.")
+            if m.entidad is None and m.uniones:
+                errores.append(
+                    f"La metrica compuesta '{m.nombre}' no puede elegir "
+                    f"relaciones: no lee ninguna tabla. Ponlas en las metricas "
+                    f"que combina.")
 
         for m in self.metricas:
             if m.tabla_medidas and m.tabla_medidas not in set(nombres_tm):

@@ -93,6 +93,15 @@ export interface Metrica {
   tabla_medidas?: string | null
   expresion: string
   formato?: string
+  /**
+   * Relaciones que esta métrica usa en vez de la activa, como
+   * `"entidad.campo -> entidad.campo"`.
+   *
+   * Un hecho toca el calendario por más de una fecha más a menudo de lo que
+   * parece. Sólo una puede estar activa; las demás se dejan dibujadas e
+   * inactivas y la métrica dice cuál es la suya.
+   */
+  uniones?: string[]
   [clave: string]: unknown
 }
 

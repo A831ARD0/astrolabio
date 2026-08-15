@@ -25,9 +25,9 @@ def _yaml(*, unico: bool) -> str:
         modelo: sucursales
         version: 1
         entidades:
-          - nombre: fact_hubspot
+          - nombre: fact_lead
             tipo: hecho
-            origen: {{tabla: fact_hubspot}}
+            origen: {{tabla: fact_lead}}
             campos:
               - {{nombre: id_lead,    tipo: entero,  rol: clave}}
               - {{nombre: id_sucursal, tipo: entero, rol: clave_externa}}
@@ -35,20 +35,20 @@ def _yaml(*, unico: bool) -> str:
           - nombre: cat_sucursal
             tipo: dimension
             origen: {{tabla: cat_sucursal}}
-            clave_primaria: id_sucursal_quiter
+            clave_primaria: id_sucursal_propio
             campos:
-              - {{nombre: id_sucursal_quiter, tipo: entero, rol: clave}}
-              - {{nombre: id_sucursal_hubspot, tipo: entero, rol: clave,
+              - {{nombre: id_sucursal_propio, tipo: entero, rol: clave}}
+              - {{nombre: id_sucursal_crm, tipo: entero, rol: clave,
                   unico: {str(unico).lower()}}}
               - {{nombre: nombre, tipo: texto, rol: dimension}}
         relaciones:
-          - desde: [fact_hubspot, id_sucursal]
-            hasta: [cat_sucursal, id_sucursal_hubspot]
+          - desde: [fact_lead, id_sucursal]
+            hasta: [cat_sucursal, id_sucursal_crm]
             cardinalidad: muchos_a_uno
         metricas:
           - nombre: importe_total
             etiqueta: Importe
-            entidad: fact_hubspot
+            entidad: fact_lead
             expresion: SUMA(importe)
     """).strip()
 
@@ -74,7 +74,7 @@ def test_sin_declarar_nada_el_lado_uno_se_avisa(escribir):
     avisos = _avisos(Modelo(escribir(_yaml(unico=False))))
     assert len(avisos) == 1
     assert avisos[0]["gravedad"] == "advertencia"
-    assert "id_sucursal_hubspot" in avisos[0]["mensaje"]
+    assert "id_sucursal_crm" in avisos[0]["mensaje"]
 
 
 def test_marcarla_unica_calla_el_aviso_sin_tocar_la_clave(escribir):
@@ -86,14 +86,14 @@ def test_marcarla_unica_calla_el_aviso_sin_tocar_la_clave(escribir):
     m = Modelo(escribir(texto))
     assert _avisos(m) == []
     # Y la clave primaria sigue siendo la de siempre.
-    assert m.entidades["cat_sucursal"].clave_primaria == "id_sucursal_quiter"
+    assert m.entidades["cat_sucursal"].clave_primaria == "id_sucursal_propio"
 
 
 def test_la_clave_primaria_ya_vale_por_si_sola(escribir):
     """No hace falta marcar `unico` en la clave: lo es por definicion."""
     texto = _yaml(unico=False).replace(
-        "hasta: [cat_sucursal, id_sucursal_hubspot]",
-        "hasta: [cat_sucursal, id_sucursal_quiter]")
+        "hasta: [cat_sucursal, id_sucursal_crm]",
+        "hasta: [cat_sucursal, id_sucursal_propio]")
     assert _avisos(Modelo(escribir(texto))) == []
 
 
@@ -112,6 +112,6 @@ def test_el_campo_conserva_la_marca_al_ir_y_volver():
     """`unico` sobrevive al viaje por la definicion: no se pierde al guardar."""
     d = desde_yaml(_yaml(unico=True))
     campo = next(c for e in d.entidades for c in e.campos
-                 if c.nombre == "id_sucursal_hubspot")
+                 if c.nombre == "id_sucursal_crm")
     assert campo.unico is True
     assert d.model_dump()["entidades"][1]["campos"][1]["unico"] is True

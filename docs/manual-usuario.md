@@ -686,6 +686,37 @@ pero no se enseñan.
 En el panel aparecen bajo **Compuestas**, con el punto hueco: los puntos rellenos
 marcan algo que existe —una tabla—, y esto es un cálculo encima de lo que existe.
 
+### Cuando una tabla se une por más de una fecha
+
+Un contacto tiene fecha de primera visita, de asignación a sucursal y de prueba de
+manejo. Las tres apuntan al calendario y las tres son ciertas, pero **cada
+indicador cuenta por la suya**: el tráfico de piso por la visita, los leads
+asignados por la asignación.
+
+Sólo una relación puede estar **activa**. Si estuvieran dos, cada consulta tendría
+dos caminos igual de válidos hacia el calendario y el total dependería de cuál
+eligiera el compilador — que es exactamente lo que este motor no hace.
+
+Así que se dibujan todas y se dejan **inactivas** menos una. Después, en el editor
+de cada métrica, aparece **Se une por** con una casilla por cada relación inactiva
+que toque su hecho:
+
+```
+Se une por      sin marcar nada, por la relación activa
+  ☐ fecha_1ra_visita_piso      → dim_calendario.fecha
+  ☑ fecha_asignacion_sucursal  → dim_calendario.fecha
+  ☐ fecha_prueba_de_manejo     → dim_calendario.fecha
+```
+
+Marcar una la enciende **para esa métrica y sólo para esa**, y de paso apaga la que
+estuviera activa entre esas dos tablas — si no, volverían a quedar dos caminos.
+Dos métricas del mismo hecho pueden ir cada una por su fecha y salir juntas en el
+mismo tablero.
+
+Al guardar se comprueba que la relación exista y que toque al hecho de la métrica.
+Elegir una que no lo toca no daría error al calcular: la cifra saldría por la
+relación activa como si nada, y eso es peor que un error.
+
 ### Comparar contra otro mes
 
 «Cuánto crecí respecto al mes pasado» se escribe con cuatro funciones, y las cuatro

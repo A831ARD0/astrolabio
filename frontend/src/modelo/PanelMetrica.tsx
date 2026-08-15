@@ -132,6 +132,29 @@ export function PanelMetrica({
 
   const campos = useMemo(() => (compuesta ? [] : entidad?.campos ?? []), [compuesta, entidad])
 
+  /**
+   * Las relaciones **inactivas** que tocan a este hecho: las que la métrica
+   * puede pedir en vez de la activa.
+   *
+   * Sólo las inactivas. La activa ya se usa sin decir nada, así que ofrecerla
+   * sería ofrecer una casilla que no hace nada.
+   */
+  const alternas = useMemo(() => {
+    if (compuesta || !borrador.entidad) return []
+    return (definicion.relaciones ?? [])
+      .filter(
+        (r) =>
+          r.activa === false &&
+          (r.desde[0] === borrador.entidad || r.hasta[0] === borrador.entidad),
+      )
+      .map((r) => ({
+        clave: `${r.desde[0]}.${r.desde[1]} -> ${r.hasta[0]}.${r.hasta[1]}`,
+        // Lo que hay que leer es por qué columna del hecho se une.
+        propia: r.desde[0] === borrador.entidad ? r.desde[1] : r.hasta[1],
+        otra: r.desde[0] === borrador.entidad ? r.hasta.join('.') : r.desde.join('.'),
+      }))
+  }, [definicion.relaciones, borrador.entidad, compuesta])
+
   // El contexto que lee el autocompletado. Se fija en cada render porque cambia
   // al cambiar de entidad, y es una asignación de tres campos.
   fijarContexto({
@@ -319,6 +342,11 @@ export function PanelMetrica({
                     setBorrador({
                       ...borrador,
                       entidad: e.target.value === COMPUESTA ? null : e.target.value,
+                      // Las relaciones elegidas eran del hecho anterior: al
+                      // cambiarlo dejan de tocarlo, y guardar así ni siquiera
+                      // pasa la revisión. Se limpian aquí en vez de dejar que
+                      // falle al aceptar.
+                      uniones: [],
                     })
                   }
                 >
@@ -376,6 +404,43 @@ export function PanelMetrica({
 
             {nombreRepetido && (
               <div className="error-caja">Ya hay otra métrica con ese nombre.</div>
+            )}
+
+            {/*
+              Sólo sale cuando hay relaciones inactivas que tocan este hecho, que
+              es cuando la elección existe. En un hecho con una sola fecha, esta
+              caja no diría nada y ocuparía el sitio de la fórmula.
+            */}
+            {alternas.length > 0 && (
+              <div className="campo">
+                <label>
+                  Se une por
+                  <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 8 }}>
+                    sin marcar nada, por la relación activa
+                  </span>
+                </label>
+                <div className="atajos">
+                  {alternas.map((r) => (
+                    <label key={r.clave} className="chico" style={{ display: 'block' }}>
+                      <input
+                        type="checkbox"
+                        checked={(borrador.uniones ?? []).includes(r.clave)}
+                        onChange={(e) => {
+                          const puestas = borrador.uniones ?? []
+                          setBorrador({
+                            ...borrador,
+                            uniones: e.target.checked
+                              ? [...puestas, r.clave]
+                              : puestas.filter((u) => u !== r.clave),
+                          })
+                        }}
+                      />{' '}
+                      <span className="mono">{r.propia}</span>
+                      <span className="tenue"> → {r.otra}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/*

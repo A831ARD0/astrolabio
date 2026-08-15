@@ -91,7 +91,8 @@ export function PanelRelaciones({
       // Lo que importa del lado «uno» es que no se repita, y eso puede constar
       // de dos maneras: siendo la clave primaria, o estando marcada como única.
       // Una entidad tiene una sola clave primaria y suele traer varios
-      // identificadores irrepetibles —el propio, el de Quiter, el del CRM—, uno
+      // identificadores irrepetibles —el propio, el del sistema de origen,
+      // el del CRM—, uno
       // por cada hecho que se une contra ella.
       const campoDestino = destino?.campos.find((c) => c.nombre === r.hasta[1])
       const consta =

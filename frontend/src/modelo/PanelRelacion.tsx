@@ -57,7 +57,7 @@ export function PanelRelacion({
       {/*
         Las columnas se eligen aquí y no sólo arrastrando en el lienzo. Dos
         tablas que se relacionan casi nunca llaman igual a su clave —ID_Sucursal
-        contra ID_Quiter— y acertar la tabla y fallar la columna es el error
+        contra Sucursal_Codigo— y acertar la tabla y fallar la columna es el error
         corriente. Sin esto había que quitar la relación y volver a hacerla.
       */}
       <div className="campo">
@@ -122,10 +122,10 @@ export function PanelRelacion({
 
       {r.activa === false && (
         <div className="aviso-caja">
-          Ninguna consulta pasa por aquí. Sirve para dejar documentada la unión
-          —y poder activarla cuando toque—, pero para <b>usar</b> esta columna en
-          una cifra hay que activarla y desactivar la otra, o traer{' '}
-          <b>{r.hasta[0]}</b> una segunda vez como entidad aparte.
+          No se usa por omisión: una consulta que no diga nada pasa por la
+          activa. Para que una cifra concreta se una <b>por aquí</b>, ábrela y
+          márcala en <b>Se une por</b> — así conviven el tráfico contado por una
+          fecha y los leads contados por otra, sin tocar el resto del modelo.
         </div>
       )}
 

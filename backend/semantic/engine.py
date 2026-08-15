@@ -108,6 +108,16 @@ class Relacion:
     #: Solo las activas se recorren al consultar. Ver `RelacionDef.activa`.
     activa: bool = True
 
+    @property
+    def clave(self) -> str:
+        """Como se nombra esta relacion desde una metrica. Ver `Metrica.uniones`."""
+        return (f"{self.entidad_a}.{self.campo_a} -> "
+                f"{self.entidad_b}.{self.campo_b}")
+
+    @property
+    def par(self) -> tuple[str, str]:
+        return tuple(sorted((self.entidad_a, self.entidad_b)))  # type: ignore[return-value]
+
 
 @dataclass
 class Metrica:
@@ -119,6 +129,8 @@ class Metrica:
     entidad: str | None
     expresion: str
     formato: str = "numero"
+    #: Relaciones que ESTA metrica usa en vez de la activa. Ver `Modelo.grafo_con`.
+    uniones: tuple[str, ...] = ()
 
     @property
     def compuesta(self) -> bool:
@@ -159,7 +171,8 @@ class Modelo:
 
         self.metricas: dict[str, Metrica] = {
             m["nombre"]: Metrica(m["nombre"], m["etiqueta"], m.get("entidad"),
-                                 m["expresion"], m.get("formato", "numero"))
+                                 m["expresion"], m.get("formato", "numero"),
+                                 tuple(m.get("uniones", []) or ()))
             for m in crudo.get("metricas", [])
         }
 
@@ -185,6 +198,8 @@ class Modelo:
         self._sql_formula: dict[str, str] = {}
         #: Lo mismo para las compuestas, por nombre: su SQL y de que dependen.
         self._sql_compuesta: dict[str, tuple[str, list[str]]] = {}
+        #: Grafos alternos, por juego de uniones pedidas. Ver `grafo_con`.
+        self._grafos: dict[tuple[str, ...], dict] = {}
 
     # ---------------- metricas ----------------
 
@@ -265,8 +280,49 @@ class Modelo:
 
     # ---------------- rutas ----------------
 
+    def relaciones_nombrables(self, entidad: str) -> list[Relacion]:
+        """
+        Las relaciones INACTIVAS que tocan a esta entidad.
+
+        Son las unicas que una metrica puede pedir: la activa ya se usa sin decir
+        nada, y nombrarla no cambiaria nada.
+        """
+        return [r for r in self.relaciones
+                if not r.activa and entidad in (r.entidad_a, r.entidad_b)]
+
+    def grafo_con(self, uniones: tuple[str, ...]) -> dict[str, list[tuple[str, Relacion]]]:
+        """
+        El grafo como lo ve una metrica que pidio unirse por otras relaciones.
+
+        Un hecho toca el calendario por mas de una fecha mas a menudo de lo que
+        parece: el contacto tiene fecha de primera visita, de asignacion y de
+        prueba de manejo, y cada indicador cuenta por la suya. Solo UNA puede
+        estar activa —si mandaran dos, cada consulta tendria dos caminos igual de
+        validos y el total dependeria de cual eligiera el compilador—, asi que las
+        demas se dejan dibujadas e inactivas y la metrica dice cual es la suya.
+
+        Activar la pedida no basta: hay que APAGAR la que estaba activa entre ese
+        mismo par de entidades. Si no, quedan dos caminos a la vez y el modelo
+        vuelve a ser ambiguo justo donde se queria precision.
+        """
+        if not uniones:
+            return self.grafo
+        if uniones not in self._grafos:
+            pedidas = {r.clave: r for r in self.relaciones if r.clave in uniones}
+            pares = {r.par for r in pedidas.values()}
+            grafo: dict[str, list[tuple[str, Relacion]]] = {n: [] for n in self.entidades}
+            for r in self.relaciones:
+                activa = r.clave in pedidas or (r.activa and r.par not in pares)
+                if not activa:
+                    continue
+                grafo[r.entidad_a].append((r.entidad_b, r))
+                grafo[r.entidad_b].append((r.entidad_a, r))
+            self._grafos[uniones] = grafo
+        return self._grafos[uniones]
+
     def rutas_minimas(self, desde: str, hasta: str, tope: int = 6,
-                      atravesar_hechos: bool = False) -> list[list[str]]:
+                      atravesar_hechos: bool = False,
+                      grafo: dict | None = None) -> list[list[str]]:
         """
         Rutas de longitud minima entre dos entidades.
 
@@ -282,6 +338,7 @@ class Modelo:
         """
         if desde == hasta:
             return [[desde]]
+        g = self.grafo if grafo is None else grafo
         encontradas: list[list[str]] = []
         mejor = tope
 
@@ -289,7 +346,7 @@ class Modelo:
             nonlocal mejor
             if len(camino) - 1 > mejor:
                 return
-            for vecina, rel in self.grafo[actual]:
+            for vecina, rel in g[actual]:
                 if vecina in camino:
                     continue
                 # Para agregar, cada salto debe ir del lado "muchos" al lado
@@ -314,17 +371,19 @@ class Modelo:
         dfs(desde, [desde])
         return encontradas
 
-    def ruta_unica(self, desde: str, hasta: str) -> list[str]:
+    def ruta_unica(self, desde: str, hasta: str,
+                   grafo: dict | None = None) -> list[str]:
         """Ruta unica para agregar, o error. Nunca elige en silencio."""
-        rutas = self.rutas_minimas(desde, hasta)
+        rutas = self.rutas_minimas(desde, hasta, grafo=grafo)
         if not rutas:
             raise SinRuta(desde, hasta)
         if len(rutas) > 1:
             raise RutaAmbigua(desde, hasta, rutas)
         return rutas[0]
 
-    def relacion_entre(self, a: str, b: str) -> Relacion:
-        for vecina, rel in self.grafo[a]:
+    def relacion_entre(self, a: str, b: str,
+                       grafo: dict | None = None) -> Relacion:
+        for vecina, rel in (self.grafo if grafo is None else grafo)[a]:
             if vecina == b:
                 return rel
         raise SinRuta(a, b)
@@ -610,11 +669,12 @@ class Compilador:
 
     # -- joins ---------------------------------------------------------------
 
-    def _sql_join(self, ruta: list[str], alias: dict[str, str]) -> str:
+    def _sql_join(self, ruta: list[str], alias: dict[str, str],
+                  grafo: dict | None = None) -> str:
         partes = []
         for i in range(len(ruta) - 1):
             a, b = ruta[i], ruta[i + 1]
-            rel = self.m.relacion_entre(a, b)
+            rel = self.m.relacion_entre(a, b, grafo)
             if rel.entidad_a == a:
                 ca, cb = rel.campo_a, rel.campo_b
             else:
@@ -627,6 +687,7 @@ class Compilador:
 
     def _plan_alcance(self, ent_base: str, objetivos: list[str],
                       rutas_elegidas: dict[str, str],
+                      grafo: dict | None = None,
                       ) -> tuple[dict[str, str], list[str]]:
         """
         Alias de tabla y JOINs para alcanzar `objetivos` partiendo de `ent_base`.
@@ -647,7 +708,7 @@ class Compilador:
             if clave in rutas_elegidas:
                 ruta = rutas_elegidas[clave].split(" → ")
             else:
-                ruta = self.m.ruta_unica(ent_base, ent)
+                ruta = self.m.ruta_unica(ent_base, ent, grafo)
             rutas[ent] = ruta
             necesarias.update(ruta)
 
@@ -660,7 +721,7 @@ class Compilador:
                 tramo.append(paso)
                 if paso in vistos:
                     continue
-                joins.append(self._sql_join(tramo[-2:], alias))
+                joins.append(self._sql_join(tramo[-2:], alias, grafo))
                 vistos.add(paso)
         return alias, joins
 
@@ -738,7 +799,11 @@ class Compilador:
             if p.entidad not in objetivos:
                 objetivos.append(p.entidad)
 
-        alias, joins = self._plan_alcance(ent_metrica, objetivos, rutas_elegidas)
+        # Todas las metricas de este CTE comparten uniones: `compilar` las agrupa
+        # por eso, precisamente para poder unir aqui de una sola forma.
+        grafo = self.m.grafo_con(metricas[0].uniones)
+        alias, joins = self._plan_alcance(ent_metrica, objetivos, rutas_elegidas,
+                                          grafo)
 
         sel_dims = [
             f"{alias[e]}.{_cita(c)} AS {_cita(f'{e}.{c}')}" for e, c in dims
@@ -868,19 +933,23 @@ class Compilador:
             else:
                 pedidas.append(nombre)
 
-        por_entidad: dict[str, list[Metrica]] = {}
+        # Por entidad Y por uniones, no solo por entidad: dos metricas del mismo
+        # hecho que se unen al calendario por fechas distintas —una por la primera
+        # visita y otra por la asignacion— no pueden compartir CTE, porque el CTE
+        # es justamente donde se decide por donde se une.
+        por_grupo: dict[tuple[str, tuple[str, ...]], list[Metrica]] = {}
         vistas: set[str] = set()
         for nombre in pedidas:
             if nombre in vistas:
                 continue
             vistas.add(nombre)
             met = self.m.metricas[nombre]
-            por_entidad.setdefault(met.entidad, []).append(met)
+            por_grupo.setdefault((met.entidad, met.uniones), []).append(met)
 
         ctes: list[tuple[str, str, list[str]]] = []
         parametros: list = []
         cols_dim = [f"{e}.{cc}" for e, cc in dims]
-        for i, (ent, mets) in enumerate(por_entidad.items()):
+        for i, ((ent, _u), mets) in enumerate(por_grupo.items()):
             cuerpo, params = self._cte_metrica(
                 ent, mets, dims, c.filtros, c.rutas_elegidas, predicados
             )
