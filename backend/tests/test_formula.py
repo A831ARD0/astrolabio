@@ -135,6 +135,26 @@ def test_calcular_acumula_las_condiciones(con, ctx):
                  "CALCULAR(SUMA(importe), tipo = 'Contado', unidades > 0)") == 100.0
 
 
+def test_calcular_sobre_una_metrica_ya_filtrada_acumula(con, ctx):
+    """
+    Acotar una metrica que a su vez acota otra: «lo de contado, y ademas con
+    unidades». Las dos condiciones tienen que valer a la vez.
+
+    Antes esto ni siquiera daba un numero equivocado: fallaba diciendo que
+    CALCULAR no encontraba ninguna agregacion dentro — habiendola, solo que ya
+    envuelta en su propio FILTER—. Es el patron de toda una familia de medidas
+    que llegan de Power BI: un total con su regla, y luego los tramos de ese
+    total.
+    """
+    ctx.metricas["contado"] = "CALCULAR(SUMA(importe), tipo = 'Contado')"
+    # De contado hay dos filas: 100 con 2 unidades y 300 con 0.
+    assert valor(con, ctx, "[contado]") == 400.0
+    assert valor(con, ctx, "CALCULAR([contado], unidades > 0)") == 100.0
+    # Y las condiciones se juntan con Y, no se pisan.
+    sql = compilar("CALCULAR([contado], unidades > 0)", ctx)
+    assert sql.count("FILTER") == 1 and " AND " in sql
+
+
 def test_calcular_sin_agregacion_dentro_no_pasa(ctx):
     """
     Filtrar una expresion que no agrega no significa nada, y en DAX es el error

@@ -272,6 +272,14 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **`CALCULAR` sobre una métrica que ya venía filtrada acumula la condición.** Era
+  el patrón «un total con su regla, y luego los tramos de ese total»: `Inventario`
+  descarta las unidades de demostración, y `Inventario de menos de 30 días` acota
+  además por antigüedad. Antes eso no daba un número equivocado — fallaba, y con un
+  mensaje que mentía: decía que `CALCULAR` no encontraba ninguna agregación dentro,
+  habiéndola, sólo que ya envuelta en su propio `FILTER`. Ahora las condiciones se
+  juntan con `Y` en un solo filtro.
+
 - **Una columna de periodo ya no sale con separador de miles.** `202601` se leía
   como «201,601», o sea como doscientos mil y pico. Ya pasaba antes; ahora se nota
   más, porque comparar contra otro mes obliga a poner esa columna en el desglose.

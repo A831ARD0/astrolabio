@@ -680,10 +680,23 @@ def _filtrar(nodo: exp.Expression, condicion: exp.Expression) -> exp.Expression:
     otra. Es tambien el limite honesto frente a CALCULATE de DAX, que ademas
     puede quitar filtros que puso otro — eso requiere un contexto de filtro que
     aqui no existe.
+
+    Una agregacion que YA venia filtrada acumula la condicion nueva en vez de
+    quedarse fuera. Es el caso corriente de acotar una metrica que a su vez acota
+    otra —«el inventario que no es de demostracion, y ademas de menos de 30
+    dias»— y antes ni siquiera fallaba con razon: decia que no habia ninguna
+    agregacion dentro, habiendola, solo que envuelta.
     """
     encontrado = [False]
 
     def envolver(n: exp.Expression) -> exp.Expression:
+        if isinstance(n, exp.Filter) and _es_agregado(n.this):
+            encontrado[0] = True
+            donde = n.args["expression"]
+            donde.set("this", exp.And(
+                this=exp.Paren(this=donde.this),
+                expression=exp.Paren(this=condicion.copy())))
+            return n
         if not _es_agregado(n) or isinstance(n.parent, exp.Filter):
             return n
         encontrado[0] = True
