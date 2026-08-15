@@ -35,6 +35,12 @@ Cuatro cosas y ninguna mas:
      agregacion. Esa ultima es la que evita el error clasico: `Importe / Unidades`
      se ve bien, compila, y devuelve el cociente de UNA fila cualquiera del grupo.
 
+Todo eso vale para una metrica que se agrega desde UN hecho. Aparte estan las
+**metricas compuestas** (`compilar_compuesta`), que no leen ninguna tabla y solo
+combinan otras metricas: son las que permiten dividir lo vendido entre lo
+presupuestado cuando cada cifra vive en un hecho distinto. Se calculan despues de
+agrupar y por eso no pueden nombrar columnas ni volver a agregar.
+
 Lo que este lenguaje NO tiene, dicho aqui para que no haya que descubrirlo
 probando: **inteligencia de tiempo al estilo DAX**. No hay `DATESINPERIOD` ni
 `SAMEPERIODLASTYEAR`. Esas funciones de Power BI reescriben el contexto de filtro
@@ -919,12 +925,237 @@ def _nombre_de_marca(marca: str, ctx: Contexto, expresion: str) -> str | None:
 
 
 # --------------------------------------------------------------------------- #
+# Metricas compuestas
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class ContextoCompuesta:
+    """
+    Las metricas que una compuesta puede nombrar, y de que tipo es cada una.
+
+    `None` marca una metrica normal —la que se agrega desde un hecho— y una
+    cadena marca otra compuesta, con su expresion, que hay que meter dentro.
+    """
+
+    metricas: dict[str, str | None] = field(default_factory=dict)
+
+    def buscar(self, nombre: str) -> tuple[str, str | None] | None:
+        """(nombre real, expresion si es compuesta). None si no existe."""
+        n = nombre.lower()
+        for k, v in self.metricas.items():
+            if k.lower() == n:
+                return k, v
+        return None
+
+
+_MARCA_METRICA = "__met_{}__"
+
+
+def _referencias_compuesta(
+    tramo: Tramo, ctx: ContextoCompuesta, fallos: list[Fallo],
+    en_curso: tuple[str, ...],
+) -> tuple[str, dict[str, exp.Expression], set[str]]:
+    """
+    Cambia cada `[metrica]` por una marca, y dice a que arbol apunta cada una.
+
+    La diferencia con `_extraer_referencias` es toda la idea de una compuesta: una
+    metrica normal PEGA la expresion de la que referencia, porque las dos se
+    agregan sobre la misma tabla. Aqui no se puede — las dos vienen de hechos
+    distintos— asi que una metrica base se deja como una COLUMNA con su nombre,
+    que el compilador de consultas resolvera contra la columna ya agregada.
+    """
+    mascara = enmascarar(tramo.texto)
+    apunta: dict[str, exp.Expression] = {}
+    dependencias: set[str] = set()
+    piezas: list[str] = []
+    ultimo = 0
+    for i, m in enumerate(_REFERENCIA.finditer(mascara)):
+        nombre = tramo.texto[m.start(1):m.end(1)].strip()
+        hallada = ctx.buscar(nombre)
+        marca = _MARCA_METRICA.format(i)
+        if hallada is None:
+            conocidas = list(ctx.metricas)
+            parecida = difflib.get_close_matches(nombre, conocidas, 1, 0.6)
+            pista = (f" ¿Querias decir [{parecida[0]}]?" if parecida else
+                     " El modelo todavia no tiene otras metricas."
+                     if not conocidas else
+                     f" Las del modelo son: {', '.join(sorted(conocidas))}.")
+            fallos.append(Fallo(
+                f"No hay ninguna metrica llamada '{nombre}'.{pista}",
+                tramo.base + m.start(), m.end() - m.start()))
+            arbol: exp.Expression = exp.Null()
+        else:
+            real, expresion = hallada
+            if real.lower() in {e.lower() for e in en_curso}:
+                raise ErrorFormula([Fallo(
+                    "Estas metricas compuestas se llaman entre si sin final: "
+                    + " → ".join([*en_curso, real]) + ".",
+                    tramo.base + m.start(), m.end() - m.start())])
+            if expresion is None:
+                dependencias.add(real)
+                arbol = exp.column(real, quoted=True)
+            else:
+                sql, deps = compilar_compuesta(expresion, ctx, (*en_curso, real))
+                dependencias.update(deps)
+                arbol = sqlglot.parse_one(sql, read=DIALECTO)
+        apunta[marca.lower()] = arbol
+        piezas.append(tramo.texto[ultimo:m.start()])
+        piezas.append(marca)
+        ultimo = m.end()
+    piezas.append(tramo.texto[ultimo:])
+    return "".join(piezas), apunta, dependencias
+
+
+def compilar_compuesta(
+    expresion: str, ctx: ContextoCompuesta,
+    _en_curso: tuple[str, ...] = (),
+) -> tuple[str, list[str]]:
+    """
+    Compila una metrica compuesta a SQL. Devuelve `(sql, metricas de las que
+    depende)`, donde cada dependencia aparece en el SQL como una columna con su
+    nombre.
+
+    Una compuesta no lee ninguna tabla: se calcula DESPUES de agrupar, sobre las
+    cifras que ya dejo cada hecho en su propio grano. Eso es lo que permite
+    escribir `DIVIDIR([Unidades Vendidas], [Objetivo de Ventas])` cuando una vive
+    en las facturas y la otra en los objetivos — dos tablas que no se pueden
+    juntar antes de agregar sin multiplicar una por las filas de la otra.
+
+    Y es tambien de donde salen sus dos limites, que son consecuencia y no
+    capricho: no puede nombrar columnas —no hay ninguna tabla de la cual sacarlas—
+    ni volver a agregar, porque lo que recibe ya viene agregado.
+    """
+    fallos: list[Fallo] = []
+    variables, tramo_return = partir(expresion)
+    definidas: dict[str, exp.Expression] = {}
+    dependencias: set[str] = set()
+
+    def preparar(tramo: Tramo) -> exp.Expression:
+        texto, referencias, deps = _referencias_compuesta(
+            tramo, ctx, fallos, _en_curso)
+        dependencias.update(deps)
+        arbol = _parsear(texto, tramo)
+        arbol = _sustituir_nombres(arbol, {**definidas, **referencias})
+        arbol = _mapear(arbol.copy(), _reescribir)
+        return sqlglot.parse_one(arbol.sql(dialect=DIALECTO), read=DIALECTO)
+
+    for nombre, tramo, _pos in variables:
+        definidas[nombre.lower()] = preparar(tramo)
+    arbol = preparar(tramo_return)
+
+    # Lo que quede como columna y no sea una de las metricas nombradas es un
+    # campo suelto, y aqui no hay tabla de donde sacarlo. Se para al compilar y no
+    # como aviso: no es una formula discutible, es uno que no se puede ejecutar.
+    esperadas = {d.lower() for d in dependencias}
+    sueltas = sorted({c.name for c in arbol.find_all(exp.Column)
+                      if c.name.lower() not in esperadas})
+    if sueltas:
+        fallos.append(Fallo(
+            f"{'La columna' if len(sueltas) == 1 else 'Las columnas'} "
+            f"{', '.join(sueltas)} no se {'puede' if len(sueltas) == 1 else 'pueden'} "
+            f"usar aqui: una metrica compuesta no lee ninguna tabla, solo combina "
+            f"otras metricas. Escribe [{sueltas[0]}] si es una metrica, o mueve el "
+            f"calculo a una metrica del hecho donde vive esa columna.",
+            0, len(expresion.split("\n")[0])))
+
+    if arbol.find(exp.AggFunc) is not None:
+        fallos.append(Fallo(
+            "Una metrica compuesta no puede agregar: lo que recibe ya viene "
+            "sumado por cada hecho. Quita el SUMA / PROMEDIO / CONTAR de fuera y "
+            "combina las metricas directamente.",
+            0, len(expresion.split("\n")[0])))
+
+    if fallos:
+        raise ErrorFormula(fallos)
+    return arbol.sql(dialect=DIALECTO), sorted(dependencias)
+
+
+def revisar_compuesta(expresion: str, ctx: ContextoCompuesta,
+                      nombre: str | None = None) -> list[dict]:
+    """
+    Todo lo que esta mal en una formula compuesta, con linea y columna.
+
+    `nombre` es el de la metrica que se esta revisando, y sirve para una sola
+    cosa: que nombrarse a si misma salga como un circulo y no como una metrica
+    que existe.
+    """
+    if not expresion.strip():
+        return [Fallo("La metrica necesita una expresion.").con_posicion(expresion)]
+
+    fallos = _revisar_nombres_de_funcion(expresion)
+    if fallos:
+        return [f.con_posicion(expresion) for f in fallos]
+
+    try:
+        compilar_compuesta(expresion, ctx, (nombre,) if nombre else ())
+    except ErrorFormula as e:
+        return [f.con_posicion(expresion) for f in e.fallos]
+    except Exception as e:                               # pragma: no cover
+        return [Fallo(f"La formula no se pudo compilar: {e}").con_posicion(expresion)]
+    return []
+
+
+# --------------------------------------------------------------------------- #
 # Revision
 # --------------------------------------------------------------------------- #
 
 def _buscar(mascara: str, palabra: str, desde: int = 0) -> int:
     m = re.search(rf"\b{re.escape(palabra)}\b", mascara[desde:], re.IGNORECASE)
     return desde + m.start() if m else 0
+
+
+_LLAMADA = re.compile(r"\b([A-Za-z_ÁÉÍÓÚÜÑáéíóúüñ][\w]*)\s*\(")
+
+
+def _revisar_nombres_de_funcion(expresion: str) -> list[Fallo]:
+    """
+    Funciones que no existen y funciones con el numero de argumentos cambiado.
+
+    Va aparte —y antes de compilar— porque se revisa sobre el texto TAL COMO SE
+    ESCRIBIO: despues de la reescritura `SUMA` ya se llama SUM, y el mensaje
+    hablaria de una funcion que no aparece en la pantalla. Lo usan por igual las
+    metricas normales y las compuestas: equivocarse escribiendo `DIVIDR` es lo
+    mismo en las dos.
+    """
+    mascara = enmascarar(expresion)
+    fallos: list[Fallo] = []
+    conocidos = {*CATALOGO, *NATIVAS}
+    try:
+        variables, _ = partir(expresion)
+        nombres_var = {n.lower() for n, _, _ in variables}
+    except ErrorFormula as e:
+        return e.fallos
+
+    for m in _LLAMADA.finditer(mascara):
+        nombre = expresion[m.start(1):m.end(1)]
+        if nombre.upper() in conocidos or nombre.lower() in nombres_var:
+            continue
+        parecida = difflib.get_close_matches(nombre.upper(), sorted(CATALOGO),
+                                             1, 0.7)
+        pista = f" ¿Querias decir {parecida[0]}?" if parecida else ""
+        fallos.append(Fallo(
+            f"No existe ninguna funcion '{nombre}'.{pista}",
+            m.start(1), len(nombre)))
+
+    for m in _LLAMADA.finditer(mascara):
+        funcion = CATALOGO.get(expresion[m.start(1):m.end(1)].upper())
+        if funcion is None:
+            continue
+        cuantos = _contar_argumentos(mascara, m.end() - 1)
+        if cuantos is None:
+            continue
+        if cuantos < funcion.minimo or (funcion.maximo is not None
+                                        and cuantos > funcion.maximo):
+            pide = (str(funcion.minimo) if funcion.maximo == funcion.minimo
+                    else f"entre {funcion.minimo} y {funcion.maximo}"
+                    if funcion.maximo is not None else f"{funcion.minimo} o mas")
+            fallos.append(Fallo(
+                f"{funcion.nombre} lleva {pide} argumento(s) y le diste "
+                f"{cuantos}. Se escribe {funcion.firma}.",
+                m.start(1), len(funcion.nombre)))
+
+    fallos.sort(key=lambda f: f.inicio)
+    return fallos
 
 
 def _columnas_desnudas(arbol: exp.Expression) -> list[str]:
@@ -968,50 +1199,9 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
         return [Fallo("La metrica necesita una expresion.").con_posicion(expresion)]
 
     mascara = enmascarar(expresion)
-    fallos: list[Fallo] = []
 
-    # Nombres de funcion mal escritos: se revisa sobre el texto original para
-    # poder señalar el sitio, antes de que la reescritura los cambie.
-    conocidos = {*CATALOGO, *NATIVAS}
-    nombres_var = set()
-    try:
-        variables, _ = partir(expresion)
-        nombres_var = {n.lower() for n, _, _ in variables}
-    except ErrorFormula as e:
-        return [f.con_posicion(expresion) for f in e.fallos]
-
-    for m in re.finditer(r"\b([A-Za-z_ÁÉÍÓÚÜÑáéíóúüñ][\w]*)\s*\(", mascara):
-        nombre = expresion[m.start(1):m.end(1)]
-        if nombre.upper() in conocidos or nombre.lower() in nombres_var:
-            continue
-        parecida = difflib.get_close_matches(nombre.upper(), sorted(CATALOGO),
-                                             1, 0.7)
-        pista = f" ¿Querias decir {parecida[0]}?" if parecida else ""
-        fallos.append(Fallo(
-            f"No existe ninguna funcion '{nombre}'.{pista}",
-            m.start(1), len(nombre)))
-
-    # El numero de argumentos, ANTES de compilar: `SUMA(x, 3)` revienta al
-    # compilar con el mensaje de sqlglot, que habla de SUM y de argumentos
-    # soportados. Este dice que lleva SUMA y como se escribe.
-    for m in re.finditer(r"\b([A-Za-z_ÁÉÍÓÚÜÑáéíóúüñ][\w]*)\s*\(", mascara):
-        funcion = CATALOGO.get(expresion[m.start(1):m.end(1)].upper())
-        if funcion is None:
-            continue
-        cuantos = _contar_argumentos(mascara, m.end() - 1)
-        if cuantos is None:
-            continue
-        if cuantos < funcion.minimo or (funcion.maximo is not None
-                                        and cuantos > funcion.maximo):
-            pide = (str(funcion.minimo) if funcion.maximo == funcion.minimo
-                    else f"entre {funcion.minimo} y {funcion.maximo}"
-                    if funcion.maximo is not None else f"{funcion.minimo} o mas")
-            fallos.append(Fallo(
-                f"{funcion.nombre} lleva {pide} argumento(s) y le diste "
-                f"{cuantos}. Se escribe {funcion.firma}.",
-                m.start(1), len(funcion.nombre)))
+    fallos = _revisar_nombres_de_funcion(expresion)
     if fallos:
-        fallos.sort(key=lambda f: f.inicio)
         return [f.con_posicion(expresion) for f in fallos]
 
     try:

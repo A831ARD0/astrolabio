@@ -7,6 +7,35 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Métricas compuestas: una cifra que sale de dividir dos hechos distintos.** El
+  porcentaje de logro es lo vendido entre lo presupuestado, y lo vendido está en las
+  facturas mientras que el presupuesto está en otra tabla, a otro grano. Hasta ahora
+  no había forma de escribirlo: una métrica se agrega desde **un** hecho, y desde el
+  hecho de las ventas la columna del objetivo no existe.
+
+  En «Calcula desde» hay ahora una opción más, **· otras métricas (compuesta)**. Una
+  compuesta no lee ninguna tabla: combina otras métricas —`DIVIDIR([Unidades
+  Vendidas], [Objetivo de Ventas], 0)`— y puede nombrar cualquiera del modelo, venga
+  del hecho que venga.
+
+  Lo importante es **cuándo** se calcula. Cada hecho sigue agregando por su lado, en
+  su propio CTE y a su propio grano, y el cociente se hace después, sobre el
+  resultado ya agregado. Unir las dos tablas antes multiplicaría el objetivo del mes
+  por el número de facturas del mes —el fan trap de siempre, que da un número enorme
+  con toda la pinta de estar bien—.
+
+  De ahí salen sus dos límites, que son consecuencia y no capricho: no puede nombrar
+  columnas, porque no hay ninguna tabla de la cual sacarlas, ni volver a agregar,
+  porque lo que recibe ya viene sumado. Las dos cosas se avisan al guardar y no en el
+  primer tablero que la use.
+
+  Pedir una compuesta devuelve **una** columna: sus dependencias se calculan por
+  dentro y no se enseñan. Y una compuesta puede apoyarse en otra, con detección de
+  ciclos.
+
+  Los modelos de antes no cambian: `entidad` pasó de obligatoria a opcional y una
+  métrica que la trae sigue significando exactamente lo mismo.
+
 - **Los grupos de métricas se pliegan, como los de Flujos y Transformar.** Cada cajón
   —una tabla de medidas, o un hecho con sus métricas sueltas— se pliega desde su
   cabecera. Con cinco cajones de seis métricas, llegar al último pedía atravesar

@@ -31,9 +31,11 @@ import sqlglot
 import sqlglot.expressions as exp
 import yaml
 
-from semantic.formula import Contexto, ErrorFormula
+from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
+from semantic.formula import compilar_compuesta
 from semantic.formula import revisar as revisar_formula
+from semantic.formula import revisar_compuesta
 
 
 # --------------------------------------------------------------------------- #
@@ -108,9 +110,16 @@ class Relacion:
 class Metrica:
     nombre: str
     etiqueta: str
-    entidad: str
+    #: El hecho del que se agrega, y por tanto el FROM de su CTE. `None` la marca
+    #: como COMPUESTA: no lee ninguna tabla, solo combina otras metricas, y se
+    #: calcula despues de unirlas. Ver `Compilador.compilar`.
+    entidad: str | None
     expresion: str
     formato: str = "numero"
+
+    @property
+    def compuesta(self) -> bool:
+        return self.entidad is None
 
 
 class Modelo:
@@ -145,7 +154,7 @@ class Modelo:
         ]
 
         self.metricas: dict[str, Metrica] = {
-            m["nombre"]: Metrica(m["nombre"], m["etiqueta"], m["entidad"],
+            m["nombre"]: Metrica(m["nombre"], m["etiqueta"], m.get("entidad"),
                                  m["expresion"], m.get("formato", "numero"))
             for m in crudo.get("metricas", [])
         }
@@ -170,6 +179,8 @@ class Modelo:
         # referencia a otra recompila la referenciada cada vez, y una consulta
         # con seis metricas encima de la misma base lo haria seis veces.
         self._sql_formula: dict[str, str] = {}
+        #: Lo mismo para las compuestas, por nombre: su SQL y de que dependen.
+        self._sql_compuesta: dict[str, tuple[str, list[str]]] = {}
 
     # ---------------- metricas ----------------
 
@@ -189,6 +200,48 @@ class Modelo:
             metricas={m.nombre: m.expresion for m in self.metricas.values()
                       if m.entidad == entidad},
         )
+
+    def contexto_compuesta(self) -> ContextoCompuesta:
+        """
+        Contra que se resuelve una compuesta: TODAS las metricas del modelo,
+        vengan del hecho que vengan. Ese es justamente su motivo de ser.
+
+        Se incluye tambien la que se esta compilando. Quitarla parecia la forma
+        barata de impedir que se llamara a si misma, y lo que hacia era romper la
+        recursion: al resolver `ida`, `vuelta` ya no encontraba a `ida` y el error
+        salia como «no hay ninguna metrica llamada ida» en vez de decir que se
+        llaman en circulo. De cortar el ciclo se encarga `_en_curso`, que es lo
+        unico que sabe por donde se ha pasado.
+        """
+        return ContextoCompuesta(
+            metricas={m.nombre: (m.expresion if m.compuesta else None)
+                      for m in self.metricas.values()},
+        )
+
+    def sql_compuesta(self, metrica: Metrica) -> tuple[str, list[str]]:
+        """`(sql, metricas de las que depende)` de una metrica compuesta."""
+        if metrica.nombre not in self._sql_compuesta:
+            try:
+                self._sql_compuesta[metrica.nombre] = compilar_compuesta(
+                    metrica.expresion, self.contexto_compuesta(),
+                    (metrica.nombre,))
+            except ErrorFormula as e:
+                raise ErrorModelo(
+                    f"La formula de la metrica compuesta '{metrica.nombre}' no "
+                    f"se puede compilar: {e}") from e
+        return self._sql_compuesta[metrica.nombre]
+
+    def dependencias_base(self, nombre: str) -> list[str]:
+        """
+        Las metricas NO compuestas de las que depende, ya aplanadas.
+
+        Son las que hay que calcular de verdad: una compuesta no agrega nada, asi
+        que pedirla es pedir estas.
+        """
+        metrica = self.metricas[nombre]
+        if not metrica.compuesta:
+            return [nombre]
+        return self.sql_compuesta(metrica)[1]
 
     def sql_de(self, metrica: Metrica) -> str:
         """La formula de la metrica, ya como SQL de DuckDB."""
@@ -370,14 +423,20 @@ class Modelo:
         # suelto fuera de la agregacion SI compilan, y son los dos errores que de
         # verdad se cometen.
         for m in self.metricas.values():
-            if m.entidad not in self.entidades:
+            if m.compuesta:
+                fallos = revisar_compuesta(m.expresion,
+                                           self.contexto_compuesta(), m.nombre)
+            elif m.entidad in self.entidades:
+                fallos = revisar_formula(m.expresion, self.contexto(m.entidad))
+            else:
                 continue                       # ya lo dice revisar_referencias
-            for fallo in revisar_formula(m.expresion, self.contexto(m.entidad)):
+            for fallo in fallos:
                 problemas.append({
                     "tipo": "formula",
                     "gravedad": ("critico" if fallo["gravedad"] == "error"
                                  else "advertencia"),
-                    "entidad": f"{m.entidad}.{m.nombre}",
+                    "entidad": (m.nombre if m.compuesta
+                                else f"{m.entidad}.{m.nombre}"),
                     "mensaje": f"Metrica '{m.nombre}', linea {fallo['linea']}: "
                                f"{fallo['mensaje']}",
                 })
@@ -411,6 +470,24 @@ def _calificar(expresion: str, alias: str, campos: set[str],
     for col in arbol.find_all(exp.Column):
         if col.name in campos:
             col.set("table", exp.to_identifier(alias, quoted=False))
+    return arbol.sql(dialect=dialecto, identify=True)
+
+
+def _calificar_metricas(expresion: str, donde: dict[str, str],
+                        dialecto: str = "duckdb") -> str:
+    """
+    En la formula de una compuesta, antepone a cada metrica el CTE que la calculo.
+
+    `DIVIDIR([a], [b])` llega aqui como `"a" / NULLIF("b", 0)`, con `a` y `b`
+    puestas como columnas por `compilar_compuesta`. Cada una vive en el CTE de su
+    propio hecho, asi que sale `m0."a" / NULLIF(m1."b", 0)` — y ahi esta todo el
+    asunto: son dos tablas distintas, ya agregadas cada una a su grano, y por eso
+    el cociente no multiplica una por las filas de la otra.
+    """
+    arbol = sqlglot.parse_one(expresion, read=dialecto)
+    for col in arbol.find_all(exp.Column):
+        if col.name in donde:
+            col.set("table", exp.to_identifier(donde[col.name], quoted=False))
     return arbol.sql(dialect=dialecto, identify=True)
 
 
@@ -627,10 +704,29 @@ class Compilador:
     def compilar(self, c: Consulta,
                  predicados: list | None = None) -> ConsultaCompilada:
         dims = [tuple(d.split(".")) for d in c.dimensiones]
-        por_entidad: dict[str, list[Metrica]] = {}
+
+        # Las compuestas no agregan nada: se calculan al final, sobre las cifras
+        # que ya dejo cada hecho. Lo que hay que meter en los CTE son sus
+        # dependencias, esten o no pedidas — quien pide «% Logro Unidades» no ha
+        # pedido las unidades ni el objetivo, pero sin ellos no hay cociente.
+        compuestas: list[Metrica] = []
+        pedidas: list[str] = []
         for nombre in c.metricas:
             if nombre not in self.m.metricas:
                 raise ErrorModelo(f"La metrica '{nombre}' no existe en el modelo.")
+            met = self.m.metricas[nombre]
+            if met.compuesta:
+                compuestas.append(met)
+                pedidas.extend(self.m.dependencias_base(nombre))
+            else:
+                pedidas.append(nombre)
+
+        por_entidad: dict[str, list[Metrica]] = {}
+        vistas: set[str] = set()
+        for nombre in pedidas:
+            if nombre in vistas:
+                continue
+            vistas.add(nombre)
             met = self.m.metricas[nombre]
             por_entidad.setdefault(met.entidad, []).append(met)
 
@@ -644,15 +740,35 @@ class Compilador:
             ctes.append((f"m{i}", cuerpo, [m.nombre for m in mets]))
             parametros.extend(params)          # el orden importa: CTE por CTE
 
+        # Donde quedo cada metrica base, para poder nombrarla desde fuera.
+        donde = {m: n for n, _, ms in ctes for m in ms}
+
+        def columnas_pedidas() -> list[str]:
+            """
+            Solo lo que se pidio, en el orden en que se pidio.
+
+            Las dependencias que se metieron para poder calcular una compuesta se
+            quedan dentro: quien pide el porcentaje de logro pidio una columna, no
+            tres.
+            """
+            salida = []
+            for nombre in c.metricas:
+                met = self.m.metricas[nombre]
+                if met.compuesta:
+                    sql_c, _ = self.m.sql_compuesta(met)
+                    salida.append(
+                        f"{_calificar_metricas(sql_c, donde)} AS {_cita(nombre)}")
+                else:
+                    salida.append(f"{donde[nombre]}.{_cita(nombre)}")
+            return salida
+
         if not dims:
             # Sin desglose: los CTE tienen una sola fila cada uno.
-            sel = ", ".join(
-                f"{n}.{_cita(m)}" for n, _, ms in ctes for m in ms
-            )
             froms = ", ".join(n for n, _, _ in ctes)
             partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
             return ConsultaCompilada(
-                f"WITH {partes}\nSELECT {sel}\nFROM {froms}", parametros
+                f"WITH {partes}\nSELECT " + ", ".join(columnas_pedidas()) +
+                f"\nFROM {froms}", parametros
             )
 
         # Espina dorsal: todas las combinaciones de dimension que aparecen en
@@ -661,14 +777,13 @@ class Compilador:
         cols = ", ".join(_cita(cd) for cd in cols_dim)
         espina = "\n  UNION\n  ".join(f"SELECT {cols} FROM {n}" for n, _, _ in ctes)
 
-        sel = [f"e.{_cita(cd)}" for cd in cols_dim]
         joins = []
-        for n, _, ms in ctes:
-            sel += [f"{n}.{_cita(m)}" for m in ms]
+        for n, _, _ms in ctes:
             cond = " AND ".join(
                 f"e.{_cita(cd)} IS NOT DISTINCT FROM {n}.{_cita(cd)}" for cd in cols_dim
             )
             joins.append(f"LEFT JOIN {n} ON {cond}")
+        sel = [f"e.{_cita(cd)}" for cd in cols_dim] + columnas_pedidas()
 
         partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
         sql = (

@@ -38,6 +38,16 @@ import {
 
 const FORMATOS = ['numero', 'entero', 'moneda', 'porcentaje']
 
+/**
+ * El valor del desplegable que significa «ninguna entidad».
+ *
+ * Un `<select>` no puede llevar `null` como valor —los valores de una opción son
+ * cadenas— y la cadena vacía ya significa «no hay hechos que elegir». Así que un
+ * centinela, que nunca puede chocar con el nombre de una entidad porque los
+ * nombres no llevan espacios ni paréntesis.
+ */
+const COMPUESTA = '(compuesta)'
+
 const CATEGORIAS: Record<string, string> = {
   agregacion: 'Agregación',
   condicion: 'Condición y lógica',
@@ -95,6 +105,7 @@ export function PanelMetrica({
 
   const oscuro = window.matchMedia('(prefers-color-scheme: dark)').matches
   const hechos = definicion.entidades.filter((e) => e.tipo === 'hecho')
+  const compuesta = borrador.entidad === null
   const entidad = definicion.entidades.find((e) => e.nombre === borrador.entidad)
 
   const dimensiones = definicion.entidades.flatMap((e) =>
@@ -103,16 +114,23 @@ export function PanelMetrica({
       .map((c) => `${e.nombre}.${c.nombre}`),
   )
 
-  /** Las otras métricas de ESTA entidad: las únicas que se pueden referenciar. */
+  /**
+   * Las métricas que se pueden escribir como `[nombre]`.
+   *
+   * En una métrica normal, solo las de su mismo hecho: pegar aquí la expresión de
+   * una que vive en otra tabla daría SQL que compila sobre columnas que no
+   * existen. En una compuesta, **todas** — no pega ninguna expresión, nombra la
+   * cifra ya calculada, y cruzar hechos es justo para lo que sirve.
+   */
   const hermanas = useMemo(
     () =>
       definicion.metricas.filter(
-        (m, i) => m.entidad === borrador.entidad && i !== indice,
+        (m, i) => i !== indice && (compuesta || m.entidad === borrador.entidad),
       ),
-    [definicion.metricas, borrador.entidad, indice],
+    [definicion.metricas, borrador.entidad, compuesta, indice],
   )
 
-  const campos = useMemo(() => entidad?.campos ?? [], [entidad])
+  const campos = useMemo(() => (compuesta ? [] : entidad?.campos ?? []), [compuesta, entidad])
 
   // El contexto que lee el autocompletado. Se fija en cada render porque cambia
   // al cambiar de entidad, y es una asignación de tres campos.
@@ -128,19 +146,35 @@ export function PanelMetrica({
 
   // Revisión en vivo, con freno: se pide al parar de teclear y no en cada tecla.
   useEffect(() => {
-    if (!borrador.expresion.trim() || !borrador.entidad) {
+    if (!borrador.expresion.trim() || (!compuesta && !borrador.entidad)) {
       setFallos([])
       setSql(null)
       return
     }
     const t = setTimeout(() => {
       revisar.mutate(
-        {
-          entidad: borrador.entidad,
-          expresion: borrador.expresion,
-          campos: campos.map((c) => c.nombre),
-          metricas: Object.fromEntries(hermanas.map((m) => [m.nombre, m.expresion])),
-        },
+        compuesta
+          ? {
+              entidad: null,
+              expresion: borrador.expresion,
+              // Con su expresión si también son compuestas, y `null` si se
+              // agregan desde un hecho: el servidor necesita saber cuáles tiene
+              // que meter dentro y cuáles son una columna ya calculada.
+              metricas_del_modelo: Object.fromEntries(
+                hermanas.map((m) => [
+                  m.nombre,
+                  m.entidad === null ? m.expresion : null,
+                ]),
+              ),
+            }
+          : {
+              entidad: borrador.entidad,
+              expresion: borrador.expresion,
+              campos: campos.map((c) => c.nombre),
+              metricas: Object.fromEntries(
+                hermanas.map((m) => [m.nombre, m.expresion]),
+              ),
+            },
         {
           onSuccess: (r) => {
             setFallos(r.fallos)
@@ -151,7 +185,7 @@ export function PanelMetrica({
     }, ESPERA_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [borrador.expresion, borrador.entidad, campos, hermanas])
+  }, [borrador.expresion, borrador.entidad, compuesta, campos, hermanas])
 
   // Los subrayados rojos dentro del editor. Van como marcadores de Monaco y no
   // como una lista aparte porque el error hay que verlo DONDE está.
@@ -277,11 +311,16 @@ export function PanelMetrica({
                 separación que hace Power BI, y por eso mover una métrica de cajón
                 no le toca el número.
               */}
-              <div className="campo" style={{ flex: '0 0 150px' }}>
+              <div className="campo" style={{ flex: '0 0 190px' }}>
                 <label>Calcula desde</label>
                 <select
-                  value={borrador.entidad}
-                  onChange={(e) => setBorrador({ ...borrador, entidad: e.target.value })}
+                  value={compuesta ? COMPUESTA : borrador.entidad ?? ''}
+                  onChange={(e) =>
+                    setBorrador({
+                      ...borrador,
+                      entidad: e.target.value === COMPUESTA ? null : e.target.value,
+                    })
+                  }
                 >
                   {hechos.length === 0 && <option value="">(no hay hechos)</option>}
                   {hechos.map((e) => (
@@ -289,12 +328,22 @@ export function PanelMetrica({
                       {e.nombre}
                     </option>
                   ))}
+                  {/*
+                    La opción que permite cruzar hechos. Va al final y separada
+                    porque no es un hecho más: es la ausencia de hecho.
+                  */}
+                  <option value={COMPUESTA}>· otras métricas (compuesta)</option>
                 </select>
               </div>
               <div className="campo" style={{ flex: '0 0 150px' }}>
                 <label>Aparece en</label>
                 <select
                   value={borrador.tabla_medidas ?? ''}
+                  title={
+                    compuesta
+                      ? 'Una compuesta no tiene hecho debajo del cual ponerse, así que sin cajón aparece en «Compuestas».'
+                      : undefined
+                  }
                   onChange={(e) =>
                     setBorrador({
                       ...borrador,
@@ -302,7 +351,7 @@ export function PanelMetrica({
                     })
                   }
                 >
-                  <option value="">(bajo su hecho)</option>
+                  <option value="">{compuesta ? '(en Compuestas)' : '(bajo su hecho)'}</option>
                   {(definicion.tablas_medidas ?? []).map((t) => (
                     <option key={t.nombre} value={t.nombre}>
                       {t.nombre}
@@ -371,15 +420,27 @@ export function PanelMetrica({
                 />
               </div>
               <span className="chico tenue">
-                Los campos se escriben sin prefijo de tabla: el motor los califica
-                solo. <code>VAR</code>/<code>RETURN</code> para partirla en pasos,{' '}
-                <code>--</code> para comentar, <code>[otra_metrica]</code> para
-                reutilizar otra.
+                {compuesta ? (
+                  <>
+                    Solo <code>[otra_metrica]</code>, operaciones y funciones que
+                    no agreguen. No lleva columnas —no lee ninguna tabla— ni{' '}
+                    <code>SUMA</code>, porque lo que recibe ya viene sumado.{' '}
+                    <code>VAR</code>/<code>RETURN</code> y <code>--</code> también
+                    valen aquí.
+                  </>
+                ) : (
+                  <>
+                    Los campos se escriben sin prefijo de tabla: el motor los
+                    califica solo. <code>VAR</code>/<code>RETURN</code> para
+                    partirla en pasos, <code>--</code> para comentar,{' '}
+                    <code>[otra_metrica]</code> para reutilizar otra.
+                  </>
+                )}
               </span>
             </div>
 
             {/* Lo que se puede meter con un clic, sin escribirlo. */}
-            {entidad && (
+            {(entidad || compuesta) && (
               <div className="atajos">
                 {campos.filter((c) => c.rol === 'medida_base').length > 0 && (
                   <div className="chico">
@@ -399,12 +460,20 @@ export function PanelMetrica({
                 )}
                 {hermanas.length > 0 && (
                   <div className="chico">
-                    <span className="suave">Otras métricas: </span>
+                    <span className="suave">
+                      {compuesta ? 'Métricas del modelo: ' : 'Otras métricas: '}
+                    </span>
                     {hermanas.map((m) => (
                       <button
                         key={m.nombre}
                         className="btn chico mono"
-                        title={m.expresion}
+                        /* De qué hecho sale cada una, que en una compuesta es lo
+                           que hay que saber para no dividir peras entre manzanas. */
+                        title={
+                          compuesta
+                            ? `${m.entidad ?? 'compuesta'} · ${m.expresion}`
+                            : m.expresion
+                        }
                         onClick={() => insertar(`[${m.nombre}]`)}
                       >
                         [{m.nombre}]
@@ -546,6 +615,12 @@ export function PanelMetrica({
               {!funciones.isLoading && porCategoria.length === 0 && (
                 <div className="vacio">Ninguna función se llama así.</div>
               )}
+              <p className="chico tenue" style={{ padding: '0 2px' }}>
+                Para cruzar dos hechos —lo vendido entre lo presupuestado— elige{' '}
+                <strong>otras métricas (compuesta)</strong> en «Calcula desde». Se
+                calcula después de que cada hecho agregó lo suyo, así que el
+                objetivo del mes no se multiplica por el número de facturas.
+              </p>
               <p className="chico tenue" style={{ padding: '0 2px' }}>
                 No hay inteligencia de tiempo tipo DAX (
                 <span className="mono">SAMEPERIODLASTYEAR</span> y compañía): una

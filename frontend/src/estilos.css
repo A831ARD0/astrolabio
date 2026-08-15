@@ -1883,6 +1883,15 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
   border-radius: 50%;
 }
 
+/* Una compuesta no sale de ninguna tabla, y el punto lo dice: hueco en vez de
+   relleno. Los rellenos —naranja el hecho, teal la tabla de medidas— marcan algo
+   que existe; esto es un cálculo encima de lo que ya existe. */
+.punto.compuesta {
+  background: transparent;
+  border: 1.5px solid var(--medida);
+  border-radius: 50%;
+}
+
 .acciones-cajon {
   position: absolute;
   right: 4px;

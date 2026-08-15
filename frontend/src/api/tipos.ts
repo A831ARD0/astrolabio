@@ -73,8 +73,14 @@ export interface TablaMedidas {
 export interface Metrica {
   nombre: string
   etiqueta: string
-  /** El hecho del que se calcula: es lo que decide el FROM del SQL. */
-  entidad: string
+  /**
+   * El hecho del que se calcula: es lo que decide el FROM del SQL.
+   *
+   * `null` la marca como **compuesta**: no sale de ninguna tabla, sino de
+   * combinar otras métricas —`DIVIDIR([Unidades], [Objetivo])`—, y se calcula
+   * después de que cada hecho agregó lo suyo.
+   */
+  entidad: string | null
   /** En qué tabla de medidas se muestra. Ausente = debajo de su propio hecho. */
   tabla_medidas?: string | null
   expresion: string

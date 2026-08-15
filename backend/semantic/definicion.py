@@ -24,8 +24,9 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from semantic.formula import Contexto, ErrorFormula
+from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
+from semantic.formula import compilar_compuesta
 from semantic.politica import PoliticaDef, revisar_politicas
 
 TIPOS_CAMPO = ("entero", "decimal", "texto", "fecha", "booleano")
@@ -125,7 +126,13 @@ class MetricaDef(_Base):
     nombre: str = Field(min_length=1, max_length=120)
     etiqueta: str
     #: El hecho del que se calcula: es lo que decide el FROM del SQL.
-    entidad: str
+    #:
+    #: `None` la marca como COMPUESTA. Una compuesta no sale de ninguna tabla:
+    #: combina otras metricas —`DIVIDIR([Unidades Vendidas], [Objetivo])`— y se
+    #: calcula despues de que cada hecho agrego lo suyo. Es la unica forma de
+    #: dividir una cifra de las facturas entre una de los objetivos sin que la
+    #: union multiplique una por las filas de la otra.
+    entidad: str | None = None
     #: En que tabla de medidas se muestra. None = debajo de su propio hecho, que es
     #: como estaban todas antes de que esto existiera.
     tabla_medidas: str | None = None
@@ -214,7 +221,7 @@ class Definicion(_Base):
                     f"marca las demas como inactivas.")
 
         for m in self.metricas:
-            if m.entidad not in entidades:
+            if m.entidad is not None and m.entidad not in entidades:
                 errores.append(
                     f"La metrica '{m.nombre}' se calcula desde la entidad "
                     f"'{m.entidad}', que no existe.")
@@ -247,16 +254,28 @@ class Definicion(_Base):
         # unida, y romperles el guardado al actualizar seria cobrarles el cambio
         # a ellos.
         for m in self.metricas:
-            if m.entidad not in entidades:
+            if m.entidad is not None and m.entidad not in entidades:
                 continue
-            ent = entidades[m.entidad]
-            contexto = Contexto(
-                campos={c.nombre for c in ent.campos},
-                metricas={o.nombre: o.expresion for o in self.metricas
-                          if o.entidad == m.entidad and o.nombre != m.nombre},
-            )
             try:
-                compilar_formula(m.expresion, contexto)
+                if m.entidad is None:
+                    # Una compuesta nombra metricas y nada mas, asi que aqui se
+                    # ve todo lo que puede estar mal. La indulgencia de mas
+                    # arriba —guardar aunque la formula no cuadre— existe para el
+                    # modelo que apoya una metrica en una columna de una tabla
+                    # unida, que el compilador no puede ver; esto si se ve.
+                    compilar_compuesta(m.expresion, ContextoCompuesta(
+                        metricas={o.nombre: (o.expresion if o.entidad is None
+                                             else None)
+                                  for o in self.metricas},
+                    ), (m.nombre,))
+                else:
+                    ent = entidades[m.entidad]
+                    compilar_formula(m.expresion, Contexto(
+                        campos={c.nombre for c in ent.campos},
+                        metricas={o.nombre: o.expresion for o in self.metricas
+                                  if o.entidad == m.entidad
+                                  and o.nombre != m.nombre},
+                    ))
             except ErrorFormula as e:
                 for f in e.fallos:
                     errores.append(

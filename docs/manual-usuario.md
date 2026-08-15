@@ -647,6 +647,45 @@ es lo que ya estaban leyendo los tableros. Las secciones marcadas como
 modelo, no algo que cada quien reescribe en su tablero. Es lo que hace que dos
 personas no tengan dos utilidades distintas.
 
+### Dividir una cifra de un hecho entre la de otro
+
+El porcentaje de logro es lo vendido entre lo presupuestado. Lo vendido está en las
+facturas; el presupuesto, en otra tabla y a otro grano —una fila por sucursal y mes,
+no una por factura—. Una métrica normal no puede escribir eso: se agrega desde **un**
+hecho, y desde las facturas la columna del objetivo no existe.
+
+Para eso está la última opción de **Calcula desde**: **· otras métricas
+(compuesta)**. Una compuesta no sale de ninguna tabla. Combina métricas que ya
+existen, y puede nombrar cualquiera del modelo:
+
+```
+DIVIDIR([Unidades Vendidas], [Objetivo de Ventas], 0)
+```
+
+Lo que la hace correcta es **cuándo** se calcula: cada hecho agrega primero por su
+lado, y la división se hace después, sobre las cifras ya sumadas. Si en vez de eso se
+unieran las dos tablas antes de sumar, el objetivo del mes se repetiría una vez por
+factura y saldría multiplicado por cuatrocientos. El número tendría buena pinta y
+estaría mal, que es la peor combinación.
+
+Dos cosas no se pueden escribir en una compuesta, y las dos por la misma razón:
+
+- **Columnas.** `DIVIDIR(unidades, [Objetivo])` no vale: no hay ninguna tabla de la
+  cual sacar `unidades`. Si esa cuenta hace falta, se hace en una métrica del hecho
+  donde vive la columna y aquí se nombra el resultado.
+- **`SUMA`, `PROMEDIO`, `CONTAR`…** Lo que recibe ya viene sumado; volver a sumarlo
+  sería agrupar dos veces sobre el mismo grupo.
+
+Las dos te las dice al **guardar**, no en el primer tablero que la use.
+
+Una compuesta puede apoyarse en otra —`SI([% Logro] > 1, 1, [% Logro])`— y si dos se
+llaman entre sí sin final, se avisa en vez de colgarse. Y pedirla en un tablero
+devuelve **una** columna: las métricas de las que depende se calculan por dentro,
+pero no se enseñan.
+
+En el panel aparecen bajo **Compuestas**, con el punto hueco: los puntos rellenos
+marcan algo que existe —una tabla—, y esto es un cálculo encima de lo que existe.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

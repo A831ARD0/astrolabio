@@ -113,6 +113,14 @@ export function SeccionMetricas({
     .filter((e) => sinCajon.some(({ m }) => m.entidad === e.nombre))
     .map((e) => e.nombre)
 
+  /**
+   * Las compuestas sin cajón, que no tienen hecho debajo del cual ponerse.
+   *
+   * Sin este grupo desaparecerían del panel: se guardan bien y no se ven, que es
+   * la peor de las dos formas de fallar.
+   */
+  const compuestasSueltas = sinCajon.filter(({ m }) => m.entidad === null)
+
   const nombreLibre = (n: string, salvo?: string) =>
     !!n.trim() &&
     n.trim() !== salvo &&
@@ -251,6 +259,24 @@ export function SeccionMetricas({
               )}
             </Cajon>
           ))}
+
+          {compuestasSueltas.length > 0 && (
+            <Cajon
+              clave={`metricas.${d.modelo}.__compuestas__`}
+              punto="compuesta"
+              nombre="Compuestas"
+              ayuda="Métricas que combinan otras métricas, sin hecho propio"
+              cuenta={compuestasSueltas.length}
+            >
+              {compuestasSueltas.map(({ m, i }) => (
+                <button key={m.nombre} className="metrica" onClick={() => alAbrir(i)}>
+                  <span className="sigma" aria-hidden="true">Σ</span>
+                  <span className="nom">{m.etiqueta || m.nombre}</span>
+                  <span className="dcha">{m.formato}</span>
+                </button>
+              ))}
+            </Cajon>
+          )}
 
           {/* Lo que no está en ningún cajón, bajo su hecho: es donde estaba antes. */}
           {hechosConMetricas.map((hecho) => (

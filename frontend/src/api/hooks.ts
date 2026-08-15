@@ -240,10 +240,13 @@ export function useFunciones() {
 export function useRevisarFormula(id: number) {
   return useMutation({
     mutationFn: (v: {
-      entidad: string
+      /** `null` = compuesta: se revisa contra las métricas, no contra campos. */
+      entidad: string | null
       expresion: string
-      campos: string[]
-      metricas: Record<string, string>
+      campos?: string[]
+      metricas?: Record<string, string>
+      /** Solo si es compuesta: expresión si también lo es, `null` si no. */
+      metricas_del_modelo?: Record<string, string | null>
     }) => api.post<RevisionFormula>(`/modelos/${id}/revisar-formula`, v),
   })
 }
@@ -334,7 +337,8 @@ export function useAccionDashboard(id: number) {
 export function useProbarMetrica(id: number) {
   return useMutation({
     mutationFn: (v: {
-      entidad: string
+      /** `null` = compuesta. */
+      entidad: string | null
       expresion: string
       dimensiones?: string[]
       limite?: number

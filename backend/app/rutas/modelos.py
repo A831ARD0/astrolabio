@@ -30,8 +30,9 @@ from app.modelos_db import Rol, Usuario, VersionModelo, iso
 from app.politicas import PoliticaInvalida
 from semantic.definicion import Definicion, desde_yaml, volcar_yaml
 from semantic.formula import (
-    Contexto, ErrorFormula, catalogo_para_pantalla, compilar as compilar_formula,
-    revisar as revisar_formula,
+    Contexto, ContextoCompuesta, ErrorFormula, catalogo_para_pantalla,
+    compilar as compilar_formula, compilar_compuesta,
+    revisar as revisar_formula, revisar_compuesta,
 )
 from semantic.politica import PoliticaDef, atributos_requeridos
 from semantic.engine import Consulta, ErrorModelo
@@ -108,7 +109,8 @@ class Publicar(BaseModel):
 
 
 class ProbarMetrica(BaseModel):
-    entidad: str
+    #: `None` = compuesta: se calcula sobre las metricas ya guardadas.
+    entidad: str | None = None
     expresion: str
     formato: str = "numero"
     dimensiones: list[str] = []
@@ -127,10 +129,15 @@ class RevisarFormula(BaseModel):
     quien llame a esta ruta desde fuera.
     """
 
-    entidad: str
+    #: `None` = es una metrica compuesta y se revisa contra `metricas_del_modelo`.
+    entidad: str | None = None
     expresion: str
     campos: list[str] | None = None
     metricas: dict[str, str] | None = None
+    #: Solo para una compuesta: TODAS las metricas del modelo, con su expresion
+    #: si tambien son compuestas y `None` si se agregan desde un hecho. Una
+    #: compuesta puede nombrar cualquiera, que es su motivo de ser.
+    metricas_del_modelo: dict[str, str | None] | None = None
 
 
 class VistaPrevia(BaseModel):
@@ -794,7 +801,7 @@ def probar_metrica(modelo_id: int, cuerpo: ProbarMetrica, sesion: SesionDep,
     """
     v = _version_vigente(sesion, modelo_id)
     m = _cargar_semantico(v.yaml)
-    if cuerpo.entidad not in m.entidades:
+    if cuerpo.entidad is not None and cuerpo.entidad not in m.entidades:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"La entidad '{cuerpo.entidad}' no esta en el modelo")
 
@@ -916,6 +923,22 @@ def revisar_formula_ruta(modelo_id: int, cuerpo: RevisarFormula, sesion: SesionD
     sigue siendo el paso siguiente — este dice si esta bien ESCRITA, aquel dice
     si da el numero que se esperaba.
     """
+    if cuerpo.entidad is None:
+        # Compuesta: no hay entidad ni campos, solo las demas metricas.
+        if cuerpo.metricas_del_modelo is not None:
+            ctx_c = ContextoCompuesta(metricas=dict(cuerpo.metricas_del_modelo))
+        else:
+            ctx_c = _cargar_semantico(
+                _version_vigente(sesion, modelo_id).yaml).contexto_compuesta()
+        fallos = revisar_compuesta(cuerpo.expresion, ctx_c)
+        try:
+            sql = compilar_compuesta(cuerpo.expresion, ctx_c)[0]
+        except Exception:
+            sql = None
+        return {"fallos": fallos,
+                "hay_errores": any(f["gravedad"] == "error" for f in fallos),
+                "sql": sql}
+
     if cuerpo.campos is not None:
         contexto = Contexto(campos=set(cuerpo.campos),
                             metricas=dict(cuerpo.metricas or {}))
@@ -962,8 +985,11 @@ def campos(modelo_id: int, sesion: SesionDep, _: UsuarioDep):
             if c.rol == "dimension" and c.visible
         ],
         "metricas": [
+            # Una compuesta no sale de ningun hecho, y en la lista de metricas de
+            # un tablero esa nota es lo que dice de donde viene la cifra: se pone
+            # «compuesta» y no un hueco, que se leeria como un dato que falta.
             {"clave": mt.nombre, "etiqueta": mt.etiqueta,
-             "entidad": mt.entidad, "formato": mt.formato}
+             "entidad": mt.entidad or "compuesta", "formato": mt.formato}
             for mt in m.metricas.values()
         ],
     }
