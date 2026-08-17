@@ -411,7 +411,7 @@ def test_un_yaml_que_no_es_yaml_lo_dice(cliente, cab_editor, modelo_id):
     r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
                     json={"yaml": "esto: [no cierra\n  ni es un modelo"})
     assert r.status_code == 422, r.text
-    assert "no se pudo leer" in r.text
+    assert "no es YAML valido" in r.text
 
 
 def test_hay_que_mandar_uno_de_los_dos_y_no_los_dos(cliente, cab_editor,
@@ -427,3 +427,98 @@ def test_hay_que_mandar_uno_de_los_dos_y_no_los_dos(cliente, cab_editor,
 def test_un_lector_no_importa_yaml(cliente, cab_lector, modelo_id, yaml_modelo):
     assert cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_lector,
                        json={"yaml": yaml_modelo}).status_code == 403
+
+
+def test_un_trozo_con_solo_metricas_se_mezcla(cliente, cab_editor, modelo_id,
+                                              yaml_modelo):
+    """
+    El caso corriente: las entidades ya están dibujadas y lo que llega de fuera son
+    las métricas traducidas. Exigir el archivo completo obligaba a pegar los dos
+    bloques a mano fuera de la aplicación, que es justo lo que esto viene a quitar.
+
+    Se mezcla por NOMBRE: lo pegado gana, y lo que no venga en el texto se queda.
+    Reemplazar la lista entera habría borrado en silencio lo que alguien escribió
+    en la pantalla.
+    """
+    import yaml as _y
+    antes = cliente.get(f"/api/modelos/{modelo_id}/definicion",
+                        headers=cab_editor).json()["definicion"]
+    hecho = next(e["nombre"] for e in antes["entidades"] if e["tipo"] == "hecho")
+    vieja = antes["metricas"][0]["nombre"]
+
+    trozo = {
+        "tablas_medidas": [{"nombre": "Cajón nuevo"}],
+        "metricas": [
+            {"nombre": "recien_llegada", "etiqueta": "Recién llegada",
+             "entidad": hecho, "expresion": "CONTAR()", "formato": "entero",
+             "tabla_medidas": "Cajón nuevo"},
+            # Y una que ya existía, con la fórmula cambiada: debe ganar la pegada.
+            {**antes["metricas"][0], "expresion": "CONTAR()"},
+        ],
+    }
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": _y.safe_dump(trozo, allow_unicode=True)})
+    assert r.status_code == 200, r.text
+    assert r.json()["importado"] == {"modo": "mezcla", "nuevas": 1,
+                                     "reemplazadas": 1,
+                                     "intactas": len(antes["metricas"]) - 1,
+                                     "tablas_medidas": 1}
+
+    d = cliente.get(f"/api/modelos/{modelo_id}/definicion",
+                    headers=cab_editor).json()["definicion"]
+    nombres = [m["nombre"] for m in d["metricas"]]
+    # La nueva entró, la que ya estaba se quedó, y ninguna desapareció.
+    assert "recien_llegada" in nombres
+    assert set(m["nombre"] for m in antes["metricas"]) <= set(nombres)
+    reemplazada = next(m for m in d["metricas"] if m["nombre"] == vieja)
+    assert reemplazada["expresion"] == "CONTAR()"
+
+
+def test_un_trozo_con_una_metrica_imposible_no_entra(cliente, cab_editor,
+                                                     modelo_id):
+    """Mezclar no es colar: pasa por las mismas revisiones."""
+    import yaml as _y
+    trozo = {"metricas": [{"nombre": "mala", "etiqueta": "Mala",
+                           "entidad": "no_existe", "expresion": "CONTAR()",
+                           "formato": "entero"}]}
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": _y.safe_dump(trozo)})
+    assert r.status_code == 422, r.text
+    assert "no_existe" in r.text
+
+
+def test_un_trozo_a_medias_lo_dice_sin_volcar_pydantic(cliente, cab_editor,
+                                                       modelo_id):
+    """
+    El error que se veía era «3 validation errors for Definicion … input_value=
+    {…}, input_type=dict» con su enlace a errors.pydantic.dev. Es correcto y no
+    dice lo único que hacía falta saber.
+    """
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": "metricas:\n- nombre: a_medias\n"
+                                  "  etiqueta: A medias\n"})
+    assert r.status_code == 422, r.text
+    dicho = r.text
+    assert "pydantic" not in dicho and "input_value" not in dicho
+    assert "expresion" in dicho
+
+
+def test_un_texto_que_no_es_ni_modelo_ni_metricas_se_explica(cliente,
+                                                             cab_editor,
+                                                             modelo_id):
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": "cualquier_cosa: 3\notra: 4\n"})
+    assert r.status_code == 422, r.text
+    assert "no es un modelo ni un juego de metricas" in r.text
+    # Y dice que llego, para que se vea que se leyo el texto.
+    assert "cualquier_cosa" in r.text
+
+
+def test_un_modelo_incompleto_sigue_pidiendo_lo_que_falta(cliente, cab_editor,
+                                                          modelo_id):
+    """Con `entidades` pero sin `modelo` es un modelo mal escrito, no un trozo."""
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": "entidades: []\n"})
+    assert r.status_code == 422, r.text
+    assert "Falta 'modelo'" in r.text
+    assert "trozo de modelo" in r.text

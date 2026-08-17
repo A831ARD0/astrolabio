@@ -44,10 +44,20 @@ versionado es [semántico](https://semver.org/lang/es/).
   otra herramienta sólo podía entrar tecleándolo en el lienzo, una por una. Ahora hay un
   botón **Importar YAML…** con un cuadro donde pegarlo.
 
-  Reemplaza el **borrador**, nunca una versión publicada: lo que ven los tableros no
-  cambia hasta que se publique. Y pasa por las mismas revisiones que lo que manda el
-  lienzo —el texto se lee a la definición y se valida— así que una métrica que nombra un
-  hecho que no existe no entra, y el error habla de la métrica y no de una línea.
+  Valen **dos** cosas, porque son dos necesidades distintas. El **modelo completo**
+  reemplaza el borrador. Un **trozo con sólo `metricas:`** se mezcla con lo que ya hay
+  —es el caso corriente: las entidades ya están dibujadas y lo que llega de fuera son
+  las métricas—. La mezcla es por nombre: lo pegado gana sobre la métrica que se llame
+  igual y lo que no venga en el texto se queda, así que no desaparece en silencio lo que
+  alguien escribió en la pantalla. Al terminar dice qué hizo: *«96 métricas nuevas, 0
+  reemplazadas y 1 sin tocar»*.
+
+  Reemplaza o mezcla el **borrador**, nunca una versión publicada: lo que ven los
+  tableros no cambia hasta que se publique. Y pasa por las mismas revisiones que lo que
+  manda el lienzo —el texto se lee a la definición y se valida— así que una métrica que
+  nombra un hecho que no existe no entra, y el error habla de la métrica y no de una
+  línea. Un texto que no es ni un modelo ni un juego de métricas se dice como tal, en
+  vez del volcado de pydantic con su enlace a `errors.pydantic.dev`.
 
   El editor sigue siendo de sólo lectura. Teclear encima de lo que se está mirando
   invita a editar la versión publicada por error; importar es un acto con su botón, que

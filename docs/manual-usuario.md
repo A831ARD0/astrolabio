@@ -872,7 +872,19 @@ donde pegarlo: un modelo escrito a mano, un respaldo, o un juego de métricas
 traducido de otra herramienta. Sin eso, meter noventa métricas significaba teclearlas
 una por una.
 
-Reemplaza el **borrador** entero, nunca una versión publicada — lo que ven los
+Valen dos cosas:
+
+| Lo que pegas | Qué hace |
+|---|---|
+| El **modelo completo** — empieza por `modelo:` y lleva `entidades:` | Reemplaza el borrador |
+| Un **trozo con sólo `metricas:`** (y `tablas_medidas:` si hace falta) | Se mezcla con lo que ya tienes |
+
+La mezcla es lo normal cuando las tablas ya están dibujadas y lo que llega de fuera
+son las métricas. Va **por nombre**: las de igual nombre se sustituyen y las demás se
+quedan, así que no desaparece nada que hayas escrito. Al terminar te dice qué hizo:
+«96 métricas nuevas, 0 reemplazadas y 1 sin tocar».
+
+En los dos casos se toca el **borrador**, nunca una versión publicada — lo que ven los
 tableros no cambia hasta que publiques. Y se revisa igual que si lo hubieras armado
 en el lienzo: si una métrica nombra una columna o un hecho que no existe, no entra, y
 el error habla de la métrica.

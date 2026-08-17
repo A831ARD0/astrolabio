@@ -197,10 +197,19 @@ export function useImportarYaml(id: number) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (v: { yaml: string }) =>
-      api.put<{ problemas: Problema[]; borrador: Borrador; yaml: string }>(
-        `/modelos/${id}/borrador`,
-        v,
-      ),
+      api.put<{
+        problemas: Problema[]
+        borrador: Borrador
+        yaml: string
+        /** Qué se hizo con el texto: reemplazar el borrador o mezclar métricas. */
+        importado?: {
+          modo: 'reemplazo' | 'mezcla'
+          nuevas?: number
+          reemplazadas?: number
+          intactas?: number
+          tablas_medidas?: number
+        }
+      }>(`/modelos/${id}/borrador`, v),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: claves.definicion(id) })
       qc.invalidateQueries({ queryKey: claves.yaml(id) })

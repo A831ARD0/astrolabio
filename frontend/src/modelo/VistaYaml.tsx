@@ -61,10 +61,19 @@ export function VistaYaml({
       {
         onSuccess: (r) => {
           const criticos = r.problemas.filter((p) => p.gravedad === 'critico')
+          const i = r.importado
+          // Qué se hizo, y sólo después si algo quedó mal. Con una mezcla, lo
+          // primero que hay que poder comprobar es que no desapareció nada.
+          const que =
+            i?.modo === 'mezcla'
+              ? `${i.nuevas} métrica(s) nueva(s), ${i.reemplazadas} reemplazada(s)`
+                + ` y ${i.intactas} sin tocar.`
+              : 'Borrador reemplazado.'
           setHecho(
-            criticos.length
-              ? `Importado. El diagnóstico ve ${criticos.length} problema(s) crítico(s).`
-              : 'Importado, y el diagnóstico no ve nada crítico.',
+            que
+            + (criticos.length
+              ? ` El diagnóstico ve ${criticos.length} problema(s) crítico(s).`
+              : ' El diagnóstico no ve nada crítico.'),
           )
           setImportando(false)
           setTexto('')
@@ -110,10 +119,17 @@ export function VistaYaml({
       {importando && (
         <div style={{ padding: '8px 8px 0' }}>
           <p className="chico tenue" style={{ margin: '0 0 6px' }}>
-            Pega aquí el modelo completo. Reemplaza el <strong>borrador</strong> —lo
-            que ven los tableros no cambia hasta que publiques— y se revisa igual
-            que si lo hubieras armado en el lienzo: si una métrica nombra una
-            columna que no existe, no entra.
+            Dos cosas valen aquí. El <strong>modelo completo</strong> —empieza por{' '}
+            <code>modelo:</code> y lleva <code>entidades:</code>— reemplaza el
+            borrador. Un <strong>trozo con sólo <code>metricas:</code></strong> se
+            mezcla con lo que ya tienes: las de igual nombre se sustituyen, las
+            demás se quedan.
+          </p>
+          <p className="chico tenue" style={{ margin: '0 0 6px' }}>
+            En los dos casos se toca el <strong>borrador</strong> —lo que ven los
+            tableros no cambia hasta que publiques— y se revisa igual que si lo
+            hubieras armado en el lienzo: si una métrica nombra una columna que no
+            existe, no entra.
           </p>
           <textarea
             className="mono"

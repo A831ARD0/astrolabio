@@ -14,7 +14,7 @@ from typing import Literal
 import yaml
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import func, select
 
 from app.analitico import (comprobar_grano, ejecutar_consulta, ejecutar_muestra,
@@ -110,6 +110,10 @@ class GuardarBorrador(BaseModel):
     y seis metricas traducidas de otra herramienta. La pestaña YAML las enseñaba y
     no habia por donde meterlas: quedaba pegarlas a mano en la pantalla, una por
     una.
+
+    El `yaml` admite las dos cosas: el modelo completo, que reemplaza el borrador,
+    o un trozo con solo `metricas:`, que se mezcla con lo que ya hay. Ver
+    `_importar_yaml`.
 
     Uno de los dos, no los dos: si llegaran ambos habria que decidir cual manda, y
     esa decision no la puede tomar el servidor sin adivinar.
@@ -527,17 +531,10 @@ def guardar_borrador(modelo_id: int, cuerpo: GuardarBorrador, sesion: SesionDep,
     _existe(sesion, modelo_id)
 
     definicion = cuerpo.definicion
+    resumen: dict | None = None
     if definicion is None:
-        # Un YAML pegado desde fuera se lee a `Definicion` a proposito, en vez de
-        # guardarse tal cual: asi pasa por las mismas revisiones que lo que manda
-        # la interfaz, y los errores hablan de entidades y de metricas en vez de
-        # lineas de un archivo.
-        try:
-            definicion = desde_yaml(cuerpo.yaml or "")
-        except Exception as e:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                {"errores": [f"El YAML no se pudo leer. {en_castellano(e)}"]})
+        definicion, resumen = _importar_yaml(
+            sesion, modelo_id, cuerpo.yaml or "")
 
     errores = definicion.revisar_referencias()
     if errores:
@@ -563,7 +560,136 @@ def guardar_borrador(modelo_id: int, cuerpo: GuardarBorrador, sesion: SesionDep,
     # registro dejaria de servir para lo que sirve: saber que cambio de verdad.
     # Lo que se audita es publicar y descartar, que son los actos con efecto.
     return {"problemas": semantico.diagnosticar(),
-            "borrador": _resumen_borrador(sesion, b), "yaml": texto}
+            "borrador": _resumen_borrador(sesion, b), "yaml": texto,
+            **({"importado": resumen} if resumen else {})}
+
+
+#: Un YAML que trae SOLO metricas no es un modelo incompleto: es un trozo, y el
+#: caso mas corriente que hay. Se reconoce por lo que le falta.
+_CLAVES_FRAGMENTO = ("metricas", "tablas_medidas")
+
+
+def _importar_yaml(sesion, modelo_id: int, texto: str) -> tuple[Definicion, dict]:
+    """
+    El YAML pegado, leido a una definicion, y que se hizo con el.
+
+    Dos formas, porque son dos necesidades distintas y confundirlas cuesta el
+    trabajo de una tarde:
+
+    - **El modelo entero** —lleva `entidades`— reemplaza el borrador.
+    - **Un trozo con solo `metricas:`** se MEZCLA con lo que ya hay. Es el caso
+      corriente: se traducen noventa metricas de otra herramienta y las entidades
+      ya estaban dibujadas. Exigir el archivo completo obligaba a pegar los dos
+      bloques a mano fuera de la aplicacion, que es justo lo que esto viene a
+      quitar.
+
+    La mezcla es por NOMBRE: lo pegado gana sobre la metrica que se llame igual, y
+    lo que no venga en el texto se queda. Reemplazar la lista entera habria
+    borrado en silencio lo que alguien escribio en la pantalla, y eso no se puede
+    deshacer desde aqui.
+    """
+    try:
+        crudo = yaml.safe_load(texto)
+    except yaml.YAMLError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {"errores": [f"El texto no es YAML valido. {str(e).splitlines()[0]}"]})
+    if not isinstance(crudo, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {"errores": ["El YAML tiene que empezar por claves —`modelo:`, "
+                         "`entidades:`, `metricas:`— y esto no es un mapa."]})
+
+    if "entidades" not in crudo:
+        if not any(k in crudo for k in _CLAVES_FRAGMENTO):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                {"errores": [
+                    "Esto no es un modelo ni un juego de metricas. Un modelo "
+                    "completo lleva `modelo:`, `version:` y `entidades:`; un "
+                    "trozo para mezclar lleva `metricas:` y, si hace falta, "
+                    "`tablas_medidas:`. Lo que llego no trae ninguna de las dos "
+                    f"cosas: {', '.join(sorted(crudo)[:6]) or 'nada'}."]})
+        return _mezclar_fragmento(sesion, modelo_id, crudo)
+
+    try:
+        return desde_yaml(texto), {"modo": "reemplazo"}
+    except ValidationError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            {"errores": _errores_legibles(e)})
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {"errores": [f"El YAML no se pudo leer. {en_castellano(e)}"]})
+
+
+def _mezclar_fragmento(sesion, modelo_id: int, crudo: dict
+                       ) -> tuple[Definicion, dict]:
+    """Mete las metricas pegadas en el borrador que ya hay, por nombre."""
+    borrador = sesion.get(BorradorModelo, modelo_id)
+    base_texto = (borrador.yaml if borrador is not None
+                  else _version_vigente(sesion, modelo_id).yaml)
+    base = desde_yaml(base_texto).model_dump(exclude_none=True, mode="json")
+
+    try:
+        llegan = Definicion.model_validate(
+            {**base, **{k: crudo[k] for k in _CLAVES_FRAGMENTO if k in crudo}}
+        ).model_dump(exclude_none=True, mode="json")
+    except ValidationError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            {"errores": _errores_legibles(e)})
+
+    antes = {m["nombre"]: m for m in base.get("metricas") or []}
+    pegadas = {m["nombre"]: m for m in llegan.get("metricas") or []}
+    reemplazadas = sorted(set(antes) & set(pegadas))
+    nuevas = [n for n in pegadas if n not in antes]
+    # El orden: primero las que ya estaban —en su orden— y las nuevas detras.
+    metricas = [pegadas.get(n, antes[n]) for n in antes] + \
+               [pegadas[n] for n in nuevas]
+
+    tablas = {t["nombre"]: t for t in base.get("tablas_medidas") or []}
+    for t in llegan.get("tablas_medidas") or []:
+        tablas[t["nombre"]] = t
+
+    mezclado = {**base, "metricas": metricas,
+                "tablas_medidas": list(tablas.values())}
+    return Definicion.model_validate(mezclado), {
+        "modo": "mezcla",
+        "nuevas": len(nuevas),
+        "reemplazadas": len(reemplazadas),
+        "intactas": len(antes) - len(reemplazadas),
+        "tablas_medidas": len(tablas),
+    }
+
+
+def _errores_legibles(e: ValidationError) -> list[str]:
+    """
+    Los errores de pydantic dichos para quien pego el texto.
+
+    El volcado tal cual —«3 validation errors for Definicion … input_value={…},
+    input_type=dict» con su enlace a errors.pydantic.dev— es correcto y no dice lo
+    unico que hace falta saber: que faltan `modelo` y `entidades` porque se pego un
+    trozo donde iba el archivo completo.
+    """
+    lineas: list[str] = []
+    faltan_raiz = set()
+    for d in e.errors():
+        sitio = ".".join(str(x) for x in d["loc"]) or "el modelo"
+        if d["type"] == "missing":
+            if len(d["loc"]) == 1:
+                faltan_raiz.add(str(d["loc"][0]))
+            lineas.append(f"Falta '{sitio}'.")
+        else:
+            lineas.append(f"{sitio}: {d['msg']}")
+
+    if {"modelo", "entidades"} & faltan_raiz:
+        lineas.insert(0, "Esto parece un trozo de modelo y no uno completo. "
+                         "Para reemplazar el borrador hace falta el archivo "
+                         "entero, con `modelo:`, `version:` y `entidades:`. Si "
+                         "solo quieres agregar metricas, pega un texto que "
+                         "empiece por `metricas:` y se mezclaran con las que ya "
+                         "tienes.")
+    return lineas[:12]
 
 
 @router.delete("/{modelo_id}/borrador")
