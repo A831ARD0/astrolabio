@@ -64,12 +64,15 @@ export function Grafico({
   widget,
   datos,
   formatoMetrica,
+  etiquetaMetrica,
   alSeleccionar,
 }: {
   widget: Widget
   datos: ResultadoConsulta
   /** Formato por nombre de métrica, sacado del catálogo del modelo. */
   formatoMetrica: (metrica: string) => Formato
+  /** Como se llama cada metrica en ESTE widget: la leyenda no es para el ordenador. */
+  etiquetaMetrica: (metrica: string) => string
   alSeleccionar?: (campo: string, valor: unknown) => void
 }) {
   const dim = widget.dimensiones[0]
@@ -79,7 +82,7 @@ export function Grafico({
     const formato = formatoMetrica(widget.metricas[0] ?? '')
 
     const series = widget.metricas.map((m, i) => ({
-      nombre: m,
+      nombre: etiquetaMetrica(m),
       valores: datos.filas.map((f) => (f[m] as number) ?? 0),
       color: PALETA[i % PALETA.length]!,
     }))
@@ -157,7 +160,7 @@ export function Grafico({
         itemStyle: { color: s.color, borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
       })),
     }
-  }, [widget, datos, dim, formatoMetrica])
+  }, [widget, datos, dim, formatoMetrica, etiquetaMetrica])
 
   const ref = useEcharts(
     opciones,

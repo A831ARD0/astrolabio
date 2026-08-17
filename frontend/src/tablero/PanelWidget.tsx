@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useCampos } from '../api/hooks'
 import type { Hoja, TipoWidget, Widget } from '../api/tipos'
 import { coincide } from '../comunes/buscar'
+import { type Formato, type Total, totalPorOmision } from './formato'
 
 const TIPOS: { valor: TipoWidget; etiqueta: string }[] = [
   { valor: 'kpi', etiqueta: 'KPI — una cifra grande' },
@@ -42,6 +43,24 @@ const UNA_DIMENSION: TipoWidget[] = [
   'area',
   'pastel',
 ]
+
+const FORMATOS: { valor: Formato; etiqueta: string; ejemplo: string }[] = [
+  { valor: 'entero', etiqueta: 'Entero', ejemplo: '1,235' },
+  { valor: 'numero', etiqueta: 'Con decimales', ejemplo: '1,234.57' },
+  { valor: 'moneda', etiqueta: 'Moneda', ejemplo: '$1,235' },
+  { valor: 'porcentaje', etiqueta: 'Porcentaje', ejemplo: '12.3 %' },
+]
+
+const TOTALES: { valor: Total; etiqueta: string }[] = [
+  { valor: 'suma', etiqueta: 'Suma' },
+  { valor: 'promedio', etiqueta: 'Promedio' },
+  { valor: 'ninguno', etiqueta: 'Sin total' },
+]
+
+/** Lee un diccionario que el widget guarda como opción propia. */
+function mapaDe<T>(widget: Widget, clave: string): Record<string, T> {
+  return (widget[clave] as Record<string, T> | undefined) ?? {}
+}
 
 export function PanelWidget({
   widget,
@@ -147,13 +166,46 @@ export function PanelWidget({
       )}
 
       {!sinMetricas && (
-        <Seleccionables
-          titulo={`Métricas${widget.metricas?.length ? ` (${widget.metricas.length})` : ''}`}
-          items={metricas.map((m) => ({ clave: m.clave, etiqueta: m.etiqueta,
-                                        nota: m.entidad }))}
-          elegidos={widget.metricas ?? []}
-          alAlternar={alternarMet}
-          vacio="El modelo no tiene métricas todavía."
+        <>
+          <Elegidas
+            titulo="Columnas de cifras"
+            campo="metricas"
+            claves={widget.metricas ?? []}
+            etiquetaBase={(c) =>
+              metricas.find((m) => m.clave === c)?.etiqueta ?? c
+            }
+            formatoBase={(c) =>
+              (metricas.find((m) => m.clave === c)?.formato as Formato) ?? 'numero'
+            }
+            widget={widget}
+            conTotales={widget.tipo === 'tabla'}
+            alCambiar={alCambiar}
+          />
+          <Seleccionables
+            titulo={`Métricas${widget.metricas?.length ? ` (${widget.metricas.length})` : ''}`}
+            items={metricas.map((m) => ({ clave: m.clave, etiqueta: m.etiqueta,
+                                          nota: m.entidad }))}
+            elegidos={widget.metricas ?? []}
+            alAlternar={alternarMet}
+            vacio="El modelo no tiene métricas todavía."
+          />
+        </>
+      )}
+
+      {/* Con un solo desglose no hay orden que elegir. */}
+      {!soloUna && widget.tipo !== 'texto' && (
+        <Elegidas
+          titulo={widget.tipo === 'filtro' ? 'Campos, en este orden' : 'Columnas de desglose'}
+          campo="dimensiones"
+          claves={widget.dimensiones ?? []}
+          etiquetaBase={(c) =>
+            dimensiones.find((d) => d.clave === c)?.etiqueta ?? c
+          }
+          formatoBase={() => 'numero'}
+          widget={widget}
+          conTotales={false}
+          soloEtiqueta
+          alCambiar={alCambiar}
         />
       )}
 
@@ -192,6 +244,176 @@ export function PanelWidget({
       <button className="btn peligro" onClick={alQuitar}>
         Quitar widget
       </button>
+    </div>
+  )
+}
+
+/**
+ * Lo elegido, **en el orden en que sale**, con las propiedades de cada columna.
+ *
+ * Va separado del catálogo a propósito. En el catálogo el orden es alfabético o el
+ * del modelo, y lo que importa aquí es otro: el orden de las columnas de la tabla y
+ * de las series del gráfico. Mezclar las dos cosas en una lista obliga a elegir
+ * entre poder buscar y poder ordenar.
+ */
+function Elegidas({
+  titulo,
+  campo,
+  claves,
+  etiquetaBase,
+  formatoBase,
+  widget,
+  conTotales,
+  soloEtiqueta = false,
+  alCambiar,
+}: {
+  titulo: string
+  /** En qué lista del widget se guarda el orden. */
+  campo: 'metricas' | 'dimensiones'
+  claves: string[]
+  etiquetaBase: (clave: string) => string
+  formatoBase: (clave: string) => Formato
+  widget: Widget
+  conTotales: boolean
+  /** Una dimension no tiene formato de cifra ni total: solo su nombre. */
+  soloEtiqueta?: boolean
+  alCambiar: (cambios: Partial<Widget>) => void
+}) {
+  const [abierta, setAbierta] = useState<string | null>(null)
+
+  if (claves.length === 0) return null
+
+  const etiquetas = mapaDe<string>(widget, 'etiquetas')
+  const formatos = mapaDe<Formato>(widget, 'formatos')
+  const totales = mapaDe<Total>(widget, 'totales_de')
+
+  const mover = (i: number, paso: -1 | 1) => {
+    const j = i + paso
+    if (j < 0 || j >= claves.length) return
+    const orden = [...claves]
+    ;[orden[i], orden[j]] = [orden[j]!, orden[i]!]
+    alCambiar({ [campo]: orden } as Partial<Widget>)
+  }
+
+  /** Guarda una propiedad, y la borra del widget si vuelve a ser la del modelo. */
+  const poner = (mapa: string, clave: string, valor: string | undefined) => {
+    const copia = { ...mapaDe<string>(widget, mapa) }
+    if (valor === undefined) delete copia[clave]
+    else copia[clave] = valor
+    alCambiar({ [mapa]: copia } as Partial<Widget>)
+  }
+
+  return (
+    <div>
+      <div className="chico suave" style={{ marginBottom: 4 }}>
+        {titulo} <span className="tenue">({claves.length}, en este orden)</span>
+      </div>
+      <div className="columnas-elegidas">
+        {claves.map((c, i) => {
+          const base = formatoBase(c)
+          const formato = formatos[c] ?? base
+          const total = totales[c] ?? totalPorOmision(formato)
+          return (
+            <div key={c} className={`col-elegida ${abierta === c ? 'abierta' : ''}`}>
+              <div className="cabeza">
+                <button
+                  className="titulo"
+                  title={c}
+                  onClick={() => setAbierta(abierta === c ? null : c)}
+                >
+                  <span className="pos">{i + 1}</span>
+                  <span className="nom">{etiquetas[c] || etiquetaBase(c)}</span>
+                  <span className="flecha">{abierta === c ? '▾' : '▸'}</span>
+                </button>
+                <button
+                  className="mueve"
+                  disabled={i === 0}
+                  title="Subir"
+                  onClick={() => mover(i, -1)}
+                >
+                  ↑
+                </button>
+                <button
+                  className="mueve"
+                  disabled={i === claves.length - 1}
+                  title="Bajar"
+                  onClick={() => mover(i, 1)}
+                >
+                  ↓
+                </button>
+              </div>
+
+              {abierta === c && (
+                <div className="cuerpo">
+                  <div className="campo">
+                    <label>Etiqueta</label>
+                    <input
+                      type="text"
+                      value={etiquetas[c] ?? ''}
+                      placeholder={etiquetaBase(c)}
+                      onChange={(e) =>
+                        poner('etiquetas', c, e.target.value || undefined)
+                      }
+                    />
+                    <span className="chico tenue">
+                      Solo cambia el nombre en este widget. En el modelo sigue
+                      llamándose igual, y ahí es donde lo ven los demás tableros.
+                    </span>
+                  </div>
+
+                  {!soloEtiqueta && (
+                  <div className="campo">
+                    <label>Formato</label>
+                    <select
+                      value={formato}
+                      onChange={(e) =>
+                        poner(
+                          'formatos',
+                          c,
+                          e.target.value === base ? undefined : e.target.value,
+                        )
+                      }
+                    >
+                      {FORMATOS.map((f) => (
+                        <option key={f.valor} value={f.valor}>
+                          {f.etiqueta} — {f.ejemplo}
+                          {f.valor === base ? ' (del modelo)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  )}
+
+                  {conTotales && (
+                    <div className="campo">
+                      <label>Fila de totales</label>
+                      <select
+                        value={total}
+                        onChange={(e) =>
+                          poner('totales_de', c, e.target.value)
+                        }
+                      >
+                        {TOTALES.map((t) => (
+                          <option key={t.valor} value={t.valor}>
+                            {t.etiqueta}
+                          </option>
+                        ))}
+                      </select>
+                      {formato === 'porcentaje' && total === 'suma' && (
+                        <span className="chico aviso-texto">
+                          La suma de varios porcentajes no significa nada. Para un
+                          logro, el total correcto se calcula con una métrica que
+                          divida los dos totales.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

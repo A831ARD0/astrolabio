@@ -7,6 +7,27 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Las columnas de un widget se ordenan, y cada una tiene sus propiedades.** Una
+  lista aparte del catálogo muestra lo elegido en el orden en que sale, numerado y con
+  flechas para moverlo — el orden de las columnas de la tabla y de las series del
+  gráfico. Iban en el orden en que se hubiera hecho clic, y no había forma de
+  cambiarlo salvo desmarcar todo y volver a empezar.
+
+  Cada columna se abre y tiene **etiqueta** (el nombre en *este* widget; en el modelo
+  sigue llamándose igual, que es lo que ven los demás tableros), **formato** (entero,
+  decimales, moneda, porcentaje, con el del modelo marcado) y, en las tablas,
+  **fila de totales**.
+
+- **Fila de totales en las tablas.** Se pone sola **suma** en dinero y conteos, y
+  **sin total** en porcentajes y cifras con decimales: la suma de cuarenta porcentajes
+  no significa nada, y una cifra con decimales casi siempre es un promedio, así que
+  sumarla daría un número que parece bueno y no lo es. Se puede forzar, y entonces la
+  pantalla dice por qué no conviene y cómo se calcula el total bueno de un logro. La
+  fila se queda a la vista al desplazar.
+
+- La leyenda de los gráficos deja de mostrar el nombre técnico de la métrica
+  (`unidades_vendidas`) y muestra su etiqueta.
+
 - **Un tablero es un libro de hojas.** Se cambia de hoja en una barra de pestañas, y
   cada hoja tiene su propio espacio de trabajo. Los widgets no van dentro de la hoja:
   cada widget dice a cuál pertenece, con lo que un tablero guardado antes de que

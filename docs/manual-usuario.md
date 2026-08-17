@@ -1001,6 +1001,34 @@ acentos y por trozos en cualquier orden, así que `logro unid` encuentra
 «% Logro Unidades». Lo que ya está elegido no desaparece al buscar; si lo hiciera, no
 habría forma de quitarlo sin acordarse de cómo se llamaba.
 
+### Las columnas de un widget: orden y propiedades
+
+Debajo del título, **Columnas de cifras** lista lo elegido **en el orden en que
+sale**, numerado, con flechas para subir y bajar. Es una lista aparte del catálogo a
+propósito: en el catálogo el orden es el del modelo, y aquí importa otro —el de las
+columnas de la tabla y de las series del gráfico—. Mezclarlos obligaría a elegir
+entre poder buscar y poder ordenar.
+
+Cada columna se abre con `▸` y tiene sus propias propiedades:
+
+- **Etiqueta.** El nombre en *este* widget. En el modelo sigue llamándose igual, que
+  es lo que ven los demás tableros: un ajuste de estética no debe cambiarle el
+  vocabulario a nadie más.
+- **Formato.** Entero, con decimales, moneda o porcentaje. El del modelo viene
+  marcado como «(del modelo)», y si lo eliges vuelve a seguir al modelo.
+- **Fila de totales** (en las tablas). Suma, promedio o sin total.
+
+Sobre los totales: se ponen solos **suma** en dinero y en conteos, y **sin total** en
+porcentajes y en cifras con decimales. No es pereza: la suma de cuarenta porcentajes
+no significa nada, y una cifra con decimales casi siempre es un promedio o una razón,
+así que sumarla daría un número que parece bueno y no lo es. Se puede forzar la suma
+—la pantalla te deja y te dice por qué no deberías—, pero el total correcto de un
+logro se calcula con una métrica que divida los dos totales, no sumando los
+porcentajes de cada fila.
+
+El total es de **las filas que se trajeron**. Si el widget tiene un máximo de filas y
+se alcanzó, es el total de ésas.
+
 ### Hojas: un tablero es un libro
 
 Un tablero tiene **hojas**, como un libro, y se cambia de una a otra en la barra de

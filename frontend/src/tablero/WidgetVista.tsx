@@ -19,7 +19,16 @@ import { Th } from '../comunes/Th'
 import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
-import { type Formato, compacto, esNumero, exacto, formatear } from './formato'
+import {
+  type Formato,
+  type Total,
+  compacto,
+  esNumero,
+  exacto,
+  formatear,
+  totalPorOmision,
+  totalizar,
+} from './formato'
 import {
   TIPOS_GRAFICO,
   claveDeRuta,
@@ -106,7 +115,17 @@ function WidgetDatos({
   alElegirRuta,
 }: PropsWidget) {
   const datos = useDatosWidget(modeloId, version, widget, selecciones, rutasElegidas)
-  const { formatoDe, etiquetaDe } = useEtiquetas(modeloId)
+  const { formatoDe: formatoModelo, etiquetaDe: etiquetaModelo } = useEtiquetas(modeloId)
+
+  // El widget puede renombrar una columna y cambiarle el formato **solo para él**.
+  // Lo del modelo sigue siendo lo del modelo: es lo que ven los demás tableros, y
+  // que un tablero pudiera cambiarlo para todos convertiría un ajuste de estética
+  // en un cambio de cifras ajenas.
+  const propias = (clave: string) =>
+    (widget[clave] as Record<string, string> | undefined) ?? {}
+  const etiquetaDe = (c: string) => propias('etiquetas')[c]?.trim() || etiquetaModelo(c)
+  const formatoDe = (m: string) =>
+    (propias('formatos')[m] as Formato | undefined) ?? formatoModelo(m)
 
   if (datos.isLoading) return <div className="vacio chico">Consultando…</div>
   if (datos.isError) {
@@ -152,7 +171,10 @@ function WidgetDatos({
   if (widget.tipo === 'tabla') {
     return (
       <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
-             metricas={widget.metricas} />
+             metricas={widget.metricas}
+             totalesDe={(m) =>
+               (propias('totales_de')[m] as Total | undefined) ??
+               totalPorOmision(formatoDe(m))} />
     )
   }
   if (TIPOS_GRAFICO.includes(widget.tipo)) {
@@ -161,6 +183,7 @@ function WidgetDatos({
         widget={widget}
         datos={datos.data}
         formatoMetrica={formatoDe}
+        etiquetaMetrica={etiquetaDe}
         alSeleccionar={alAlternar}
       />
     )
@@ -207,13 +230,21 @@ function Tabla({
   etiquetaDe,
   formatoDe,
   metricas,
+  totalesDe,
 }: {
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
   formatoDe: (m: string) => Formato
   metricas: string[]
+  totalesDe: (m: string) => Total
 }) {
   const orden = useOrden(datos.filas, (f, c) => f[c])
+
+  // El total es de las filas que se trajeron, no del universo: si el widget tiene
+  // un máximo de filas y se alcanzó, esto suma esas. Se dice en el pie.
+  const totales = metricas.map((m) => totalizar(datos.filas.map((f) => f[m]),
+                                                totalesDe(m)))
+  const hayTotales = totales.some((t) => t !== null)
 
   return (
     <div className="tabla-envoltura" style={{ height: '100%', border: 0 }}>
@@ -244,6 +275,25 @@ function Tabla({
             </tr>
           ))}
         </tbody>
+        {hayTotales && (
+          <tfoot>
+            <tr>
+              {datos.columnas.map((c, i) => {
+                if (!metricas.includes(c)) {
+                  // La primera columna de desglose lleva el rótulo; las demás,
+                  // nada: repetir «Totales» no informa.
+                  return <td key={c}>{i === 0 ? 'Totales' : ''}</td>
+                }
+                const t = totales[metricas.indexOf(c)]
+                return (
+                  <td key={c} className="num">
+                    {t === null ? '—' : formatear(t, formatoDe(c))}
+                  </td>
+                )
+              })}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )

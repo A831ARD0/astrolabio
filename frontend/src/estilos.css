@@ -873,6 +873,83 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 .filtro > header .btn { margin-left: auto; }
+/* Las columnas elegidas de un widget, en su orden, cada una con sus propiedades. */
+.columnas-elegidas { display: flex; flex-direction: column; gap: 2px; }
+
+.col-elegida {
+  border: 1px solid transparent;
+  border-radius: var(--r);
+}
+.col-elegida.abierta { border-color: var(--borde); background: var(--fondo); }
+
+.col-elegida .cabeza { display: flex; align-items: stretch; gap: 1px; }
+.col-elegida .titulo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  background: none;
+  border: 0;
+  border-radius: var(--r);
+  cursor: pointer;
+  text-align: left;
+  color: var(--texto);
+}
+.col-elegida .titulo:hover { background: var(--fondo-hover); }
+/* El número es el orden en que sale la columna, no un adorno. */
+.col-elegida .pos {
+  flex: 0 0 16px;
+  font-size: 10.5px;
+  color: var(--texto-tenue);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.col-elegida .titulo .nom {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-elegida .flecha { color: var(--texto-tenue); font-size: 10px; }
+
+.col-elegida .mueve {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  background: none;
+  border: 0;
+  border-radius: var(--r);
+  color: var(--texto-tenue);
+  cursor: pointer;
+}
+.col-elegida .mueve:hover:not(:disabled) {
+  background: var(--fondo-hover);
+  color: var(--texto);
+}
+.col-elegida .mueve:disabled { opacity: 0.25; cursor: default; }
+
+.col-elegida .cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 7px 8px 9px;
+}
+
+.aviso-texto { color: var(--aviso); }
+
+/* La fila de totales de una tabla: se separa de los datos, y se queda a la vista
+   al desplazar — un total que se va con el scroll obliga a bajar para volver a
+   verlo cada vez que se compara una fila. */
+table.datos tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: var(--fondo-alto);
+  border-top: 1px solid var(--borde-fuerte);
+  font-weight: 550;
+}
+
 /* La lista de valores es la misma dentro del panel y dentro del desplegable, así
    que su estilo cuelga de ella y no del panel: colgado del panel, la del portal
    salía sin viñeta quitada y sin los cuatro estados. */
