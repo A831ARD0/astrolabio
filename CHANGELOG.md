@@ -7,6 +7,32 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Acotar una métrica por una columna de otra tabla.** Es el caso más corriente de
+  todos: «las ventas cuyo canal es digital», donde el canal no está en la factura
+  sino en el catálogo de orígenes. Se escribe con el nombre de la tabla delante:
+
+  ```
+  CALCULAR(SUMA(Unidades), DIM_ORIGEN_VENTA.categoria_canal = 'Digital')
+  ```
+
+  El compilador une esa tabla **dentro del cálculo del hecho**, que es el único
+  sitio donde sirve: acotar después no puede, porque para entonces el hecho ya está
+  sumado. Antes esto fallaba con un «Referenced column not found» que hablaba de un
+  SQL que nadie había escrito.
+
+  El prefijo es obligatorio y no un adorno: dos tablas suelen tener una columna con
+  el mismo nombre —`id_origen` está en el hecho y en la dimensión— y adivinar de cuál
+  se hablaba es justo la clase de decisión que este motor no toma en silencio. El
+  autocompletado ofrece esas columnas ya con su prefijo.
+
+  La tabla se une **por la izquierda**. En el mismo cálculo viven las demás métricas
+  del hecho, y una unión normal les quitaría de en medio las filas cuya clave no casa
+  —un origen nulo, un código que no está en el catálogo— cambiando totales que nadie
+  pidió filtrar.
+
+  Si el hecho no tiene camino hasta esa tabla, o tiene dos, lo dice el **diagnóstico
+  del modelo** y no el tablero de quien sólo estaba mirando una cifra.
+
 - **Comprobar el grano contra los datos.** El grano son las columnas que **juntas**
   identifican una fila: en una tabla de objetivos, la sucursal y el mes — por separado
   las dos se repiten, y juntas no deberían. Es una **afirmación**, y hasta ahora nadie

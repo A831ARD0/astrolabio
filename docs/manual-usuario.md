@@ -686,6 +686,37 @@ pero no se enseñan.
 En el panel aparecen bajo **Compuestas**, con el punto hueco: los puntos rellenos
 marcan algo que existe —una tabla—, y esto es un cálculo encima de lo que existe.
 
+### Acotar por una columna que está en otra tabla
+
+«Las ventas cuyo canal es digital» tiene un problema: el canal no está en la
+factura, está en el catálogo de orígenes. Se escribe poniéndole delante el nombre de
+la tabla:
+
+```
+CALCULAR(SUMA(Unidades), DIM_ORIGEN_VENTA.categoria_canal = 'Digital')
+```
+
+El autocompletado ofrece esas columnas ya con su prefijo, detrás de las del propio
+hecho.
+
+**El prefijo es obligatorio**, y no por gusto: `id_origen` está en la factura y en el
+catálogo, y si se pudiera escribir suelto habría que adivinar de cuál se hablaba.
+Adivinar es lo que este motor no hace.
+
+Lo que ocurre por dentro es que esa tabla se une **antes de sumar**, dentro del
+cálculo del hecho. Acotar después no se puede: para entonces el hecho ya está sumado
+y ya no hay filas que dejar fuera.
+
+Y se une **por la izquierda**, que es lo que hace que las demás métricas del hecho no
+se enteren. Una factura con el origen vacío, o con un código que no está en el
+catálogo, sigue contando en el total: sólo queda fuera de la métrica acotada, que es
+lo único que se pidió acotar. Con una unión normal ese total habría bajado sin que
+nadie lo pidiera.
+
+Si el hecho no tiene camino hasta esa tabla —o tiene dos, y entonces habría dos
+cifras posibles—, lo dice el **diagnóstico del modelo**. Ahí y no en el tablero de
+quien sólo estaba mirando una cifra.
+
 ### Cuando una tabla se une por más de una fecha
 
 Un contacto tiene fecha de primera visita, de asignación a sucursal y de prueba de

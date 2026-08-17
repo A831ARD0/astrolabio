@@ -325,6 +325,10 @@ class Definicion(_Base):
                         metricas={o.nombre: o.expresion for o in self.metricas
                                   if o.entidad == m.entidad
                                   and o.nombre != m.nombre},
+                        entidad=m.entidad,
+                        externos={n: {c.nombre for c in o.campos}
+                                  for n, o in entidades.items()
+                                  if n != m.entidad},
                     ))
             except ErrorFormula as e:
                 for f in e.fallos:

@@ -63,15 +63,28 @@ export interface ContextoFormula {
   campos: { nombre: string; tipo: string; rol: string }[]
   metricas: { nombre: string; etiqueta: string; expresion: string }[]
   funciones: FuncionFormula[]
+  /**
+   * Columnas de LAS DEMÁS tablas, que se escriben con prefijo:
+   * `DIM_ORIGEN_VENTA.categoria_canal`. Son las que sirven para acotar —«las
+   * ventas cuyo canal es digital»— cuando lo que acota no está en el hecho.
+   *
+   * Van con prefijo obligatorio y no sueltas: dos tablas suelen tener una
+   * columna con el mismo nombre, y adivinar de cuál se hablaba es justo la clase
+   * de decisión que este motor no toma en silencio.
+   */
+  externos?: { entidad: string; nombre: string; tipo: string }[]
 }
 
-const contexto: ContextoFormula = { campos: [], metricas: [], funciones: [] }
+const contexto: ContextoFormula = {
+  campos: [], metricas: [], funciones: [], externos: [],
+}
 
 /** Lo llama el editor en cada render: barato, y siempre al día. */
 export function fijarContexto(nuevo: ContextoFormula) {
   contexto.campos = nuevo.campos
   contexto.metricas = nuevo.metricas
   contexto.funciones = nuevo.funciones
+  contexto.externos = nuevo.externos ?? []
 }
 
 let registrado = false
@@ -198,6 +211,20 @@ export function registrarLenguaje(monaco: Monaco) {
           insertText: c.nombre,
           detail: `${c.rol === 'medida_base' ? 'medida' : c.rol} · ${c.tipo}`,
           sortText: (c.rol === 'medida_base' ? '1' : '2') + c.nombre,
+          range: rango,
+        })
+      }
+
+      for (const c of contexto.externos ?? []) {
+        const etiqueta = `${c.entidad}.${c.nombre}`
+        sugerencias.push({
+          label: etiqueta,
+          kind: K.Property,
+          insertText: etiqueta,
+          detail: `${c.entidad} · ${c.tipo}`,
+          // Detrás de las columnas propias: lo corriente es acotar por una del
+          // hecho, y estas obligan además a unir otra tabla.
+          sortText: '5' + etiqueta,
           range: rango,
         })
       }

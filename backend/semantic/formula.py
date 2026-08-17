@@ -167,7 +167,9 @@ CATALOGO: dict[str, Funcion] = {
         _f("CALCULAR", "CALCULAR(expresion, condicion, ...)", "condicion",
            "Calcula la expresion contando solo las filas que cumplen las "
            "condiciones. Es el equivalente honesto de CALCULATE: se le aplica a "
-           "CADA agregacion que haya dentro.",
+           "CADA agregacion que haya dentro. La condicion puede acotar por una "
+           "columna de OTRA tabla escribiendola con su nombre delante: "
+           "DIM_ORIGEN_VENTA.categoria_canal = 'Digital'.",
            "CALCULAR(SUMA(Importe_Venta), Tipo_Venta = 'Contado')", 2, None, True),
         _f("SUMASI", "SUMASI(numero, condicion)", "condicion",
            "Suma solo las filas que cumplen la condicion.",
@@ -429,10 +431,40 @@ class Contexto:
 
     campos: set[str] = field(default_factory=set)
     metricas: dict[str, str] = field(default_factory=dict)
+    #: Como se llama la entidad de la metrica, para poder nombrar sus columnas
+    #: tambien con prefijo sin que parezcan de otra tabla.
+    entidad: str | None = None
+    #: Columnas de LAS DEMAS entidades, por entidad. Una condicion puede nombrar
+    #: una escribiendo `Entidad.campo`: es el «ventas cuyo canal es digital»,
+    #: donde el canal vive en la dimension y no en el hecho. Ver
+    #: `Compilador._cte_metrica`, que es quien une esa tabla.
+    externos: dict[str, set[str]] = field(default_factory=dict)
 
     def campo(self, nombre: str) -> bool:
         n = nombre.lower()
         return any(c.lower() == n for c in self.campos)
+
+    def externo(self, tabla: str, campo: str) -> tuple[str, str] | None:
+        """
+        `(entidad, campo)` con los nombres reales, si `tabla.campo` existe.
+
+        Se compara sin distinguir mayusculas porque asi se escribe: nadie teclea
+        `DIM_ORIGEN_VENTA` con el mismo casing que tiene en el YAML, y fallar por
+        eso seria un error sobre nada.
+        """
+        t, c = tabla.lower(), campo.lower()
+        propias = {self.entidad: self.campos} if self.entidad else {}
+        for ent, campos in {**propias, **self.externos}.items():
+            if ent.lower() != t:
+                continue
+            for x in campos:
+                if x.lower() == c:
+                    return ent, x
+            return None
+        return None
+
+    def entidades_externas(self) -> list[str]:
+        return sorted(self.externos)
 
     def metrica(self, nombre: str) -> str | None:
         n = nombre.lower()
@@ -1381,6 +1413,30 @@ def _columnas_desnudas(arbol: exp.Expression) -> list[str]:
     return sueltas
 
 
+def _mal_prefijada(ctx: Contexto, tabla: str, campo: str) -> str:
+    """
+    Que decirle a quien escribio `Otra.columna` y no existe.
+
+    Se distinguen los dos errores porque se arreglan distinto: si la tabla no
+    esta en el modelo, sobra o esta mal escrita; si la tabla si esta, lo que
+    sobra es la columna.
+    """
+    entidades = ctx.entidades_externas() + ([ctx.entidad] if ctx.entidad else [])
+    parecida = difflib.get_close_matches(tabla, entidades, 1, 0.6)
+    if ctx.externo(tabla, campo) is None and not any(
+            e.lower() == tabla.lower() for e in entidades):
+        return (f"'{tabla}' no es una tabla de este modelo."
+                + (f" ¿Querias decir {parecida[0]}?" if parecida else
+                   f" Las que puedes nombrar son: {', '.join(entidades)}."))
+    real = next(e for e in entidades if e.lower() == tabla.lower())
+    columnas = sorted(ctx.externos.get(real) or ctx.campos)
+    pista = difflib.get_close_matches(campo, columnas, 1, 0.6)
+    return (f"'{campo}' no es una columna de '{real}'."
+            + (f" ¿Querias decir {real}.{pista[0]}?" if pista else
+               f" Tiene: {', '.join(columnas[:8])}"
+               f"{'…' if len(columnas) > 8 else ''}."))
+
+
 def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
     """
     Todo lo que esta mal en la formula, con linea y columna. Lista vacia = bien.
@@ -1415,6 +1471,23 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
         vistos: set[str] = set()
         for col in arbol.find_all(exp.Column):
             nombre = col.name
+            # `Entidad.campo`: nombra la columna de otra tabla. Se revisa contra
+            # esa entidad, no contra la del hecho —ahi no esta, y decir «no es un
+            # campo de esta entidad» seria exactamente lo contrario de lo que
+            # pasa—. Que HAYA camino hasta ella lo comprueba el compilador, que es
+            # el unico que conoce las relaciones.
+            if col.table:
+                if ctx.externo(col.table, nombre) is not None:
+                    continue
+                clave = f"{col.table}.{nombre}".lower()
+                if clave in vistos:
+                    continue
+                vistos.add(clave)
+                fallos.append(Fallo(
+                    _mal_prefijada(ctx, col.table, nombre),
+                    _buscar(mascara, f"{col.table}.{nombre}"),
+                    len(col.table) + len(nombre) + 1))
+                continue
             if ctx.campo(nombre) or nombre.lower() in vistos:
                 continue
             vistos.add(nombre.lower())

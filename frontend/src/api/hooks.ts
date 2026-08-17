@@ -249,6 +249,9 @@ export function useRevisarFormula(id: number) {
       expresion: string
       campos?: string[]
       metricas?: Record<string, string>
+      /** Columnas de todas las entidades del borrador, para las condiciones que
+       *  nombran la columna de otra tabla (`DIM_ORIGEN.categoria_canal`). */
+      campos_por_entidad?: Record<string, string[]>
       /** Solo si es compuesta: expresión si también lo es, `null` si no. */
       metricas_del_modelo?: Record<string, string | null>
     }) => api.post<RevisionFormula>(`/modelos/${id}/revisar-formula`, v),

@@ -135,6 +135,11 @@ class RevisarFormula(BaseModel):
     expresion: str
     campos: list[str] | None = None
     metricas: dict[str, str] | None = None
+    #: Las columnas de LAS DEMAS entidades del borrador, por entidad. Hacen falta
+    #: para revisar una condicion que nombra la columna de otra tabla
+    #: —`DIM_ORIGEN_VENTA.categoria_canal`—: sin ellas se subrayaria en rojo una
+    #: tabla que existe en la pantalla de quien escribe.
+    campos_por_entidad: dict[str, list[str]] | None = None
     #: Solo para una compuesta: TODAS las metricas del modelo, con su expresion
     #: si tambien son compuestas y `None` si se agregan desde un hecho. Una
     #: compuesta puede nombrar cualquiera, que es su motivo de ser.
@@ -993,8 +998,14 @@ def revisar_formula_ruta(modelo_id: int, cuerpo: RevisarFormula, sesion: SesionD
                 "sql": sql}
 
     if cuerpo.campos is not None:
-        contexto = Contexto(campos=set(cuerpo.campos),
-                            metricas=dict(cuerpo.metricas or {}))
+        contexto = Contexto(
+            campos=set(cuerpo.campos),
+            metricas=dict(cuerpo.metricas or {}),
+            entidad=cuerpo.entidad,
+            externos={n: set(cs) for n, cs
+                      in (cuerpo.campos_por_entidad or {}).items()
+                      if n != cuerpo.entidad},
+        )
     else:
         m = _cargar_semantico(_version_vigente(sesion, modelo_id).yaml)
         if cuerpo.entidad not in m.entidades:

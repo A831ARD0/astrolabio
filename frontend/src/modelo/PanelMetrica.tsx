@@ -133,6 +133,27 @@ export function PanelMetrica({
   const campos = useMemo(() => (compuesta ? [] : entidad?.campos ?? []), [compuesta, entidad])
 
   /**
+   * Las columnas de las **demás** tablas, para poder acotar por una de ellas.
+   *
+   * Es el caso de «las ventas cuyo canal es digital»: el canal vive en el
+   * catálogo de orígenes y no en la factura. Se escriben con el nombre de la
+   * tabla delante, y el compilador une esa tabla dentro del cálculo.
+   */
+  const externos = useMemo(
+    () =>
+      compuesta
+        ? []
+        : definicion.entidades
+            .filter((e) => e.nombre !== borrador.entidad)
+            .flatMap((e) =>
+              e.campos.map((c) => ({
+                entidad: e.nombre, nombre: c.nombre, tipo: c.tipo,
+              })),
+            ),
+    [definicion.entidades, borrador.entidad, compuesta],
+  )
+
+  /**
    * Las relaciones **inactivas** que tocan a este hecho: las que la métrica
    * puede pedir en vez de la activa.
    *
@@ -165,6 +186,7 @@ export function PanelMetrica({
       expresion: m.expresion,
     })),
     funciones: funciones.data?.funciones ?? [],
+    externos,
   })
 
   // Revisión en vivo, con freno: se pide al parar de teclear y no en cada tecla.
@@ -197,6 +219,15 @@ export function PanelMetrica({
               metricas: Object.fromEntries(
                 hermanas.map((m) => [m.nombre, m.expresion]),
               ),
+              // Las columnas de las demás tablas van también, y del BORRADOR:
+              // quien escribe puede estar nombrando una tabla que acaba de
+              // crear, y revisar contra lo guardado la subrayaría en rojo.
+              campos_por_entidad: Object.fromEntries(
+                definicion.entidades.map((e) => [
+                  e.nombre,
+                  e.campos.map((c) => c.nombre),
+                ]),
+              ),
             },
         {
           onSuccess: (r) => {
@@ -208,7 +239,7 @@ export function PanelMetrica({
     }, ESPERA_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [borrador.expresion, borrador.entidad, compuesta, campos, hermanas])
+  }, [borrador.expresion, borrador.entidad, compuesta, campos, hermanas, externos])
 
   // Los subrayados rojos dentro del editor. Van como marcadores de Monaco y no
   // como una lista aparte porque el error hay que verlo DONDE está.
@@ -495,8 +526,10 @@ export function PanelMetrica({
                   </>
                 ) : (
                   <>
-                    Los campos se escriben sin prefijo de tabla: el motor los
-                    califica solo. <code>VAR</code>/<code>RETURN</code> para
+                    Los campos de este hecho se escriben sin prefijo. Los de otra
+                    tabla, con el nombre de la tabla delante —
+                    <code>dim.columna</code>— y se une sola.{' '}
+                    <code>VAR</code>/<code>RETURN</code> para
                     partirla en pasos, <code>--</code> para comentar,{' '}
                     <code>[otra_metrica]</code> para reutilizar otra.
                   </>

@@ -212,12 +212,21 @@ class Modelo:
         ventas la expresion de una que vive en objetivos daria SQL que compila
         —son columnas con nombre distinto— sobre una tabla que no las tiene, y el
         error saldria como «columna inexistente» en vez de decir lo que pasa.
+
+        Las columnas de las DEMAS entidades tambien se pueden nombrar, pero con
+        prefijo: `DIM_ORIGEN_VENTA.categoria_canal`. Sin prefijo no, y eso es
+        deliberado — dos tablas suelen tener una columna con el mismo nombre, y
+        adivinar de cual se hablaba es justo la clase de decision que este motor
+        no toma en silencio.
         """
         e = self.entidades[entidad]
         return Contexto(
             campos=set(e.campos),
             metricas={m.nombre: m.expresion for m in self.metricas.values()
                       if m.entidad == entidad},
+            entidad=entidad,
+            externos={n: set(o.campos) for n, o in self.entidades.items()
+                      if n != entidad},
         )
 
     def contexto_compuesta(self) -> ContextoCompuesta:
@@ -568,6 +577,34 @@ class Modelo:
                                f"{fallo['mensaje']}",
                 })
 
+        # Una condicion que nombra la columna de otra tabla necesita camino hasta
+        # ella. La formula por si sola no puede saberlo —no conoce las
+        # relaciones— asi que sin esto el error saldria la primera vez que
+        # alguien pusiera la metrica en un tablero, y le saldria a quien solo
+        # estaba mirando una cifra.
+        for m in self.metricas.values():
+            if m.compuesta or m.entidad not in self.entidades:
+                continue
+            try:
+                sql_m = self.sql_de(m)
+            except ErrorModelo:
+                continue                       # ya lo dijo la revision de arriba
+            grafo_m = self.grafo_con(m.uniones)
+            for ent in _entidades_nombradas(sql_m, set(self.entidades)):
+                if ent == m.entidad:
+                    continue
+                try:
+                    self.ruta_unica(m.entidad, ent, grafo_m)
+                except ErrorModelo as e:
+                    problemas.append({
+                        "tipo": "condicion_sin_camino",
+                        "gravedad": "critico",
+                        "entidad": f"{m.entidad}.{m.nombre}",
+                        "mensaje": f"La metrica '{m.nombre}' filtra por una "
+                                   f"columna de '{ent}', y desde "
+                                   f"'{m.entidad}' no se llega bien ahi: {e}",
+                    })
+
         # Lo que hay que arreglar primero, arriba. `.get` con un tope al final
         # para que una gravedad nueva se coloque sola en vez de reventar la
         # pantalla entera de diagnostico.
@@ -584,7 +621,8 @@ def _cita(x: str) -> str:
 
 
 def _calificar(expresion: str, alias: str, campos: set[str],
-               dialecto: str = "duckdb") -> str:
+               dialecto: str = "duckdb",
+               alias_entidad: dict[str, str] | None = None) -> str:
     """
     Antepone el alias de tabla a cada columna de una expresion de metrica.
 
@@ -592,12 +630,44 @@ def _calificar(expresion: str, alias: str, campos: set[str],
     reemplazo ingenuo convierte 'monto_bonus_cancel' en 't."monto_bonus"_cancel'
     porque 'monto_bonus' es prefijo suyo. Trabajar sobre el AST tambien es lo que
     despues permite traducir la misma expresion a otro motor sin reescribirla.
+
+    `alias_entidad` traduce los prefijos que escribio quien definio la metrica
+    —`DIM_ORIGEN_VENTA.categoria_canal`— al alias con que esa tabla quedo unida.
+    Se resuelve ANTES de mirar `campos` y sin caer en el, que es lo que importa:
+    `id_origen` existe en el hecho y en la dimension, y sin esto una condicion
+    sobre la de la dimension acabaria leyendo la del hecho.
     """
     arbol = sqlglot.parse_one(expresion, read=dialecto)
+    mapa = {k.lower(): v for k, v in (alias_entidad or {}).items()}
     for col in arbol.find_all(exp.Column):
+        if col.table:
+            destino = mapa.get(col.table.lower())
+            if destino is not None:
+                col.set("table", exp.to_identifier(destino, quoted=False))
+            continue
         if col.name in campos:
             col.set("table", exp.to_identifier(alias, quoted=False))
     return arbol.sql(dialect=dialecto, identify=True)
+
+
+def _entidades_nombradas(sql: str, entidades: set[str],
+                         dialecto: str = "duckdb") -> list[str]:
+    """
+    Las entidades del modelo que la formula nombra con prefijo, en orden estable.
+
+    Es lo que le dice al compilador que tiene que unir esa tabla dentro del CTE
+    del hecho aunque el desglose no la pida: una metrica que filtra por el canal
+    no puede esperar a que alguien ponga el canal en las filas del tablero.
+    """
+    por_minuscula = {e.lower(): e for e in entidades}
+    salida: list[str] = []
+    for col in sqlglot.parse_one(sql, read=dialecto).find_all(exp.Column):
+        if not col.table:
+            continue
+        real = por_minuscula.get(col.table.lower())
+        if real is not None and real not in salida:
+            salida.append(real)
+    return salida
 
 
 def _calificar_metricas(expresion: str, donde: dict[str, str],
@@ -734,7 +804,7 @@ class Compilador:
     # -- joins ---------------------------------------------------------------
 
     def _sql_join(self, ruta: list[str], alias: dict[str, str],
-                  grafo: dict | None = None) -> str:
+                  grafo: dict | None = None, izquierda: bool = False) -> str:
         partes = []
         for i in range(len(ruta) - 1):
             a, b = ruta[i], ruta[i + 1]
@@ -744,7 +814,8 @@ class Compilador:
             else:
                 ca, cb = rel.campo_b, rel.campo_a
             partes.append(
-                f"JOIN {_cita(self.m.entidades[b].tabla)} AS {alias[b]} "
+                f"{'LEFT JOIN' if izquierda else 'JOIN'} "
+                f"{_cita(self.m.entidades[b].tabla)} AS {alias[b]} "
                 f"ON {alias[a]}.{_cita(ca)} = {alias[b]}.{_cita(cb)}"
             )
         return "\n  ".join(partes)
@@ -752,6 +823,7 @@ class Compilador:
     def _plan_alcance(self, ent_base: str, objetivos: list[str],
                       rutas_elegidas: dict[str, str],
                       grafo: dict | None = None,
+                      opcionales: set[str] | None = None,
                       ) -> tuple[dict[str, str], list[str]]:
         """
         Alias de tabla y JOINs para alcanzar `objetivos` partiendo de `ent_base`.
@@ -761,7 +833,16 @@ class Compilador:
         una resolviera sus rutas por su cuenta acabarian uniendo por caminos
         distintos — es decir, lo que un usuario puede ver dependeria de por que
         pantalla lo pregunta.
+
+        `opcionales` son las entidades que solo se unen porque una CONDICION de
+        una metrica las nombra. Esas van con LEFT JOIN, y no es un detalle: en el
+        mismo CTE viven las demas metricas del hecho, y un JOIN normal les
+        quitaria de en medio las filas cuya clave no casa —un origen nulo, un
+        codigo que no esta en el catalogo— cambiando totales que nadie habia
+        pedido filtrar. Con LEFT la condicion sale nula para esas filas, la
+        metrica acotada no las cuenta, y el total sigue siendo el total.
         """
+        opcionales = opcionales or set()
         necesarias = {ent_base}
         rutas: dict[str, list[str]] = {}
         for ent in objetivos:
@@ -779,13 +860,17 @@ class Compilador:
         alias = {e: f"t{i}" for i, e in enumerate(sorted(necesarias))}
         vistos = {ent_base}
         joins: list[str] = []
-        for ruta in rutas.values():
+        for ent, ruta in rutas.items():
+            # Si el destino se une solo por una condicion, todos los tramos
+            # nuevos de ESE camino van por la izquierda. Basta con que uno fuera
+            # normal para que volviera a descartar filas del hecho.
+            izquierda = ent in opcionales
             tramo = [ruta[0]]
             for paso in ruta[1:]:
                 tramo.append(paso)
                 if paso in vistos:
                     continue
-                joins.append(self._sql_join(tramo[-2:], alias, grafo))
+                joins.append(self._sql_join(tramo[-2:], alias, grafo, izquierda))
                 vistos.add(paso)
         return alias, joins
 
@@ -894,21 +979,35 @@ class Compilador:
             if p.entidad not in objetivos:
                 objetivos.append(p.entidad)
 
+        # Y las que nombra la propia formula. `CALCULAR(SUMA(Unidades),
+        # DIM_ORIGEN_VENTA.categoria_canal = 'Digital')` necesita esa dimension
+        # unida aqui dentro, donde ocurre la agregacion: acotar por ella despues
+        # ya no puede, porque para entonces el hecho esta sumado.
+        sql_metricas = {met.nombre: self.m.sql_de(met) for met in metricas}
+        opcionales: set[str] = set()
+        for sql_met in sql_metricas.values():
+            for ent in _entidades_nombradas(sql_met, set(self.m.entidades)):
+                if ent == ent_metrica or ent in objetivos:
+                    continue
+                objetivos.append(ent)
+                opcionales.add(ent)
+
         # Todas las metricas de este CTE comparten uniones: `compilar` las agrupa
         # por eso, precisamente para poder unir aqui de una sola forma.
         grafo = self.m.grafo_con(metricas[0].uniones)
         alias, joins = self._plan_alcance(ent_metrica, objetivos, rutas_elegidas,
-                                          grafo)
+                                          grafo, opcionales)
 
         sel_dims = [
             f"{alias[e]}.{_cita(c)} AS {_cita(f'{e}.{c}')}" for e, c in dims
         ]
         campos_ent = set(self.m.entidades[ent_metrica].campos)
-        sel_mets = [
-            f"{_calificar(self.m.sql_de(met), alias[ent_metrica], campos_ent)} "
-            f"AS {_cita(met.nombre)}"
-            for met in metricas
-        ]
+
+        def cuerpo(met: Metrica) -> str:
+            return _calificar(sql_metricas[met.nombre], alias[ent_metrica],
+                              campos_ent, alias_entidad=alias)
+
+        sel_mets = [f"{cuerpo(met)} AS {_cita(met.nombre)}" for met in metricas]
 
         where: list[str] = []
         params: list = []
