@@ -7,6 +7,23 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **La pestaña Datos ya no se abre con un error de una métrica que nadie eligió.** Al
+  entrar se marcan solas las seis primeras métricas, y en un modelo grande entre ellas
+  caía una que compara contra otro mes. Ésas necesitan una columna de meses en el
+  desglose y al entrar no hay desglose, así que la pantalla se abría con un error
+  correcto sobre `% Crec MoM` mientras la métrica marcada por quien miraba era otra —y
+  la conclusión razonable era que lo roto era la suya.
+
+  Ahora la selección automática salta las que comparan contra otro mes, **incluidas las
+  que lo hacen a través de otra**: `% Crec MoM` no nombra ninguna función de tiempo, la
+  nombra `Ventas Mes Anterior`, que es a quien referencia. Hay una prueba en el servidor
+  que falla si se agrega una función de tiempo y la lista de la pantalla se queda atrás.
+
+- **Un error de una consulta ya no sobrevive al cambio de selección.** Quitar la métrica
+  que causó el error dejaba el error en pantalla, describiendo algo que ya no se estaba
+  pidiendo. Se borra al marcar o desmarcar; la tabla de resultados se queda, que lleva
+  sus métricas en las cabeceras y se explica sola.
+
 - **Acotar una métrica que ya agrega dejó de salir como error.** `CALCULAR([Total de
   inventario], Dias_Antiguedad < 30)` es correcto —le mete la condición al conteo que
   esa métrica ya hacía, y el SQL sale con un solo `COUNT`— pero la revisión lo marcaba

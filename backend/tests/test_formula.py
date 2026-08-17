@@ -403,3 +403,34 @@ def test_el_catalogo_sale_ordenado_y_completo():
     assert len(filas) == len(CATALOGO)
     assert filas == sorted(filas, key=lambda x: (x["categoria"], x["nombre"]))
     assert all(x["firma"] and x["resumen"] and x["ejemplo"] for x in filas)
+
+
+def test_las_funciones_de_tiempo_de_la_pantalla_son_las_del_catalogo():
+    """
+    La pantalla de datos no marca sola una métrica que compare contra otro mes: sin
+    columna de meses en el desglose no se puede calcular, y la pestaña se abría con
+    un error sobre una métrica que nadie había elegido.
+
+    Para saber cuáles son, el navegador lleva su propia lista —no puede consultar
+    el catálogo antes del primer render— y esta prueba es lo que impide que se
+    quede atrás cuando se agregue una función de tiempo nueva. Falla ruidosamente,
+    que es justo lo que hace falta: si no, el fallo vuelve y nadie lo relaciona.
+    """
+    from pathlib import Path
+    import re
+
+    from semantic.formula import CATALOGO
+
+    ruta = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "modelo"
+            / "PanelDatos.tsx")
+    if not ruta.exists():                    # pragma: no cover
+        pytest.skip("sin el frontend al lado no hay nada que comparar")
+
+    texto = ruta.read_text(encoding="utf-8")
+    m = re.search(r"const DE_TIEMPO\s*=\s*\n?\s*/\\b\(([^)]+)\)", texto)
+    assert m, "no se encontro DE_TIEMPO en PanelDatos.tsx"
+    en_pantalla = set(m.group(1).split("|"))
+    del_catalogo = {f.nombre for f in CATALOGO.values() if f.categoria == "tiempo"}
+    assert en_pantalla == del_catalogo, (
+        f"DE_TIEMPO en PanelDatos.tsx no coincide con el catalogo. "
+        f"Sobran {en_pantalla - del_catalogo}, faltan {del_catalogo - en_pantalla}.")

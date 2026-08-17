@@ -28,6 +28,61 @@ import { Th } from '../comunes/Th'
 
 type Vista = 'resultado' | 'muestra'
 
+/**
+ * Las funciones que comparan contra otro mes.
+ *
+ * Son las de la categoría «tiempo» del catálogo, y hay una prueba en el servidor
+ * —`test_las_funciones_de_tiempo_de_la_pantalla_son_las_del_catalogo`— que falla si
+ * se agrega una función de tiempo y esta lista se queda atrás. Duplicarla aquí es
+ * lo de menos; que se desincronice en silencio sería lo malo.
+ */
+const DE_TIEMPO =
+  /\b(ACUMANIO|MESANTERIOR|MISMOMESANIOANTERIOR|PROMEDIOMESES)\s*\(/i
+
+/**
+ * Las métricas que comparan contra otro mes, **contando las que lo hacen a través
+ * de otra**.
+ *
+ * Tiene que ser transitivo: `% Crec MoM` es
+ * `DIVIDIR([Unidades] - [Ventas Mes Anterior], [Ventas Mes Anterior], 0)` y no
+ * nombra ninguna función de tiempo — la de tiempo es la que referencia. Mirar sólo
+ * su propio texto la dejaba pasar, y el error volvía con otro nombre.
+ */
+function comparanContraOtroMes(
+  metricas: { nombre: string; expresion: string }[],
+): Set<string> {
+  const porNombre = new Map(metricas.map((m) => [m.nombre, m.expresion]))
+  const sabido = new Map<string, boolean>()
+
+  function mira(nombre: string, enCurso: Set<string>): boolean {
+    const ya = sabido.get(nombre)
+    if (ya !== undefined) return ya
+    // Un ciclo entre métricas es un error del modelo y lo dice el servidor; aquí
+    // sólo hay que no quedarse dando vueltas.
+    if (enCurso.has(nombre)) return false
+    const expresion = porNombre.get(nombre)
+    if (expresion === undefined) return false
+
+    enCurso.add(nombre)
+    let si = DE_TIEMPO.test(expresion)
+    if (!si) {
+      for (const ref of expresion.matchAll(/\[([^\]]+)\]/g)) {
+        if (mira((ref[1] ?? '').trim(), enCurso)) {
+          si = true
+          break
+        }
+      }
+    }
+    enCurso.delete(nombre)
+    sabido.set(nombre, si)
+    return si
+  }
+
+  return new Set(
+    metricas.filter((m) => mira(m.nombre, new Set())).map((m) => m.nombre),
+  )
+}
+
 export function PanelDatos({
   modeloId,
   definicion,
@@ -50,9 +105,26 @@ export function PanelDatos({
   const [vista, setVista] = useState<Vista>(
     definicion.metricas.length > 0 ? 'resultado' : 'muestra',
   )
-  const [metricas, setMetricas] = useState<string[]>(() =>
-    definicion.metricas.slice(0, 6).map((m) => m.nombre),
-  )
+  /**
+   * Las que se marcan solas al entrar.
+   *
+   * Seis, y **ninguna que compare contra otro mes**. Ésas necesitan una columna de
+   * meses en el desglose, y al entrar no hay desglose: con un modelo de noventa y
+   * seis métricas, entre las seis primeras caía una de tiempo y la pestaña se
+   * abría con un error sobre una métrica que nadie había elegido. El error era
+   * correcto y la conclusión razonable era que lo roto era la métrica que sí
+   * habías marcado.
+   *
+   * Se reconocen por las funciones de tiempo del catálogo, que es la misma lista
+   * que el servidor usa para exigir la columna.
+   */
+  const [metricas, setMetricas] = useState<string[]>(() => {
+    const deTiempo = comparanContraOtroMes(definicion.metricas)
+    return definicion.metricas
+      .filter((m) => !deTiempo.has(m.nombre))
+      .slice(0, 6)
+      .map((m) => m.nombre)
+  })
   const [desglose, setDesglose] = useState<string[]>([])
   const [entidad, setEntidad] = useState(
     () => hechos[0]?.nombre ?? definicion.entidades[0]?.nombre ?? '',
@@ -61,6 +133,19 @@ export function PanelDatos({
 
   function ejecutar() {
     previa.mutate({ definicion, metricas, dimensiones: desglose, limite: 200 })
+  }
+
+  /**
+   * Tira el error al cambiar la selección.
+   *
+   * Un error habla de UNA consulta. Si se queda ahí después de quitar la métrica
+   * que lo causaba, está describiendo algo que ya no se está pidiendo, y lo
+   * razonable es concluir que lo roto es lo que acabas de marcar. Sólo el error:
+   * la tabla de resultados lleva sus métricas en las cabeceras, así que se explica
+   * sola mientras el botón «Calcular» sigue ahí.
+   */
+  function olvidarError() {
+    if (previa.isError) previa.reset()
   }
 
   function verFilas() {
@@ -152,13 +237,14 @@ export function PanelDatos({
                     <button
                       key={m.nombre}
                       className={`chip como-boton${metricas.includes(m.nombre) ? ' puesto' : ''}`}
-                      onClick={() =>
+                      onClick={() => {
+                        olvidarError()
                         setMetricas((v) =>
                           v.includes(m.nombre)
                             ? v.filter((n) => n !== m.nombre)
                             : [...v, m.nombre],
                         )
-                      }
+                      }}
                     >
                       {m.etiqueta || m.nombre}
                     </button>
@@ -174,7 +260,10 @@ export function PanelDatos({
                       {d}
                       <button
                         title="Quitar"
-                        onClick={() => setDesglose((v) => v.filter((x) => x !== d))}
+                        onClick={() => {
+                          olvidarError()
+                          setDesglose((v) => v.filter((x) => x !== d))
+                        }}
                       >
                         ×
                       </button>
@@ -192,7 +281,10 @@ export function PanelDatos({
                           detalle: d.etiqueta,
                         }))}
                       valor={null}
-                      alElegir={(clave) => setDesglose((v) => [...v, clave])}
+                      alElegir={(clave) => {
+                        olvidarError()
+                        setDesglose((v) => [...v, clave])
+                      }}
                       marcador="+ dimensión"
                     />
                   </div>
