@@ -8,6 +8,12 @@
  * Las selecciones NO se guardan al mover: son del momento. Solo se guardan si se
  * pide "guardar como estado inicial" — un tablero que se abre siempre con el filtro
  * de alguien puesto es una trampa.
+ *
+ * **Un tablero es un libro de hojas.** Los widgets no van dentro de la hoja: cada
+ * widget dice a cuál pertenece, y un tablero guardado antes de que existieran las
+ * hojas tiene una implícita con todos. Las selecciones son del libro, no de la
+ * hoja: filtrar en una hoja y que la de al lado siga en otro mes es la forma más
+ * cara de leer dos cifras que no se pueden comparar.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -25,14 +31,48 @@ import {
   useYo,
 } from '../api/hooks'
 import { PanelLateral } from '../comunes/Panel'
-import type { DefinicionDashboard, TipoWidget, Widget } from '../api/tipos'
+import type {
+  DefinicionDashboard,
+  Hoja,
+  Lienzo,
+  TipoWidget,
+  Widget,
+} from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
 import { PanelWidget } from '../tablero/PanelWidget'
 import { WidgetVista } from '../tablero/WidgetVista'
 import { PIDE_DATOS, filtrosDeSelecciones } from '../tablero/consulta'
 
-const COLUMNAS = 12
-const ALTO_FILA = 30
+const MARGEN = 10
+/** Alto de fila cuando la hoja se desplaza. En modo pantalla se calcula. */
+const ALTO_FILA_LIBRE = 30
+/** Por debajo de esto una fila no cabe ni un número: mejor desplazar. */
+const ALTO_FILA_MINIMO = 14
+
+const LIENZO_OMISION: Lienzo = { modo: 'pantalla', columnas: 12, filas: 12 }
+
+/**
+ * Las hojas de un tablero, siempre al menos una. Un tablero guardado antes de las
+ * hojas no declara ninguna: tiene una implícita con `id` vacío, que es lo que
+ * llevan sus widgets en `hoja`.
+ */
+function hojasDe(d: DefinicionDashboard): Hoja[] {
+  if (d.hojas?.length) {
+    return d.hojas.map((h) => ({ ...h, lienzo: { ...LIENZO_OMISION, ...h.lienzo } }))
+  }
+  return [{ id: '', nombre: 'Hoja 1', lienzo: LIENZO_OMISION }]
+}
+
+/**
+ * Convierte la hoja implícita en una de verdad. Hace falta antes de tocarla —
+ * cambiarle el lienzo o agregar una segunda—, y mueve los widgets de golpe para
+ * que ninguno quede apuntando a una hoja que ya no es la primera.
+ */
+function conHojas(d: DefinicionDashboard): DefinicionDashboard {
+  if (d.hojas?.length) return d
+  const h: Hoja = { id: 'h1', nombre: 'Hoja 1', lienzo: LIENZO_OMISION }
+  return { ...d, hojas: [h], widgets: d.widgets.map((w) => ({ ...w, hoja: h.id })) }
+}
 
 const PLANTILLAS: Record<string, { tipo: TipoWidget; ancho: number; alto: number }> = {
   kpi: { tipo: 'kpi', ancho: 3, alto: 4 },
@@ -40,7 +80,11 @@ const PLANTILLAS: Record<string, { tipo: TipoWidget; ancho: number; alto: number
   lineas: { tipo: 'lineas', ancho: 6, alto: 9 },
   pastel: { tipo: 'pastel', ancho: 4, alto: 9 },
   tabla: { tipo: 'tabla', ancho: 6, alto: 9 },
-  filtro: { tipo: 'filtro', ancho: 3, alto: 9 },
+  // Ancho y bajo: un panel de filtros nace como la barra de arriba de una hoja de
+  // Qlik —Año, Mes, Sucursal en fila—, no como una columna estrecha. Con este alto
+  // colapsa en desplegables desde el primer momento, que es lo que se quiere de
+  // una barra; quien quiera listas abiertas lo estira y aparecen.
+  filtro: { tipo: 'filtro', ancho: 12, alto: 3 },
   texto: { tipo: 'texto', ancho: 6, alto: 3 },
 }
 
@@ -56,7 +100,9 @@ export function Tablero() {
   const [selecciones, setSelecciones] = useState<Record<string, unknown[]>>({})
   const [editando, setEditando] = useState(false)
   const [elegido, setElegido] = useState<string | null>(null)
-  const [ancho, setAncho] = useState(1000)
+  const [hojaId, setHojaId] = useState<string | null>(null)
+  const [pestanaDer, setPestanaDer] = useState<'hoja' | 'tablero'>('hoja')
+  const [caja, setCaja] = useState({ ancho: 1000, alto: 700 })
 
   const versiones = useVersiones(cargado.data?.modelo_id ?? 0)
 
@@ -66,16 +112,18 @@ export function Tablero() {
     setSelecciones(cargado.data.definicion.selecciones ?? {})
   }, [cargado.data])
 
-  // El ancho de la rejilla se mide: react-grid-layout necesita píxeles.
+  // La rejilla se mide: react-grid-layout necesita píxeles. El alto también, y no
+  // solo el ancho, porque en modo pantalla la fila mide lo que sobre del alto
+  // visible entre las filas que pida la hoja.
   useEffect(() => {
     const medir = () => {
       const el = document.getElementById('rejilla')
-      if (el) setAncho(el.clientWidth)
+      if (el) setCaja({ ancho: el.clientWidth, alto: el.clientHeight })
     }
     medir()
     window.addEventListener('resize', medir)
     return () => window.removeEventListener('resize', medir)
-  }, [borrador, editando])
+  }, [borrador, editando, hojaId])
 
   const sucio = useMemo(
     () =>
@@ -107,26 +155,113 @@ export function Tablero() {
   const desfasado = d.version_modelo !== d.version_vigente_del_modelo
   const widget = borrador.widgets.find((w) => w.id === elegido)
 
+  const hojas = hojasDe(borrador)
+  const activa = hojas.find((h) => h.id === hojaId) ?? hojas[0]!
+  const lienzo = activa.lienzo
+  // El id vacío de la hoja implícita es el que llevan los widgets de antes.
+  const enLaHoja = (w: Widget) => (w.hoja || hojas[0]!.id) === activa.id
+  const mios = borrador.widgets.filter(enLaHoja)
+
+  const altoFila =
+    lienzo.modo === 'pantalla'
+      ? Math.max(
+          ALTO_FILA_MINIMO,
+          Math.floor((caja.alto - MARGEN * (lienzo.filas + 1)) / lienzo.filas),
+        )
+      : ALTO_FILA_LIBRE
+  // Cuántas filas ocupa de verdad lo que hay puesto.
+  const filasUsadas = Math.max(0, ...mios.map((w) => w.posicion.y + w.posicion.alto))
+
+  // Dos formas de no caber: que la fila tocara el mínimo legible, o que haya
+  // widgets más abajo de las filas que declara la hoja. En cualquiera de las dos
+  // se deja desplazar. Recortar con `overflow: hidden` dejaría widgets que no se
+  // pueden ni ver ni alcanzar, y un widget que nadie ve es una cifra que nadie
+  // revisa.
+  const desborda = filasUsadas > lienzo.filas
+  const noCabe =
+    lienzo.modo === 'pantalla' &&
+    caja.alto > 0 &&
+    (altoFila === ALTO_FILA_MINIMO || desborda)
+
   const cambiarWidget = (wid: string, cambios: Partial<Widget>) =>
     setBorrador({
       ...borrador,
       widgets: borrador.widgets.map((w) => (w.id === wid ? { ...w, ...cambios } : w)),
     })
 
+  const cambiarHoja = (hid: string, cambios: Partial<Hoja>) => {
+    const base = conHojas(borrador)
+    setBorrador({
+      ...base,
+      hojas: base.hojas.map((h) => (h.id === hid ? { ...h, ...cambios } : h)),
+    })
+  }
+
+  const agregarHoja = () => {
+    const base = conHojas(borrador)
+    const nueva: Hoja = {
+      id: `h${Date.now().toString(36)}`,
+      nombre: `Hoja ${base.hojas.length + 1}`,
+      // Nace como la que se estaba viendo: casi siempre es lo que se quiere, y
+      // dos hojas del mismo libro con rejillas distintas no se leen igual.
+      lienzo: { ...lienzo },
+    }
+    setBorrador({ ...base, hojas: [...base.hojas, nueva] })
+    setHojaId(nueva.id)
+    setElegido(null)
+    setPestanaDer('hoja')
+  }
+
+  const borrarHoja = (hid: string) => {
+    const base = conHojas(borrador)
+    if (base.hojas.length === 1) return
+    const h = base.hojas.find((x) => x.id === hid)!
+    const dentro = base.widgets.filter((w) => (w.hoja || base.hojas[0]!.id) === hid)
+    const aviso = dentro.length
+      ? `¿Borrar la hoja "${h.nombre}" y sus ${dentro.length} widget(s)?`
+      : `¿Borrar la hoja "${h.nombre}"?`
+    if (!confirm(aviso)) return
+    const quedan = base.hojas.filter((x) => x.id !== hid)
+    setBorrador({
+      ...base,
+      hojas: quedan,
+      widgets: base.widgets.filter((w) => !dentro.includes(w)),
+    })
+    setHojaId(quedan[0]!.id)
+    setElegido(null)
+  }
+
+  const moverHoja = (hid: string, paso: -1 | 1) => {
+    const base = conHojas(borrador)
+    const i = base.hojas.findIndex((h) => h.id === hid)
+    const j = i + paso
+    if (j < 0 || j >= base.hojas.length) return
+    const orden = [...base.hojas]
+    ;[orden[i], orden[j]] = [orden[j]!, orden[i]!]
+    setBorrador({ ...base, hojas: orden })
+  }
+
   const agregar = (clave: string) => {
     const p = PLANTILLAS[clave]!
+    // Las plantillas están en doceavos. En una hoja de 24 columnas, un KPI de 3
+    // sería un sello: se reparte igual de ancho, no igual de columnas.
+    const ancho = Math.max(1, Math.min(lienzo.columnas,
+                                       Math.round((p.ancho * lienzo.columnas) / 12)))
+    // Debajo de todo lo que ya hay EN ESTA HOJA: aparecer encima de otro widget y
+    // desplazarlo es la forma más rápida de deshacer el trabajo de alguien.
+    const y = filasUsadas
+    // Si lo que queda de hoja es menos que la plantilla pero da para algo, se
+    // encoge y cabe. Si ya no queda nada, entra igual y la hoja se desplaza — no
+    // se descarta ni se apila encima de otro.
+    const queda = lienzo.filas - y
+    const alto = queda >= 2 && queda < p.alto ? queda : p.alto
+
     const nuevo: Widget = {
       id: `w${Date.now().toString(36)}`,
       tipo: p.tipo,
       titulo: '',
-      posicion: {
-        x: 0,
-        // Debajo de todo lo que ya hay: aparecer encima de otro widget y
-        // desplazarlo es la forma más rápida de deshacer el trabajo de alguien.
-        y: Math.max(0, ...borrador.widgets.map((w) => w.posicion.y + w.posicion.alto)),
-        ancho: p.ancho,
-        alto: p.alto,
-      },
+      hoja: activa.id,
+      posicion: { x: 0, y, ancho, alto },
       dimensiones: [],
       metricas: [],
       filtros: [],
@@ -180,11 +315,12 @@ export function Tablero() {
           </section>
           <section className="seccion">
             <header>
-              Widgets <span className="cuenta">{borrador.widgets.length}</span>
+              Widgets de {activa.nombre || 'la hoja'}{' '}
+              <span className="cuenta">{mios.length}</span>
             </header>
             <div className="contenido">
               <div className="lista">
-                {borrador.widgets.map((w) => (
+                {mios.map((w) => (
                   <button
                     key={w.id}
                     className={elegido === w.id ? 'sel' : ''}
@@ -283,23 +419,79 @@ export function Tablero() {
           </div>
         )}
 
-        <div id="rejilla" className="rejilla">
-          {borrador.widgets.length === 0 ? (
+        {/* Las hojas del libro. Se ven siempre, no solo al editar: quien mira un
+            tablero de tres hojas tiene que saber que hay tres. */}
+        {(hojas.length > 1 || editando) && (
+          <div className="hojas">
+            <div className="pestanas">
+              {hojas.map((h, i) => (
+                <button
+                  key={h.id || `implicita-${i}`}
+                  className={h.id === activa.id ? 'activo' : ''}
+                  onClick={() => {
+                    setHojaId(h.id)
+                    setElegido(null)
+                  }}
+                >
+                  {h.nombre || `Hoja ${i + 1}`}
+                </button>
+              ))}
+            </div>
+            {editando && (
+              <button className="btn chico" title="Agregar una hoja"
+                      onClick={agregarHoja}>
+                + Hoja
+              </button>
+            )}
+            <span className="chico tenue" style={{ marginLeft: 'auto' }}>
+              {lienzo.modo === 'pantalla'
+                ? `${lienzo.columnas} × ${lienzo.filas}, cabe en la pantalla`
+                : `${lienzo.columnas} columnas, se desplaza`}
+            </span>
+          </div>
+        )}
+
+        {noCabe && editando && (
+          <div className="aviso-caja" style={{ margin: '10px 12px 0' }}>
+            {desborda
+              ? `Esta hoja dice tener ${lienzo.filas} filas y lo puesto llega a la
+                 ${filasUsadas}. Mientras sobre, la hoja se desplaza para que no
+                 quede ningún widget escondido: sube las filas de la hoja, o sube
+                 los widgets.`
+              : `${lienzo.filas} filas no caben en esta pantalla sin dejarlas de
+                 menos de ${ALTO_FILA_MINIMO} píxeles. Baja las filas de la hoja,
+                 o ponla en «se desplaza».`}
+          </div>
+        )}
+
+        <div
+          id="rejilla"
+          className={`rejilla ${lienzo.modo === 'pantalla' && !noCabe ? 'fija' : ''}`}
+        >
+          {mios.length === 0 ? (
             <div className="vacio">
-              Tablero vacío.
-              {puedeEditar && ' Entra en Editar y agrega un widget.'}
+              {borrador.widgets.length === 0
+                ? 'Tablero vacío.'
+                : `La hoja "${activa.nombre || 'sin nombre'}" está vacía.`}
+              {editando
+                ? ' Agrega un widget desde la lista de la izquierda.'
+                : puedeEditar && ' Entra en Editar y agrega un widget.'}
             </div>
           ) : (
             <GridLayout
               className="layout"
-              width={ancho}
-              gridConfig={{ cols: COLUMNAS, rowHeight: ALTO_FILA, margin: [10, 10] }}
+              width={caja.ancho}
+              gridConfig={{
+                cols: lienzo.columnas,
+                rowHeight: altoFila,
+                margin: [MARGEN, MARGEN],
+              }}
               // Se arrastra por la cabecera: si se arrastrara por cualquier punto,
               // no se podría hacer clic dentro de un gráfico ni de un filtro.
               dragConfig={{ enabled: editando, handle: '.widget > header' }}
               resizeConfig={{ enabled: editando }}
               onLayoutChange={editando ? alMoverRejilla : undefined}
-              layout={borrador.widgets.map((w) => ({
+              layout={mios.map((w) => ({
                 i: w.id,
                 x: w.posicion.x,
                 y: w.posicion.y,
@@ -307,7 +499,7 @@ export function Tablero() {
                 h: w.posicion.alto,
               }))}
             >
-              {borrador.widgets.map((w) => (
+              {mios.map((w) => (
                 <div
                   key={w.id}
                   className={`widget ${elegido === w.id && editando ? 'sel' : ''}`}
@@ -368,15 +560,34 @@ export function Tablero() {
         <PanelLateral clave="tablero-der" lado="derecha" porOmision={380}>
           <div className="barra-editor">
             <div className="pestanas">
-              <button className="activo">
-                {widget ? `${widget.tipo}` : 'Tablero'}
-              </button>
+              {widget ? (
+                <>
+                  <button className="activo">{widget.tipo}</button>
+                  <button onClick={() => setElegido(null)}>Hoja</button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className={pestanaDer === 'hoja' ? 'activo' : ''}
+                    onClick={() => setPestanaDer('hoja')}
+                  >
+                    Hoja
+                  </button>
+                  <button
+                    className={pestanaDer === 'tablero' ? 'activo' : ''}
+                    onClick={() => setPestanaDer('tablero')}
+                  >
+                    Tablero
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {widget ? (
             <PanelWidget
               widget={widget}
               modeloId={d.modelo_id}
+              hojas={hojas}
               alCambiar={(cambios) => cambiarWidget(widget.id, cambios)}
               alQuitar={() => {
                 setBorrador({
@@ -385,6 +596,16 @@ export function Tablero() {
                 })
                 setElegido(null)
               }}
+            />
+          ) : pestanaDer === 'hoja' ? (
+            <PanelHoja
+              hoja={activa}
+              indice={hojas.findIndex((h) => h.id === activa.id)}
+              total={hojas.length}
+              widgets={mios.length}
+              alCambiar={(cambios) => cambiarHoja(activa.id, cambios)}
+              alMover={(paso) => moverHoja(activa.id, paso)}
+              alBorrar={() => borrarHoja(activa.id)}
             />
           ) : (
             <PanelTablero
@@ -409,6 +630,120 @@ export function Tablero() {
           )}
         </PanelLateral>
       )}
+    </div>
+  )
+}
+
+/**
+ * Inspector de una hoja: cómo se llama, de qué tamaño es su espacio de trabajo, y
+ * dónde va en el libro.
+ */
+function PanelHoja({
+  hoja,
+  indice,
+  total,
+  widgets,
+  alCambiar,
+  alMover,
+  alBorrar,
+}: {
+  hoja: Hoja
+  indice: number
+  total: number
+  widgets: number
+  alCambiar: (cambios: Partial<Hoja>) => void
+  alMover: (paso: -1 | 1) => void
+  alBorrar: () => void
+}) {
+  const l = hoja.lienzo
+  const poner = (cambios: Partial<Lienzo>) => alCambiar({ lienzo: { ...l, ...cambios } })
+
+  return (
+    <div className="inspector">
+      <div className="campo">
+        <label>Nombre de la hoja</label>
+        <input
+          type="text"
+          value={hoja.nombre}
+          placeholder={`Hoja ${indice + 1}`}
+          onChange={(e) => alCambiar({ nombre: e.target.value })}
+        />
+      </div>
+
+      <div className="campo">
+        <label>Espacio de trabajo</label>
+        <select
+          value={l.modo}
+          onChange={(e) => poner({ modo: e.target.value as Lienzo['modo'] })}
+        >
+          <option value="pantalla">Cabe en la pantalla</option>
+          <option value="libre">Se desplaza</option>
+        </select>
+        <span className="chico tenue">
+          {l.modo === 'pantalla'
+            ? 'La hoja entera se ve de un golpe: el alto se reparte entre las filas. Un widget que nadie ve es una cifra que nadie revisa.'
+            : 'La fila mide siempre lo mismo y la página se desplaza. Es para un informe largo que se lee de arriba abajo.'}
+        </span>
+      </div>
+
+      <div className="fila">
+        <div className="campo">
+          <label>Columnas</label>
+          <input
+            type="number"
+            min={4}
+            max={24}
+            value={l.columnas}
+            onChange={(e) =>
+              poner({ columnas: Math.min(24, Math.max(4, Number(e.target.value) || 12)) })
+            }
+          />
+        </div>
+        <div className="campo">
+          <label>Filas</label>
+          <input
+            type="number"
+            min={2}
+            max={60}
+            value={l.filas}
+            onChange={(e) =>
+              poner({ filas: Math.min(60, Math.max(2, Number(e.target.value) || 12)) })
+            }
+          />
+        </div>
+      </div>
+      <span className="chico tenue" style={{ marginTop: -8 }}>
+        Bajar las columnas no mueve lo que ya está puesto: si algo se sale, guardar
+        lo dice y no lo recorta a escondidas.
+      </span>
+
+      <div className="campo">
+        <label>Orden en el libro</label>
+        <div className="fila">
+          <button className="btn" disabled={indice === 0} onClick={() => alMover(-1)}>
+            ← Antes
+          </button>
+          <button
+            className="btn"
+            disabled={indice === total - 1}
+            onClick={() => alMover(1)}
+          >
+            Después →
+          </button>
+        </div>
+        <span className="chico tenue">
+          Hoja {indice + 1} de {total} · {widgets} widget(s)
+        </span>
+      </div>
+
+      <button
+        className="btn peligro"
+        disabled={total === 1}
+        title={total === 1 ? 'Un tablero necesita al menos una hoja' : undefined}
+        onClick={alBorrar}
+      >
+        Borrar hoja
+      </button>
     </div>
   )
 }

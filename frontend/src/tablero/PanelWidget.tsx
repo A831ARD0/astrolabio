@@ -10,8 +10,11 @@
  * categorías (ilegible, y casi siempre significa que falta un filtro).
  */
 
+import { useState } from 'react'
+
 import { useCampos } from '../api/hooks'
-import type { TipoWidget, Widget } from '../api/tipos'
+import type { Hoja, TipoWidget, Widget } from '../api/tipos'
+import { coincide } from '../comunes/buscar'
 
 const TIPOS: { valor: TipoWidget; etiqueta: string }[] = [
   { valor: 'kpi', etiqueta: 'KPI — una cifra grande' },
@@ -43,11 +46,13 @@ const UNA_DIMENSION: TipoWidget[] = [
 export function PanelWidget({
   widget,
   modeloId,
+  hojas,
   alCambiar,
   alQuitar,
 }: {
   widget: Widget
   modeloId: number
+  hojas: Hoja[]
   alCambiar: (cambios: Partial<Widget>) => void
   alQuitar: () => void
 }) {
@@ -101,6 +106,26 @@ export function PanelWidget({
           onChange={(e) => alCambiar({ titulo: e.target.value })}
         />
       </div>
+
+      {hojas.length > 1 && (
+        <div className="campo">
+          <label>Hoja</label>
+          <select
+            value={widget.hoja || hojas[0]!.id}
+            onChange={(e) => alCambiar({ hoja: e.target.value })}
+          >
+            {hojas.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.nombre}
+              </option>
+            ))}
+          </select>
+          <span className="chico tenue">
+            Al cambiarla, el widget se va a esa hoja con el mismo tamaño. Si allí
+            no cabe, la hoja lo baja de sitio.
+          </span>
+        </div>
+      )}
 
       {widget.tipo === 'texto' && (
         <div className="campo">
@@ -171,6 +196,9 @@ export function PanelWidget({
   )
 }
 
+/** Desde cuántos elementos vale la pena el buscador. Con menos, estorba. */
+const BUSCADOR_DESDE = 8
+
 function Seleccionables({
   titulo,
   items,
@@ -184,6 +212,20 @@ function Seleccionables({
   alAlternar: (clave: string) => void
   vacio: string
 }) {
+  const [busca, setBusca] = useState('')
+
+  // Se busca por etiqueta, por nombre técnico y por tabla: con noventa y seis
+  // métricas, un trozo del nombre es lo que uno recuerda, no el nombre exacto.
+  const visibles = busca.trim()
+    ? items.filter((i) => coincide(`${i.etiqueta} ${i.clave} ${i.nota}`, busca))
+    : items
+
+  // Lo ya elegido no se esconde nunca: si al buscar desapareciera de la vista,
+  // no habría forma de quitarlo sin adivinar cómo se llamaba.
+  const fuera = busca.trim()
+    ? items.filter((i) => elegidos.includes(i.clave) && !visibles.includes(i))
+    : []
+
   return (
     <div>
       <div className="chico suave" style={{ marginBottom: 4 }}>
@@ -192,19 +234,34 @@ function Seleccionables({
       {items.length === 0 ? (
         <div className="chico tenue">{vacio}</div>
       ) : (
-        <div className="lista">
-          {items.map((i) => (
-            <button
-              key={i.clave}
-              className={elegidos.includes(i.clave) ? 'sel' : ''}
-              onClick={() => alAlternar(i.clave)}
-              title={i.clave}
-            >
-              <span className="nom">{i.etiqueta}</span>
-              <span className="dcha">{i.nota}</span>
-            </button>
-          ))}
-        </div>
+        <>
+          {items.length >= BUSCADOR_DESDE && (
+            <input
+              type="search"
+              className="buscar"
+              value={busca}
+              placeholder={`Buscar entre ${items.length}…`}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          )}
+          {visibles.length === 0 && fuera.length === 0 ? (
+            <div className="chico tenue">Nada coincide con «{busca.trim()}».</div>
+          ) : (
+            <div className="lista">
+              {[...visibles, ...fuera].map((i) => (
+                <button
+                  key={i.clave}
+                  className={elegidos.includes(i.clave) ? 'sel' : ''}
+                  onClick={() => alAlternar(i.clave)}
+                  title={i.clave}
+                >
+                  <span className="nom">{i.etiqueta}</span>
+                  <span className="dcha">{i.nota}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

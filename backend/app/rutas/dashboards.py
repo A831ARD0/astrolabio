@@ -33,17 +33,58 @@ router = APIRouter(prefix="/api/dashboards", tags=["dashboards"])
 TIPOS_WIDGET = ("kpi", "barras", "barras_horizontales", "lineas", "area",
                 "pastel", "tabla", "filtro", "texto")
 
+# Topes de la rejilla. 24 columnas porque 12 no alcanzan para una fila de mas de
+# cuatro cosas, y mas de 24 da cajas de dos centimetros que nadie puede leer.
+COLUMNAS_MAX = 24
+FILAS_MAX = 60
+
 
 # --------------------------------------------------------------------------- #
 # Esquemas
 # --------------------------------------------------------------------------- #
 
 class Posicion(BaseModel):
-    """Rejilla de 12 columnas; la fila mide lo que mida `alto`."""
-    x: int = Field(ge=0, le=11)
+    """
+    Rejilla de `columnas` columnas (las de la hoja); la fila mide lo que mida
+    `alto`. Los topes de aqui son el maximo absoluto: que la caja quepa en SU
+    hoja lo revisa `_revisar_widgets`, que es quien sabe cuantas columnas tiene.
+    """
+    x: int = Field(ge=0, le=COLUMNAS_MAX - 1)
     y: int = Field(ge=0)
-    ancho: int = Field(ge=1, le=12)
-    alto: int = Field(ge=1, le=40)
+    ancho: int = Field(ge=1, le=COLUMNAS_MAX)
+    alto: int = Field(ge=1, le=FILAS_MAX)
+
+
+class Lienzo(BaseModel):
+    """
+    El tamano del espacio de trabajo de una hoja.
+
+    `pantalla` reparte el alto visible entre `filas`: la hoja entera se ve sin
+    desplazar, como una hoja de Qlik. `libre` deja la fila con una altura fija y
+    la pagina se desplaza; es para un informe largo que se lee de arriba abajo.
+
+    El modo por omision es `pantalla` porque una hoja que no se ve completa
+    esconde widgets, y un widget que nadie ve es una cifra que nadie revisa.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    modo: Literal["pantalla", "libre"] = "pantalla"
+    columnas: int = Field(default=12, ge=4, le=COLUMNAS_MAX)
+    filas: int = Field(default=12, ge=2, le=FILAS_MAX)
+
+
+class Hoja(BaseModel):
+    """
+    Una hoja del tablero. Los widgets NO van dentro: cada widget dice a que hoja
+    pertenece. Asi un tablero de antes de las hojas se sigue leyendo tal cual
+    (todos sus widgets caen en la primera), y los ids siguen siendo unicos en
+    todo el tablero, con lo que mover un widget de hoja es cambiar un campo.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=40)
+    nombre: str = ""
+    lienzo: Lienzo = Lienzo()
 
 
 class Widget(BaseModel):
@@ -55,6 +96,8 @@ class Widget(BaseModel):
     tipo: Literal[TIPOS_WIDGET]              # type: ignore[valid-type]
     titulo: str = ""
     posicion: Posicion
+    # "" = la primera hoja. Lo que hace que lo de antes siga funcionando.
+    hoja: str = ""
     dimensiones: list[str] = []              # "entidad.campo"
     metricas: list[str] = []
     filtros: list[dict[str, Any]] = []       # propios de este widget
@@ -66,6 +109,8 @@ class DefinicionDashboard(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     widgets: list[Widget] = []
+    # Vacio = una sola hoja implicita con el lienzo por omision.
+    hojas: list[Hoja] = []
     # Selecciones con las que abre el tablero: {"entidad.campo": [valores]}
     selecciones: dict[str, list[Any]] = {}
 
@@ -149,6 +194,28 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
                             {"errores": [f"ids de widget repetidos: "
                                          f"{', '.join(sorted(repetidos))}"]})
     errores = []
+
+    ids_hoja = [h.id for h in definicion.hojas]
+    repes_hoja = {i for i in ids_hoja if ids_hoja.count(i) > 1}
+    if repes_hoja:
+        errores.append(f"ids de hoja repetidos: {', '.join(sorted(repes_hoja))}")
+    # Sin hojas declaradas hay una implicita de 12 columnas: la de siempre.
+    columnas = {h.id: h.lienzo.columnas for h in definicion.hojas}
+    primera = ids_hoja[0] if ids_hoja else ""
+
+    for w in definicion.widgets:
+        hoja = w.hoja or primera
+        if hoja and hoja not in columnas:
+            errores.append(f"El widget '{w.titulo or w.id}' apunta a la hoja "
+                           f"'{hoja}', que no existe en este tablero.")
+            continue
+        cols = columnas.get(hoja, 12)
+        if w.posicion.x + w.posicion.ancho > cols:
+            errores.append(
+                f"El widget '{w.titulo or w.id}' se sale de la hoja: empieza en "
+                f"la columna {w.posicion.x} y mide {w.posicion.ancho}, y la hoja "
+                f"tiene {cols} columnas.")
+
     for w in definicion.widgets:
         if w.tipo in ("kpi", "barras", "barras_horizontales", "lineas", "area",
                       "pastel") and not w.metricas:
@@ -158,9 +225,12 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
                       "pastel") and not w.dimensiones:
             errores.append(f"El widget '{w.titulo or w.id}' ({w.tipo}) necesita "
                            f"una dimension por la que desglosar.")
-        if w.tipo == "filtro" and len(w.dimensiones) != 1:
-            errores.append(f"El filtro '{w.titulo or w.id}' tiene que apuntar a "
-                           f"exactamente un campo.")
+        # Un panel de filtros lleva los campos que quepan: colapsados son una barra
+        # de desplegables (Año, Mes, Sucursal en fila) y abiertos son listas que se
+        # reparten el alto. Lo unico que no tiene sentido es un panel sin campos.
+        if w.tipo == "filtro" and not w.dimensiones:
+            errores.append(f"El filtro '{w.titulo or w.id}' no apunta a ningun "
+                           f"campo.")
         if w.tipo == "tabla" and not (w.dimensiones or w.metricas):
             errores.append(f"La tabla '{w.titulo or w.id}' esta vacia.")
     if errores:

@@ -995,13 +995,51 @@ silencio lo ya publicado.
 barras, líneas, pastel, tabla.
 
 Cada widget lleva dimensiones (por qué se desglosa) y métricas (qué se mide), y
-salen de listas del modelo.
+salen de listas del modelo. Cuando la lista es larga —noventa y seis métricas— tiene
+un buscador arriba: busca por el nombre que se ve, por el técnico y por la tabla, sin
+acentos y por trozos en cualquier orden, así que `logro unid` encuentra
+«% Logro Unidades». Lo que ya está elegido no desaparece al buscar; si lo hiciera, no
+habría forma de quitarlo sin acordarse de cómo se llamaba.
+
+### Hojas: un tablero es un libro
+
+Un tablero tiene **hojas**, como un libro, y se cambia de una a otra en la barra de
+pestañas. Cada hoja tiene su propio espacio: un widget vive en una hoja y las
+posiciones son de esa hoja, así que dos hojas no se estorban.
+
+**Las selecciones son del libro, no de la hoja.** Si filtras julio en una hoja y
+pasas a la siguiente, sigue en julio. Que cada hoja tuviera su propio filtro es la
+forma más cara de leer dos cifras que no se pueden comparar.
+
+En **Editar → Hoja** se le pone nombre, se cambia de sitio en el libro, y se elige el
+tamaño del espacio de trabajo:
+
+- **Cabe en la pantalla** (por omisión): la hoja entera se ve de un golpe. El alto se
+  reparte entre las filas que pidas, así que no hay que desplazar para saber si hay
+  algo más abajo. Un widget que nadie ve es una cifra que nadie revisa.
+- **Se desplaza**: la fila mide siempre lo mismo y la página baja. Es para un informe
+  largo que se lee de arriba abajo, como una hoja con diez secciones.
+
+**Columnas** y **filas** definen la rejilla — de 12 columnas por omisión, hasta 24.
+Con más columnas las cajas se ajustan más fino; con 24 columnas de dos centímetros ya
+no se lee nada, y por eso ahí está el tope.
+
+Si pones widgets más abajo de las filas que declara la hoja, la hoja **se desplaza de
+todos modos** y te lo dice. Recortar lo que sobra dejaría widgets que no se pueden ni
+ver ni alcanzar.
 
 ### Filtros asociativos
 
 Al hacer clic en un valor, **todo el tablero se filtra**, y los demás filtros
 muestran qué valores siguen siendo posibles con esa selección y cuáles ya no. Es el
 comportamiento al que uno se acostumbra en Qlik.
+
+Un widget de tipo **Filtro** lleva los campos que quepan, no uno solo. Nace ancho y
+bajo —la barra de arriba de la hoja: Año, Mes, Estado, Marca, Sucursal en fila— y en
+ese alto cada campo se colapsa en un desplegable que dice en una línea qué hay
+elegido. Si lo estiras hacia abajo, los desplegables se convierten en listas abiertas
+que se reparten el alto. No hay que configurar nada: lo decide el espacio que le
+dejes.
 
 ### Exportar
 

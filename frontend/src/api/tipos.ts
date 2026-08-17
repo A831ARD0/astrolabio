@@ -263,6 +263,8 @@ export interface Widget {
   tipo: TipoWidget
   titulo: string
   posicion: Posicion
+  /** A qué hoja pertenece. `''` = la primera, para lo guardado antes de las hojas. */
+  hoja: string
   dimensiones: string[]
   metricas: string[]
   filtros: Filtro[]
@@ -272,8 +274,24 @@ export interface Widget {
   [clave: string]: unknown
 }
 
+/** El tamaño del espacio de trabajo de una hoja. */
+export interface Lienzo {
+  /** `pantalla`: la hoja entera se ve sin desplazar. `libre`: se desplaza. */
+  modo: 'pantalla' | 'libre'
+  columnas: number
+  filas: number
+}
+
+export interface Hoja {
+  id: string
+  nombre: string
+  lienzo: Lienzo
+}
+
 export interface DefinicionDashboard {
   widgets: Widget[]
+  /** Vacío = una sola hoja implícita. Un tablero es un libro de hojas. */
+  hojas: Hoja[]
   selecciones: Record<string, unknown[]>
   [clave: string]: unknown
 }

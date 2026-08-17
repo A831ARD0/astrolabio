@@ -765,6 +765,19 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 
 .rejilla { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px 40px; }
 
+/* Modo "cabe en la pantalla": la hoja no se desplaza y el hueco de abajo no
+   existe, porque el alto de la fila ya está calculado para que quepa. */
+.rejilla.fija { overflow: hidden; padding: 4px 8px; }
+
+/* Las hojas del libro. */
+.hojas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
 .widget {
   display: flex;
   flex-direction: column;
@@ -860,10 +873,19 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 .filtro > header .btn { margin-left: auto; }
-.filtro .buscar { margin-bottom: 5px; }
+/* La lista de valores es la misma dentro del panel y dentro del desplegable, así
+   que su estilo cuelga de ella y no del panel: colgado del panel, la del portal
+   salía sin viñeta quitada y sin los cuatro estados. */
+.lista-valores {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lista-valores .buscar { margin-bottom: 5px; flex: 0 0 auto; }
 
-.filtro .valores { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
-.filtro .valor {
+.lista-valores .valores { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.lista-valores .valor {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -876,25 +898,25 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   cursor: pointer;
   font-size: 12.5px;
 }
-.filtro .valor .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.filtro .valor .marca {
+.lista-valores .valor .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lista-valores .valor .marca {
   flex: 0 0 8px;
   width: 8px;
   height: 8px;
   border-radius: 2px;
   border: 1px solid var(--borde-fuerte);
 }
-.filtro .valor:hover { background: var(--fondo-hover); }
+.lista-valores .valor:hover { background: var(--fondo-hover); }
 
 /* Los cuatro estados. El color dice el estado, y además hay forma y opacidad:
    quien no distingue verde de gris tiene que poder leerlo igual. */
-.filtro .valor.seleccionado { background: var(--acento-suave); color: var(--acento); font-weight: 550; }
-.filtro .valor.seleccionado .marca { background: var(--acento); border-color: var(--acento); }
-.filtro .valor.posible { color: var(--texto); }
-.filtro .valor.alternativo { color: var(--texto-tenue); }
-.filtro .valor.alternativo .marca { border-style: dashed; }
-.filtro .valor.excluido { color: var(--texto-tenue); opacity: 0.5; }
-.filtro .valor.excluido .txt { text-decoration: line-through; }
+.lista-valores .valor.seleccionado { background: var(--acento-suave); color: var(--acento); font-weight: 550; }
+.lista-valores .valor.seleccionado .marca { background: var(--acento); border-color: var(--acento); }
+.lista-valores .valor.posible { color: var(--texto); }
+.lista-valores .valor.alternativo { color: var(--texto-tenue); }
+.lista-valores .valor.alternativo .marca { border-style: dashed; }
+.lista-valores .valor.excluido { color: var(--texto-tenue); opacity: 0.5; }
+.lista-valores .valor.excluido .txt { text-decoration: line-through; }
 
 .etiqueta.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); border-color: transparent; }
 .etiqueta.aviso { background: var(--aviso-suave); color: var(--aviso); border-color: transparent; }
@@ -1320,7 +1342,19 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 .panel-filtros > .filtro:last-child { border-bottom: 0; }
 
 /* Colapsado: los desplegables no se estiran, se apilan arriba. */
-.panel-filtros.colapsado { gap: 5px; padding: 7px 8px; overflow: auto; }
+/* Colapsado: en fila y con salto de línea, como la barra de filtros de Qlik. Un
+   panel ancho y bajo con cinco campos es una barra, no una columna. */
+.panel-filtros.colapsado {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 5px;
+  padding: 7px 8px;
+  overflow: auto;
+}
+/* 150 px es lo que necesita «SUCURSAL  todos» sin cortarse. Por debajo de eso el
+   campo no dice ni de qué campo es, que es lo único que justifica colapsarlo. */
+.panel-filtros.colapsado > .filtro-colapsado { flex: 1 1 150px; max-width: 280px; }
 
 .filtro-colapsado { display: flex; align-items: center; gap: 3px; }
 .caja-filtro {
@@ -1344,6 +1378,12 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  /* Se encoge con puntos suspensivos antes que empujar el valor fuera de la
+     pastilla: en un filtro estrecho, saber que hay algo elegido importa más que
+     leer el nombre completo del campo, que además está en el title. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .caja-filtro .valor-resumen {
   flex: 1;
@@ -1383,7 +1423,21 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   border-radius: var(--r);
   box-shadow: var(--sombra);
 }
-.pop-filtro .valores { overflow: auto; }
+.pop-filtro > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 5px;
+}
+.pop-filtro > header .nom {
+  font-size: 12px;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-filtro > header .btn { margin-left: auto; }
+
 
 /* ------------------------------------------------------------------ avisos */
 

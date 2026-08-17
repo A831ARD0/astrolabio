@@ -51,6 +51,8 @@ export function Tableros() {
           <Link key={t.id} to={`/tableros/${t.id}`} className="tarjeta">
             <h3>{t.nombre}</h3>
             <p className="chico suave" style={{ margin: '0 0 8px' }}>
+              {/* Sin hojas declaradas hay una implícita: la de siempre. */}
+              {Math.max(1, t.definicion.hojas?.length ?? 0)} hoja(s) ·{' '}
               {t.definicion.widgets.length} widget(s) ·{' '}
               {t.modelo_nombre} v{t.version_modelo}
             </p>

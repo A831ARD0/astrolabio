@@ -5,7 +5,60 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Agregado
+
+- **Un tablero es un libro de hojas.** Se cambia de hoja en una barra de pestañas, y
+  cada hoja tiene su propio espacio de trabajo. Los widgets no van dentro de la hoja:
+  cada widget dice a cuál pertenece, con lo que un tablero guardado antes de que
+  existieran las hojas se abre igual —todos sus widgets en la primera— sin migrar
+  nada, los ids siguen siendo únicos en todo el libro, y mover un widget de hoja es
+  cambiar un campo en su inspector.
+
+  Las **selecciones son del libro**, no de la hoja: filtrar julio en una hoja y que la
+  de al lado siguiera en otro mes es la forma más cara de leer dos cifras que no se
+  pueden comparar.
+
+- **El tamaño del espacio de trabajo lo elige quien arma la hoja.** «Cabe en la
+  pantalla» —lo que trae de fábrica— reparte el alto visible entre las filas que pida
+  la hoja, así que se ve entera sin desplazar; «se desplaza» deja la fila fija y baja
+  la página, para un informe largo. La rejilla va de 12 columnas a 24.
+
+  Si lo puesto llega más abajo de las filas declaradas, la hoja **se desplaza de todos
+  modos y lo dice**. Recortarlo con `overflow: hidden` dejaría widgets que no se
+  pueden ni ver ni alcanzar, y un widget que nadie ve es una cifra que nadie revisa.
+
+- **Buscador en las listas de métricas y de campos del inspector.** Aparece a partir
+  de ocho elementos. Busca por el nombre que se ve, por el técnico y por la tabla, sin
+  acentos y por trozos en cualquier orden (`logro unid` encuentra «% Logro Unidades»).
+  Lo ya elegido nunca se esconde al buscar: si desapareciera de la vista, no habría
+  forma de quitarlo sin acordarse de cómo se llamaba. Con noventa y seis métricas, la
+  lista sin buscador no era usable.
+
 ### Arreglado
+
+- **Un panel de filtros con varios campos no se podía guardar.** La pantalla dejaba
+  poner los campos que quepan y los dibujaba bien, pero el servidor seguía exigiendo
+  «exactamente un campo» —una regla de antes de que el panel supiera dibujar varios—,
+  así que al guardar la barra de filtros de Año, Mes, Estado y Sucursal el tablero se
+  rechazaba entero. Ahora lo único que se rechaza es un panel **sin** campos.
+
+- **Un filtro recién agregado salía como lista y no como desplegable.** Se veía como
+  que el widget nacía mal y se arreglaba solo al cambiarle el tipo y volver a Filtro.
+  La causa: un filtro nuevo no tiene campos todavía, y sin campos el panel no dibujaba
+  su contenedor, así que el observador de tamaño se registraba contra nada y no volvía
+  a intentarlo — el alto se quedaba en cero para siempre y nunca colapsaba. El
+  contenedor se dibuja siempre, aunque esté vacío.
+
+- **La lista de valores del desplegable salía sin estilo**: con viñetas de lista y sin
+  los cuatro estados asociativos, mientras la misma lista dentro del panel salía bien.
+  El estilo colgaba del panel, y el desplegable se dibuja en un portal fuera de él. Ya
+  cuelga de la lista, que es quien lo necesita, y las dos formas se ven igual — que es
+  justo lo que el código pretendía al compartir el componente. El desplegable abierto
+  además dice de qué campo es: tapa el tablero, y antes había que cerrarlo para saberlo.
+
+- **Un panel de filtros nace como barra y no como columna estrecha.** Ancho de lado a
+  lado y bajo, con los campos en fila y salto de línea, como la barra de arriba de una
+  hoja de Qlik. Antes nacía en tres columnas, donde el nombre del campo se cortaba.
 
 - **La pestaña Datos ya no se abre con un error de una métrica que nadie eligió.** Al
   entrar se marcan solas las seis primeras métricas, y en un modelo grande entre ellas

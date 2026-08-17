@@ -134,14 +134,35 @@ def test_un_grafico_sin_dimension_se_rechaza(cliente, cab_admin, modelo_dash):
     assert "dimension" in " ".join(r.json()["detail"]["errores"])
 
 
-def test_un_filtro_debe_apuntar_a_un_solo_campo(cliente, cab_admin, modelo_dash):
+def test_un_filtro_necesita_al_menos_un_campo(cliente, cab_admin, modelo_dash):
     cuerpo = _tablero_minimo(modelo_dash)
     cuerpo["nombre"] = "malo3"
     cuerpo["definicion"]["widgets"].append({
         "id": "f1", "tipo": "filtro", "posicion": {"x": 0, "y": 8, "ancho": 3, "alto": 6},
-        "dimensiones": ["cat_marca.marca_nombre", "cat_region.region_nombre"]})
+        "dimensiones": []})
     r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
     assert r.status_code == 422
+
+
+def test_un_filtro_puede_llevar_varios_campos(cliente, cab_admin, modelo_dash):
+    """
+    Un panel de filtros lleva los campos que quepan y se colapsan en una barra de
+    desplegables — Año, Mes, Sucursal en fila, como en Qlik. La regla de "exactamente
+    un campo" era de antes de que el panel supiera dibujar varios, y hacia imposible
+    guardar justo la barra de filtros que la pantalla ya sabe armar.
+    """
+    cuerpo = _tablero_minimo(modelo_dash)
+    cuerpo["nombre"] = "barra_de_filtros"
+    cuerpo["definicion"]["widgets"].append({
+        "id": "f1", "tipo": "filtro",
+        "posicion": {"x": 0, "y": 8, "ancho": 12, "alto": 3},
+        "dimensiones": ["cat_marca.marca_nombre", "cat_sucursal.sucursal_nombre",
+                        "dim_calendario.anio", "dim_calendario.mes"]})
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 201, r.text
+    guardado = next(w for w in r.json()["definicion"]["widgets"] if w["id"] == "f1")
+    assert len(guardado["dimensiones"]) == 4
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
 
 
 def test_ids_de_widget_repetidos_se_rechazan(cliente, cab_admin, modelo_dash):
@@ -353,3 +374,111 @@ def test_el_camino_elegido_hace_que_el_filtro_ambiguo_funcione(cliente, cab_admi
     total = cliente.post(f"/api/modelos/{modelo_dash}/consultar", headers=cab_admin,
                          json={"dimensiones": [], "metricas": ["monto_venta"]})
     assert 0 < kia < total.json()["filas"][0]["monto_venta"]
+
+
+# --------------------------------------------------------------------------- #
+# Hojas: un tablero es un libro
+# --------------------------------------------------------------------------- #
+
+def _con_hojas(modelo_id: int) -> dict:
+    """Dos hojas y un widget en cada una."""
+    cuerpo = _tablero_minimo(modelo_id)
+    cuerpo["nombre"] = "Libro"
+    cuerpo["definicion"]["hojas"] = [
+        {"id": "h1", "nombre": "Ventas"},
+        {"id": "h2", "nombre": "Inventario",
+         "lienzo": {"modo": "libre", "columnas": 24, "filas": 40}},
+    ]
+    cuerpo["definicion"]["widgets"][0]["hoja"] = "h1"
+    cuerpo["definicion"]["widgets"][1]["hoja"] = "h2"
+    return cuerpo
+
+
+def test_un_tablero_de_antes_de_las_hojas_se_sigue_leyendo(tablero):
+    """
+    Lo que ya existia no tiene `hojas` ni `hoja`. Tiene que abrirse igual, con
+    todos sus widgets en la hoja implicita: si esto falla, cada tablero guardado
+    hasta hoy se queda en blanco.
+    """
+    assert tablero["definicion"]["hojas"] == []
+    assert all(w["hoja"] == "" for w in tablero["definicion"]["widgets"])
+
+
+def test_cada_widget_dice_en_que_hoja_esta(cliente, cab_admin, modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_con_hojas(modelo_dash))
+    assert r.status_code == 201, r.text
+    d = r.json()["definicion"]
+    assert [h["nombre"] for h in d["hojas"]] == ["Ventas", "Inventario"]
+    assert {w["id"]: w["hoja"] for w in d["widgets"]} == {"w1": "h1", "w2": "h2"}
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_el_lienzo_de_cada_hoja_se_guarda(cliente, cab_admin, modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_con_hojas(modelo_dash))
+    hojas = r.json()["definicion"]["hojas"]
+    assert hojas[0]["lienzo"] == {"modo": "pantalla", "columnas": 12, "filas": 12}
+    assert hojas[1]["lienzo"]["modo"] == "libre"
+    assert hojas[1]["lienzo"]["columnas"] == 24
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_un_widget_en_una_hoja_que_no_existe_se_rechaza(cliente, cab_admin,
+                                                        modelo_dash):
+    """
+    Un widget huerfano no se dibuja en ninguna parte: existe, cuenta, y nadie lo
+    ve. Es peor que un error.
+    """
+    cuerpo = _con_hojas(modelo_dash)
+    cuerpo["definicion"]["widgets"][1]["hoja"] = "h9"
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 422, r.text
+    assert "h9" in r.json()["detail"]["errores"][0]
+
+
+def test_ids_de_hoja_repetidos_se_rechazan(cliente, cab_admin, modelo_dash):
+    cuerpo = _con_hojas(modelo_dash)
+    cuerpo["definicion"]["hojas"][1]["id"] = "h1"
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 422, r.text
+    assert "h1" in r.json()["detail"]["errores"][0]
+
+
+def test_un_widget_que_no_cabe_en_su_hoja_se_rechaza(cliente, cab_admin,
+                                                     modelo_dash):
+    """
+    La hoja tiene 12 columnas y la caja empieza en la 8 midiendo 9. En la hoja de
+    24 la misma caja si cabe: el tope es el de SU hoja, no uno fijo.
+    """
+    cuerpo = _con_hojas(modelo_dash)
+    cuerpo["definicion"]["widgets"][0]["posicion"] = {"x": 8, "y": 0,
+                                                      "ancho": 9, "alto": 4}
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 422, r.text
+    assert "se sale de la hoja" in r.json()["detail"]["errores"][0]
+
+    cuerpo["definicion"]["widgets"][0]["hoja"] = "h2"        # la de 24 columnas
+    ok = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert ok.status_code == 201, ok.text
+    cliente.delete(f"/api/dashboards/{ok.json()['id']}", headers=cab_admin)
+
+
+def test_una_hoja_de_24_columnas_acepta_una_caja_ancha(cliente, cab_admin,
+                                                       modelo_dash):
+    """La rejilla de 12 era un numero fijo en el esquema; ahora es de la hoja."""
+    cuerpo = _con_hojas(modelo_dash)
+    cuerpo["definicion"]["widgets"][1]["posicion"] = {"x": 0, "y": 0,
+                                                      "ancho": 24, "alto": 8}
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 201, r.text
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_una_hoja_no_puede_pedir_mas_columnas_de_las_que_se_leen(cliente,
+                                                                 cab_admin,
+                                                                 modelo_dash):
+    cuerpo = _con_hojas(modelo_dash)
+    cuerpo["definicion"]["hojas"][0]["lienzo"] = {"columnas": 60}
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 422, r.text

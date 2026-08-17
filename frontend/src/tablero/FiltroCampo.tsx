@@ -60,10 +60,13 @@ export function ListaValores({
   }, [estados, busqueda])
 
   return (
-    <>
+    // El envoltorio lleva la clase, y el estilo cuelga de aquí y no del panel.
+    // Cuando colgaba de `.filtro`, la misma lista dibujada en el portal del
+    // desplegable no heredaba nada: salía con viñetas y sin los cuatro estados.
+    <div className="lista-valores">
       {items.length > 8 && (
         <input
-          type="text"
+          type="search"
           placeholder="Buscar…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
@@ -91,7 +94,7 @@ export function ListaValores({
           <li className="vacio chico">Sin valores</li>
         )}
       </ul>
-    </>
+    </div>
   )
 }
 

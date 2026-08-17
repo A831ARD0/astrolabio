@@ -131,23 +131,30 @@ export function PanelFiltros({
     })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [])
+    // `campos.length` está en las dependencias a propósito. Un filtro recién
+    // agregado no tiene campos, y sin campos el contenedor no se dibujaba: el
+    // observador se registraba con `null` y no volvía a intentarlo nunca, así que
+    // el alto se quedaba en 0 y el panel no colapsaba jamás. Se veía como que el
+    // widget salía mal al agregarlo y bien al cambiarle el tipo y volver — porque
+    // eso lo vuelve a montar, ya con un campo.
+  }, [campos.length])
 
   const etiquetaDe = (clave: string) =>
     catalogo.data?.dimensiones.find((d) => d.clave === clave)?.etiqueta ??
     clave.split('.').pop() ??
     clave
 
-  if (campos.length === 0) {
-    return <div className="vacio chico">Agrega una dimensión a este filtro.</div>
-  }
-
   // Antes de la primera medida (alto 0) se asume que hay sitio: un parpadeo de
   // lista a desplegable se ve peor que al revés.
-  const colapsar = alto > 0 && alto / campos.length < ALTO_MINIMO
+  const colapsar = alto > 0 && campos.length > 0 && alto / campos.length < ALTO_MINIMO
 
   return (
+    // El contenedor se dibuja siempre, aunque no haya ni un campo: es lo que
+    // mide el observador, y si no existe no hay alto que medir.
     <div ref={caja} className={`panel-filtros ${colapsar ? 'colapsado' : ''}`}>
+      {campos.length === 0 && (
+        <div className="vacio chico">Agrega una dimensión a este filtro.</div>
+      )}
       {campos.map((campo) =>
         colapsar ? (
           <CampoCerrado

@@ -131,6 +131,18 @@ export function FiltroColapsado({
             className="pop-filtro"
             style={{ left: caja.left, top: caja.top, width: caja.ancho }}
           >
+            {/* Abierta, la lista tapa el tablero: si no dijera de qué campo es,
+                habría que cerrarla para saberlo. */}
+            <header>
+              <span className="nom" title={campo}>
+                {etiqueta}
+              </span>
+              {elegidos.length > 0 && (
+                <button className="btn chico" onClick={alLimpiar}>
+                  {elegidos.length} ✕
+                </button>
+              )}
+            </header>
             <ListaValores
               estados={estados}
               cargando={cargando}
