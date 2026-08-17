@@ -755,6 +755,33 @@ def _abarca_varios_meses(sql: str, dialecto: str = "duckdb") -> bool:
     return False
 
 
+def _en_ventanas_anchas(sql: str, dialecto: str = "duckdb") -> set[str]:
+    """
+    Las metricas que quedan DENTRO de una ventana que abarca mas de un mes.
+
+    Hace falta para no exigir de mas. La revision de «esto no se puede sumar por
+    meses» valia para todas las dependencias de la formula en cuanto una sola
+    ventana era ancha, y eso rechaza cosas correctas: en
+
+        SI(ESVACIO([Objetivo del mes]), PROMEDIOMESES([Utilidad media], 3),
+           [Objetivo del mes])
+
+    lo unico que se suma en tres meses es la utilidad media. El objetivo del mes se
+    lee del propio mes —esta en la condicion, fuera de la ventana— asi que si es un
+    promedio no importa, y aun asi la formula entera quedaba rechazada.
+    """
+    dentro: set[str] = set()
+    for ventana in sqlglot.parse_one(sql, read=dialecto).find_all(exp.Window):
+        spec = ventana.args.get("spec")
+        if spec is None:
+            continue
+        inicio, fin = spec.args.get("start"), spec.args.get("end")
+        if str(inicio).upper() != "UNBOUNDED" and str(inicio) == str(fin):
+            continue                      # un mes suelto: sumar uno no cambia nada
+        dentro.update(c.name for c in ventana.find_all(exp.Column))
+    return dentro
+
+
 def _es_aditiva(sql: str, dialecto: str = "duckdb") -> bool:
     """
     Si sumar los valores de varios meses da el valor del conjunto.
@@ -1094,8 +1121,14 @@ class Compilador:
         # importa es un conteo de clientes distintos: el mismo cliente en enero y
         # en febrero es UNO, y el acumulado del año lo contaria dos veces.
         if _abarca_varios_meses(sql):
+            # Solo las que estan DENTRO de la ventana ancha. Una dependencia que se
+            # lee del propio mes —la de una condicion, por ejemplo— no se suma en
+            # tres meses, asi que da igual que sea un promedio.
+            anchas = _en_ventanas_anchas(sql)
             for d in deps:
                 met = self.m.metricas[d]
+                if d not in anchas:
+                    continue
                 if met.compuesta or _es_aditiva(self.m.sql_de(met)):
                     continue
                 raise ErrorModelo(

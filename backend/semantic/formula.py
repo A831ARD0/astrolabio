@@ -1577,11 +1577,25 @@ def _envolturas(mascara: str, posicion: int) -> list[tuple[str, int]]:
     return fuera
 
 
+#: Funciones que NO agregan por su cuenta: acotan la agregacion que ya lleva
+#: dentro. `CALCULAR([Total de Inventario], Dias_Antiguedad < 30)` no cuenta dos
+#: veces — le mete la condicion al conteo que ya hacia `[Total de Inventario]`,
+#: que es justamente para lo que sirve. En el catalogo estan marcadas como que
+#: agregan porque su RESULTADO es una cifra agregada, y eso hacia que la revision
+#: las tratara como un SUMA de fuera.
+PROPAGAN = {"CALCULAR"}
+
+
 def _agrega(nombre: str) -> bool:
     funcion = CATALOGO.get(nombre.upper())
     if funcion is not None:
         return funcion.agrega
     return nombre.upper() in AGREGADOS_SQL
+
+
+def _envuelve_agregando(nombre: str) -> bool:
+    """Si poner algo ya agregado DENTRO de esta funcion seria agregar dos veces."""
+    return _agrega(nombre) and nombre.upper() not in PROPAGAN
 
 
 def _agregaciones_anidadas(expresion: str, mascara: str,
@@ -1607,7 +1621,7 @@ def _agregaciones_anidadas(expresion: str, mascara: str,
         except (ErrorFormula, Exception):     # pragma: no cover
             continue                          # su propio error ya se dira aparte
         envoltura = next((f for f in _envolturas(mascara, m.start())
-                          if _agrega(f[0])), None)
+                          if _envuelve_agregando(f[0])), None)
         if envoltura is None:
             continue
         funcion = envoltura[0].upper()

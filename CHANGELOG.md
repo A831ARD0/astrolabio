@@ -7,6 +7,21 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **Acotar una métrica que ya agrega dejó de salir como error.** `CALCULAR([Total de
+  inventario], Dias_Antiguedad < 30)` es correcto —le mete la condición al conteo que
+  esa métrica ya hacía, y el SQL sale con un solo `COUNT`— pero la revisión lo marcaba
+  en rojo y el diagnóstico lo daba por crítico. En el catálogo `CALCULAR` figura como
+  que agrega, porque su resultado *es* una cifra agregada, y eso hacía que se tratara
+  como un `SUMA` puesto por fuera. Envolverlo en algo que sí agrega sigue avisando.
+
+- **La revisión de «esto no se puede sumar por meses» era demasiado amplia.** Valía
+  para todas las dependencias de la fórmula en cuanto una sola ventana abarcaba varios
+  meses, y así rechazaba fórmulas correctas: en `SI(ESVACIO([Objetivo del mes]),
+  PROMEDIOMESES([Utilidad media], 3), [Objetivo del mes])` lo único que se suma en tres
+  meses es la utilidad media — el objetivo se lee del propio mes, está en la condición y
+  fuera de la ventana, así que da igual que sea un promedio. Ahora sólo se exige de lo
+  que está dentro de la ventana ancha; metido dentro, se sigue rechazando.
+
 - **La tabla de campos era inalcanzable en una entidad ancha.** Dos cosas la tapaban, y
   juntas hacían que las casillas **ver**, **PII**, **única** y **mes** parecieran no
   existir en la pantalla.

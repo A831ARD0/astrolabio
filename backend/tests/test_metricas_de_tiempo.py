@@ -357,3 +357,64 @@ def test_la_ventana_se_aplica_a_cada_cifra_y_no_al_cociente(cliente, cab_editor,
         # El /3 se cancela arriba y abajo: queda utilidad total / unidades total.
         assert f["uti_prom_3m"] == pytest.approx(f["uti_3m"] / f["unid_3m"] / 3)
     assert comparadas > 10
+
+
+def test_lo_que_esta_fuera_de_la_ventana_no_tiene_que_poder_sumarse(
+        cliente, cab_editor, modelo):
+    """
+    La revisión de «esto no se puede sumar por meses» valía para TODAS las
+    dependencias en cuanto una sola ventana era ancha, y eso rechazaba fórmulas
+    correctas.
+
+    El caso es de verdad: el objetivo de utilidad por unidad es un promedio del
+    propio mes, y cuando no está cargado se cae al promedio de los tres meses
+    anteriores de la cifra real. Lo único que se suma en tres meses es esa cifra
+    real; el objetivo se lee del mes de la fila —está en la condición, fuera de la
+    ventana— así que da igual que sea un promedio. Antes la fórmula entera quedaba
+    rechazada por su culpa.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    d["metricas"] += [
+        # Un promedio: NO es aditivo. Antes bastaba con nombrarlo.
+        {"nombre": "obj_uti", "etiqueta": "Objetivo de utilidad",
+         "entidad": "fact_presupuesto", "expresion": "PROMEDIO(objetivo_monto)",
+         "formato": "moneda"},
+        {"nombre": "uti_unidad", "etiqueta": "Utilidad por unidad",
+         "expresion": "DIVIDIR([monto_utilidad], [unidades_vendidas], 0)",
+         "formato": "moneda"},
+        {"nombre": "obj_con_respaldo", "etiqueta": "Objetivo, con respaldo",
+         "expresion": "SI(O(ESVACIO([obj_uti]), [obj_uti] = 0),"
+                      " PROMEDIOMESES([uti_unidad], 3), [obj_uti])",
+         "formato": "moneda"},
+    ]
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["obj_con_respaldo", "obj_uti"],
+                  [MES])
+    assert r.status_code == 200, r.text
+    filas = r.json()["filas"]
+    assert filas
+    # Y donde el objetivo existe, es el objetivo lo que sale: el respaldo no se
+    # cuela cuando no hace falta.
+    con_objetivo = [f for f in filas if f["obj_uti"]]
+    assert con_objetivo
+    assert all(f["obj_con_respaldo"] == f["obj_uti"] for f in con_objetivo)
+
+
+def test_dentro_de_la_ventana_sigue_sin_poder_sumarse(cliente, cab_editor,
+                                                      modelo):
+    """El aviso tiene que sobrevivir al arreglo de arriba: el mismo promedio,
+    ahora SÍ metido dentro de la ventana, se sigue rechazando."""
+    d = definicion(cliente, cab_editor, modelo)
+    d["metricas"] += [
+        {"nombre": "obj_uti2", "etiqueta": "Objetivo de utilidad",
+         "entidad": "fact_presupuesto", "expresion": "PROMEDIO(objetivo_monto)",
+         "formato": "moneda"},
+        {"nombre": "obj_uti2_3m", "etiqueta": "Objetivo, 3 meses",
+         "expresion": "PROMEDIOMESES([obj_uti2], 3)", "formato": "moneda"},
+    ]
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["obj_uti2_3m"], [MES])
+    assert r.status_code == 422, r.text
+    assert "no se puede sumar" in r.text

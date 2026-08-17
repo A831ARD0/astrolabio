@@ -251,6 +251,30 @@ def test_sumar_una_metrica_que_ya_suma_se_atrapa_antes_de_ejecutar(ctx):
     assert fallos[0]["largo"] == len("[venta]")
 
 
+def test_acotar_una_metrica_que_ya_agrega_no_es_agregar_dos_veces(con, ctx):
+    """
+    `CALCULAR([venta], cond)` es correcto y salia marcado como error.
+
+    No agrega dos veces: le mete la condicion al SUM que ya hacia `[venta]`, y el
+    SQL que sale lo demuestra —un solo SUM con su FILTER—. En el catalogo CALCULAR
+    figura como que agrega, porque su resultado ES una cifra agregada, y la
+    revision lo trataba como un SUMA de fuera. Con esto ocho medidas de inventario
+    de un modelo real salian en rojo y en el diagnostico como criticas, haciendo
+    algo que el motor calcula bien.
+    """
+    assert revisar("CALCULAR([venta], importe > 1)", ctx) == []
+    sql = compilar("CALCULAR([venta], importe > 1)", ctx)
+    assert sql.upper().count("SUM(") == 1
+    assert valor(con, ctx, "CALCULAR([venta], importe > 1)") is not None
+
+    # Y envolverlo en algo que SI agrega sigue siendo un error, CALCULAR en medio
+    # o no: el aviso tiene que sobrevivir al arreglo.
+    for expresion in ("SUMA([venta])",
+                      "SUMA(CALCULAR([venta], importe > 1))"):
+        fallos = revisar(expresion, ctx)
+        assert any("ya agrega" in f["mensaje"] for f in fallos), expresion
+
+
 def test_la_misma_metrica_sin_envolver_esta_bien(con, ctx):
     """La correccion que sugiere el mensaje anterior tiene que funcionar."""
     assert revisar("DIVIDIR([utilidad], [venta], 0)", ctx) == []
