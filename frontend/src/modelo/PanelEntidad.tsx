@@ -320,11 +320,21 @@ export function PanelEntidad({
             parecía roto. Aquí se dice que son la misma, y el rol, la clave, el grano
             y las relaciones se van con el nombre nuevo.
           */}
+          {/*
+            Plegado, y no siempre abierto. Es una fila por columna que desapareció:
+            en un catálogo de veintidós columnas son veintidós desplegables, y
+            empujaban la tabla de campos tan abajo que parecía no existir — alguien
+            que venía a ocultar una columna no encontraba la casilla «ver» y
+            concluía, con razón, que la opción no estaba en la pantalla. El aviso de
+            arriba se sigue viendo entero; lo que se pliega es la lista larga.
+          */}
           {desfase!.desaparecidas.length > 0 && enOrigen.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div className="chico" style={{ marginBottom: 4 }}>
+            <details style={{ marginTop: 8 }} open={desfase!.desaparecidas.length <= 4}>
+              <summary className="chico" style={{ cursor: 'pointer', marginBottom: 4 }}>
                 ¿Alguna es la misma con otro nombre?
-              </div>
+                {desfase!.desaparecidas.length > 4
+                  && ` (${desfase!.desaparecidas.length})`}
+              </summary>
               {desfase!.desaparecidas.map((campo) => (
                 <div
                   key={campo}
@@ -377,7 +387,7 @@ export function PanelEntidad({
                   </button>
                 </div>
               ))}
-            </div>
+            </details>
           )}
 
           <div style={{ marginTop: 8 }}>

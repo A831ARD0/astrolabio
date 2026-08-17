@@ -672,6 +672,24 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 /* Ancho fijo: sin esto el selector de rol empuja las dos últimas columnas fuera
    del panel, y son casillas que hay que poder marcar. */
 table.campos { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+/* Las seis columnas con ancho fijo suman unos 300px. Con `table-layout: fixed`,
+   en un panel mas angosto que eso a la primera —el nombre del campo— no le queda
+   nada: se encoge hasta cero y el encabezado se pisa con el siguiente, asi que
+   quedaban unas casillas sin saber de que columna eran. Con este minimo la tabla
+   desborda y su caja la desplaza, que es lo que ya sabe hacer. */
+table.campos { min-width: 450px; }
+table.campos th:first-child { width: 152px; }
+/* Y el nombre se queda quieto al desplazar: es lo unico que dice de que fila son
+   las casillas. Sin esto, desplazarse para llegar a «ver» dejaba fuera el nombre
+   y no se podia distinguir `Nombre_Conexion` de `Nombre_DB`. */
+table.campos th:first-child,
+table.campos td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--fondo-panel);
+  z-index: 1;
+}
+table.campos tr:hover td:first-child { background: var(--fondo-alto); }
 table.campos th:nth-child(2) { width: 58px; }
 table.campos th:nth-child(3) { width: 104px; }
 /* Las tres casillas llevan ancho declarado, la sexta incluida. Sin el de la

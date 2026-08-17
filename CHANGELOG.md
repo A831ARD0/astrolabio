@@ -5,6 +5,23 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Arreglado
+
+- **La tabla de campos era inalcanzable en una entidad ancha.** Dos cosas la tapaban, y
+  juntas hacían que las casillas **ver**, **PII**, **única** y **mes** parecieran no
+  existir en la pantalla.
+
+  El aviso de desfase con el origen lista una fila con desplegable por cada columna
+  que desapareció: en un catálogo de veintidós columnas eran veintidós desplegables
+  empujando la tabla de campos fuera de la vista. Ahora esa lista va plegada cuando
+  pasa de cuatro; el aviso se sigue viendo entero.
+
+  Y el nombre del campo se encogía hasta cero. Las seis columnas de la derecha llevan
+  ancho fijo y suman unos 300 px, así que en un panel más angosto a la primera no le
+  quedaba nada: el encabezado se pisaba con el siguiente y quedaban unas casillas sin
+  saber de qué columna eran. Ahora la tabla desborda y su caja la desplaza, y el
+  nombre se queda fijo al hacerlo — es lo único que dice de qué fila son las casillas.
+
 ### Agregado
 
 - **Acotar una métrica por una columna de otra tabla.** Es el caso más corriente de
