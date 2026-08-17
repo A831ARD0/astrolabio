@@ -86,9 +86,13 @@ export function useYaml(id: number, version?: number) {
   return useQuery({
     queryKey: claves.yaml(id, version),
     queryFn: () =>
-      api.get<{ version: number; yaml: string }>(
-        `/modelos/${id}/yaml${version ? `?version=${version}` : ''}`,
-      ),
+      api.get<{
+        version: number
+        yaml: string
+        /** Si lo devuelto es el borrador sin publicar y no una versión. */
+        es_borrador: boolean
+        version_vigente: number
+      }>(`/modelos/${id}/yaml${version ? `?version=${version}` : ''}`),
   })
 }
 

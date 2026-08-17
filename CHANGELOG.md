@@ -298,6 +298,18 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **La pestaña YAML enseñaba la versión publicada, no lo que tienes en el lienzo.** Y
+  lo decía sólo si había cambios **sin guardar**: con el borrador ya guardado, el
+  texto salía sin un solo aviso. Quien tenía trece tablas trabajadas y una publicada
+  veía **una** en el YAML, y la conclusión razonable era que el YAML estaba roto.
+  No lo estaba: era otro texto.
+
+  Ahora hay **dos pestañas** —`Borrador` y `Publicada vN`— cuando existe un borrador,
+  y el borrador es lo que se abre primero, que es lo que ya hacía `/definicion`. Sin
+  borrador, dice que no hay ninguno en vez de callar. La ruta `/yaml` devuelve además
+  `es_borrador`, así que la respuesta ya no es ambigua para quien la consuma desde
+  fuera.
+
 - **`CALCULAR` sobre una métrica que ya venía filtrada acumula la condición.** Era
   el patrón «un total con su regla, y luego los tramos de ese total»: `Inventario`
   descarta las unidades de demostración, y `Inventario de menos de 30 días` acota

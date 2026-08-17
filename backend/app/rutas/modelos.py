@@ -759,10 +759,24 @@ def guardar_politicas(modelo_id: int, cuerpo: GuardarPoliticas, sesion: SesionDe
 @router.get("/{modelo_id}/yaml")
 def leer_yaml(modelo_id: int, sesion: SesionDep, version: int | None = None,
               _: Usuario = Depends(exigir_rol(Rol.editor))):
-    """El texto tal cual. Existe para poder revisarlo, versionarlo y exportarlo."""
-    v = (_version_exacta(sesion, modelo_id, version) if version
-         else _version_vigente(sesion, modelo_id))
-    return {"version": v.version, "yaml": v.yaml}
+    """
+    El texto tal cual. Existe para poder revisarlo, versionarlo y exportarlo.
+
+    Si hay un borrador sin publicar, **es lo que se devuelve**, igual que en
+    `/definicion`. Antes no: el lienzo enseñaba el borrador y esta ruta la version
+    publicada, sin decirlo. Quien tenia trece tablas en el lienzo y una publicada
+    veia UNA en el YAML y concluia, con razon, que el YAML estaba roto — cuando lo
+    que pasaba es que estaba mirando otra cosa. Pedir una `version` concreta salta
+    el borrador, que es la via para mirar el historial.
+    """
+    vigente = _version_vigente(sesion, modelo_id)
+    borrador = None if version else sesion.get(BorradorModelo, modelo_id)
+    if borrador is not None:
+        return {"version": borrador.desde_version, "yaml": borrador.yaml,
+                "es_borrador": True, "version_vigente": vigente.version}
+    v = _version_exacta(sesion, modelo_id, version) if version else vigente
+    return {"version": v.version, "yaml": v.yaml, "es_borrador": False,
+            "version_vigente": vigente.version}
 
 
 @router.get("/{modelo_id}/rutas")

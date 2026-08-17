@@ -791,6 +791,21 @@ ese momento no te interesan; pliegas el que no estás usando y **se queda plegad
 Se recuerda por modelo y por cajón, en tu navegador, así que no es un cambio del
 modelo: no marca cambios sin guardar ni hay que publicar nada.
 
+### Ver el modelo como texto
+
+La pestaña **YAML** enseña el modelo tal cual se guarda. Cuando tienes trabajo sin
+publicar hay **dos**, y conviene tener claro cuál miras:
+
+- **Borrador** — lo que estás armando. Es lo que se abre primero.
+- **Publicada vN** — lo que ven los tableros **ahora mismo**.
+
+Si el lienzo tiene cambios que todavía no guardaste, el borrador tampoco los lleva:
+guarda primero. El aviso de arriba te lo dice.
+
+Es el texto que hay que pasar cuando alguien te pide «el modelo»: llevar el
+publicado cuando lo que trabajaste está en el borrador es enseñar un modelo que no
+es el tuyo.
+
 ### Ordenar el lienzo
 
 Con más de media docena de tablas, colocarlas a mano deja de ser posible. El botón

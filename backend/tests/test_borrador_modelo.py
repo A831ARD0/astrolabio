@@ -312,3 +312,46 @@ def test_una_metrica_con_formula_se_consulta_de_verdad(cliente, cab_editor,
                      json={"dimensiones": [], "metricas": ["facturas_distintas"]})
     assert r.status_code == 200, r.text
     assert r.json()["filas"][0]["facturas_distintas"] > 0
+
+
+def test_el_yaml_ensena_el_borrador_y_tambien_la_publicada(
+        cliente, cab_editor, modelo_id, definicion):
+    """
+    Las dos cosas se pueden mirar, y se sabe cual se esta mirando.
+
+    Antes esta ruta devolvia SIEMPRE la version publicada. El lienzo enseñaba el
+    borrador y el YAML otra cosa, sin decirlo: con trece tablas trabajadas y una
+    publicada, aqui salia una sola, y la conclusion razonable era que el YAML
+    estaba roto. No lo estaba — era otro texto.
+    """
+    entidad = next(e["nombre"] for e in definicion["entidades"]
+                   if e["tipo"] == "hecho")
+    marca = "solo_en_el_borrador"
+    nueva = {**definicion, "metricas": [
+        *definicion["metricas"],
+        {"nombre": marca, "etiqueta": "Marca", "entidad": entidad,
+         "expresion": "CONTAR()", "formato": "entero"},
+    ]}
+    assert cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                       json={"definicion": nueva}).status_code == 200
+
+    # Sin pedir version: el borrador, y dice que lo es.
+    b = cliente.get(f"/api/modelos/{modelo_id}/yaml", headers=cab_editor)
+    assert b.status_code == 200, b.text
+    assert b.json()["es_borrador"] is True
+    assert marca in b.json()["yaml"]
+    vigente = b.json()["version_vigente"]
+
+    # Pidiendo la publicada: la publicada, y sin la marca.
+    p = cliente.get(f"/api/modelos/{modelo_id}/yaml?version={vigente}",
+                    headers=cab_editor)
+    assert p.status_code == 200, p.text
+    assert p.json()["es_borrador"] is False
+    assert marca not in p.json()["yaml"]
+
+
+def test_sin_borrador_el_yaml_es_la_publicada(cliente, cab_editor, modelo_id):
+    r = cliente.get(f"/api/modelos/{modelo_id}/yaml", headers=cab_editor)
+    assert r.status_code == 200, r.text
+    assert r.json()["es_borrador"] is False
+    assert r.json()["version"] == r.json()["version_vigente"]
