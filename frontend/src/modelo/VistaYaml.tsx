@@ -6,9 +6,12 @@
  * entre versiones— es lo que evita que la definición quede encerrada en una base
  * de datos que solo esta aplicación entiende.
  *
- * Es de solo lectura a propósito. Se edita en el lienzo, que valida referencias
- * mientras se trabaja; un YAML tecleado a mano puede apuntar a columnas que no
- * existen y no se sabría hasta la primera consulta.
+ * Se ve de sólo lectura, y además **se puede importar**. Son dos cosas distintas
+ * a propósito: teclear encima de lo que estás mirando invita a editar la versión
+ * publicada por error, mientras que importar es un acto con su botón, que dice
+ * claramente que va a reemplazar el borrador entero. Y hacía falta: sin él, un
+ * modelo escrito fuera —una migración de otra herramienta, noventa y seis
+ * métricas traducidas— no tenía por dónde entrar más que a mano, una por una.
  *
  * **Hay dos textos, no uno**, y confundirlos cuesta caro: el borrador —lo que
  * estás armando— y la última versión publicada, que es lo que ven los tableros.
@@ -21,7 +24,7 @@
 import Editor from '@monaco-editor/react'
 import { useState } from 'react'
 
-import { useYaml } from '../api/hooks'
+import { useImportarYaml, useYaml } from '../api/hooks'
 
 export function VistaYaml({
   modeloId,
@@ -34,6 +37,9 @@ export function VistaYaml({
   hayCambiosSinGuardar: boolean
 }) {
   const [verPublicada, setVerPublicada] = useState(false)
+  const [importando, setImportando] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [hecho, setHecho] = useState<string | null>(null)
 
   // Sin `version` la ruta devuelve el borrador si lo hay. Para ver la publicada
   // se le pide su número explícitamente, que es la misma vía del historial.
@@ -43,29 +49,101 @@ export function VistaYaml({
     version ?? (verPublicada ? suelto.data?.version_vigente : undefined),
   )
   const yaml = version === undefined && verPublicada ? publicada : suelto
+  const importar = useImportarYaml(modeloId)
 
   const hayBorrador = suelto.data?.es_borrador === true
   const oscuro = window.matchMedia('(prefers-color-scheme: dark)').matches
 
+  function aplicar() {
+    setHecho(null)
+    importar.mutate(
+      { yaml: texto },
+      {
+        onSuccess: (r) => {
+          const criticos = r.problemas.filter((p) => p.gravedad === 'critico')
+          setHecho(
+            criticos.length
+              ? `Importado. El diagnóstico ve ${criticos.length} problema(s) crítico(s).`
+              : 'Importado, y el diagnóstico no ve nada crítico.',
+          )
+          setImportando(false)
+          setTexto('')
+        },
+      },
+    )
+  }
+
   return (
     <div className="yaml">
-      {version === undefined && hayBorrador && (
-        <div className="pestanas">
+      <div className="pestanas">
+        {version === undefined && hayBorrador && (
+          <>
+            <button
+              className={verPublicada ? '' : 'activo'}
+              onClick={() => setVerPublicada(false)}
+            >
+              Borrador
+            </button>
+            <button
+              className={verPublicada ? 'activo' : ''}
+              title="Lo que ven los tableros ahora mismo"
+              onClick={() => setVerPublicada(true)}
+            >
+              Publicada v{suelto.data?.version_vigente}
+            </button>
+          </>
+        )}
+        {version === undefined && (
           <button
-            className={verPublicada ? '' : 'activo'}
-            onClick={() => setVerPublicada(false)}
+            style={{ marginLeft: 'auto' }}
+            title="Reemplaza el borrador entero con un YAML pegado. No toca ninguna versión publicada."
+            onClick={() => {
+              setHecho(null)
+              setImportando((x) => !x)
+            }}
           >
-            Borrador
+            {importando ? 'Cancelar' : 'Importar YAML…'}
           </button>
-          <button
-            className={verPublicada ? 'activo' : ''}
-            title="Lo que ven los tableros ahora mismo"
-            onClick={() => setVerPublicada(true)}
-          >
-            Publicada v{suelto.data?.version_vigente}
-          </button>
+        )}
+      </div>
+
+      {importando && (
+        <div style={{ padding: '8px 8px 0' }}>
+          <p className="chico tenue" style={{ margin: '0 0 6px' }}>
+            Pega aquí el modelo completo. Reemplaza el <strong>borrador</strong> —lo
+            que ven los tableros no cambia hasta que publiques— y se revisa igual
+            que si lo hubieras armado en el lienzo: si una métrica nombra una
+            columna que no existe, no entra.
+          </p>
+          <textarea
+            className="mono"
+            value={texto}
+            spellCheck={false}
+            placeholder={'modelo: Mi modelo\nversion: 1\nentidades:\n  - …'}
+            onChange={(e) => setTexto(e.target.value)}
+            style={{ width: '100%', minHeight: 160, fontSize: 12 }}
+          />
+          <div className="fila" style={{ gap: 8, marginTop: 6 }}>
+            <button
+              className="btn"
+              disabled={!texto.trim() || importar.isPending}
+              onClick={aplicar}
+            >
+              {importar.isPending ? 'Importando…' : 'Reemplazar el borrador'}
+            </button>
+            <span className="chico tenue">
+              {texto.split('\n').length} líneas pegadas
+            </span>
+          </div>
+          {importar.isError && (
+            <div className="error-caja chico" style={{ marginTop: 6 }}>
+              {(importar.error as Error).message}
+            </div>
+          )}
         </div>
       )}
+
+      {hecho && <div className="aviso-caja chico">{hecho}</div>}
 
       {/*
         El borrador guardado tampoco es lo que está en pantalla si hay cambios sin

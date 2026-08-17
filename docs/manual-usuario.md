@@ -867,6 +867,20 @@ Es el texto que hay que pasar cuando alguien te pide «el modelo»: llevar el
 publicado cuando lo que trabajaste está en el borrador es enseñar un modelo que no
 es el tuyo.
 
+**Y se puede traer un YAML de fuera.** El botón **Importar YAML…** abre un cuadro
+donde pegarlo: un modelo escrito a mano, un respaldo, o un juego de métricas
+traducido de otra herramienta. Sin eso, meter noventa métricas significaba teclearlas
+una por una.
+
+Reemplaza el **borrador** entero, nunca una versión publicada — lo que ven los
+tableros no cambia hasta que publiques. Y se revisa igual que si lo hubieras armado
+en el lienzo: si una métrica nombra una columna o un hecho que no existe, no entra, y
+el error habla de la métrica.
+
+El editor de arriba sigue siendo de sólo lectura. Teclear encima de lo que estás
+mirando invita a editar por error la versión publicada; importar es un acto con su
+botón, que dice qué va a reemplazar.
+
 ### Ordenar el lienzo
 
 Con más de media docena de tablas, colocarlas a mano deja de ser posible. El botón

@@ -355,3 +355,75 @@ def test_sin_borrador_el_yaml_es_la_publicada(cliente, cab_editor, modelo_id):
     assert r.status_code == 200, r.text
     assert r.json()["es_borrador"] is False
     assert r.json()["version"] == r.json()["version_vigente"]
+
+
+# --------------------------------------------------------------------------- #
+# Importar un YAML escrito fuera
+#
+# La pestaña YAML enseñaba el modelo y no había por dónde meterlo. Un modelo
+# escrito a mano, un respaldo, o noventa y seis métricas traducidas de otra
+# herramienta sólo podían entrar tecleándolas en la pantalla, una por una.
+# --------------------------------------------------------------------------- #
+
+def test_un_yaml_pegado_reemplaza_el_borrador(cliente, cab_editor, modelo_id,
+                                              yaml_modelo):
+    """El texto entra tal cual y lo que se lee después es eso."""
+    import yaml as _y
+    crudo = _y.safe_load(yaml_modelo)
+    hecho = next(e["nombre"] for e in crudo["entidades"] if e["tipo"] == "hecho")
+    crudo["metricas"] = [
+        *crudo.get("metricas", []),
+        {"nombre": "vino_del_yaml", "etiqueta": "Vino del YAML",
+         "entidad": hecho, "expresion": "CONTAR()", "formato": "entero"},
+    ]
+
+    antes = vigente(cliente, cab_editor, modelo_id)
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": _y.safe_dump(crudo, allow_unicode=True)})
+    assert r.status_code == 200, r.text
+    assert "vino_del_yaml" in r.json()["yaml"]
+    # No crea version: lo que ven los tableros no se mueve.
+    assert vigente(cliente, cab_editor, modelo_id) == antes
+
+    d = cliente.get(f"/api/modelos/{modelo_id}/definicion",
+                    headers=cab_editor).json()["definicion"]
+    assert any(m["nombre"] == "vino_del_yaml" for m in d["metricas"])
+
+
+def test_un_yaml_pegado_pasa_por_las_mismas_revisiones(cliente, cab_editor,
+                                                       modelo_id, yaml_modelo):
+    """
+    Lo que importa de importar: que no sea una puerta trasera. Una metrica que
+    nombra un hecho inexistente no entra, y el error habla de la metrica.
+    """
+    import yaml as _y
+    crudo = _y.safe_load(yaml_modelo)
+    crudo["metricas"] = [{"nombre": "colada", "etiqueta": "Colada",
+                          "entidad": "no_existe", "expresion": "CONTAR()",
+                          "formato": "entero"}]
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": _y.safe_dump(crudo, allow_unicode=True)})
+    assert r.status_code == 422, r.text
+    assert "colada" in r.text and "no_existe" in r.text
+
+
+def test_un_yaml_que_no_es_yaml_lo_dice(cliente, cab_editor, modelo_id):
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"yaml": "esto: [no cierra\n  ni es un modelo"})
+    assert r.status_code == 422, r.text
+    assert "no se pudo leer" in r.text
+
+
+def test_hay_que_mandar_uno_de_los_dos_y_no_los_dos(cliente, cab_editor,
+                                                    modelo_id, definicion):
+    """Si llegaran ambos habria que adivinar cual manda."""
+    assert cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                       json={}).status_code == 422
+    r = cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_editor,
+                    json={"definicion": definicion, "yaml": "modelo: x"})
+    assert r.status_code == 422
+
+
+def test_un_lector_no_importa_yaml(cliente, cab_lector, modelo_id, yaml_modelo):
+    assert cliente.put(f"/api/modelos/{modelo_id}/borrador", headers=cab_lector,
+                       json={"yaml": yaml_modelo}).status_code == 403

@@ -39,6 +39,20 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Importar un YAML pegado.** La pestaña YAML enseñaba el modelo y no había por dónde
+  meterlo: un modelo escrito a mano, un respaldo o un juego de métricas traducido de
+  otra herramienta sólo podía entrar tecleándolo en el lienzo, una por una. Ahora hay un
+  botón **Importar YAML…** con un cuadro donde pegarlo.
+
+  Reemplaza el **borrador**, nunca una versión publicada: lo que ven los tableros no
+  cambia hasta que se publique. Y pasa por las mismas revisiones que lo que manda el
+  lienzo —el texto se lee a la definición y se valida— así que una métrica que nombra un
+  hecho que no existe no entra, y el error habla de la métrica y no de una línea.
+
+  El editor sigue siendo de sólo lectura. Teclear encima de lo que se está mirando
+  invita a editar la versión publicada por error; importar es un acto con su botón, que
+  dice qué va a reemplazar.
+
 - **Acotar una métrica por una columna de otra tabla.** Es el caso más corriente de
   todos: «las ventas cuyo canal es digital», donde el canal no está en la factura
   sino en el catálogo de orígenes. Se escribe con el nombre de la tabla delante:

@@ -102,7 +102,27 @@ class GuardarDefinicion(BaseModel):
 
 
 class GuardarBorrador(BaseModel):
-    definicion: Definicion
+    """
+    El borrador, de dos maneras — igual que `CrearModelo`.
+
+    `definicion` es el camino de la interfaz. `yaml` es el de quien ya tiene el
+    texto: un modelo escrito a mano, un respaldo, o —el caso que lo trajo— noventa
+    y seis metricas traducidas de otra herramienta. La pestaña YAML las enseñaba y
+    no habia por donde meterlas: quedaba pegarlas a mano en la pantalla, una por
+    una.
+
+    Uno de los dos, no los dos: si llegaran ambos habria que decidir cual manda, y
+    esa decision no la puede tomar el servidor sin adivinar.
+    """
+
+    definicion: Definicion | None = None
+    yaml: str | None = None
+
+    @model_validator(mode="after")
+    def uno_de_los_dos(self):
+        if (self.yaml is None) == (self.definicion is None):
+            raise ValueError("manda 'yaml' o 'definicion', exactamente uno")
+        return self
 
 
 class Publicar(BaseModel):
@@ -506,12 +526,25 @@ def guardar_borrador(modelo_id: int, cuerpo: GuardarBorrador, sesion: SesionDep,
     """
     _existe(sesion, modelo_id)
 
-    errores = cuerpo.definicion.revisar_referencias()
+    definicion = cuerpo.definicion
+    if definicion is None:
+        # Un YAML pegado desde fuera se lee a `Definicion` a proposito, en vez de
+        # guardarse tal cual: asi pasa por las mismas revisiones que lo que manda
+        # la interfaz, y los errores hablan de entidades y de metricas en vez de
+        # lineas de un archivo.
+        try:
+            definicion = desde_yaml(cuerpo.yaml or "")
+        except Exception as e:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                {"errores": [f"El YAML no se pudo leer. {en_castellano(e)}"]})
+
+    errores = definicion.revisar_referencias()
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"errores": errores})
 
-    texto = cuerpo.definicion.a_yaml()
+    texto = definicion.a_yaml()
     semantico = _cargar_semantico(texto)
     vigente = _version_vigente(sesion, modelo_id)
 

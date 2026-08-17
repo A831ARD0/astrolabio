@@ -185,6 +185,29 @@ export function useGuardarBorrador(id: number) {
   })
 }
 
+/**
+ * Reemplaza el borrador con un YAML pegado desde fuera.
+ *
+ * Mismo destino que guardar el borrador, así que pasa por las mismas
+ * validaciones. Va aparte porque no se puede escribir el resultado en la caché
+ * como hace `useGuardarBorrador`: lo que se manda es texto, y la definición que
+ * salga de ahí la construye el servidor. Se invalida y se vuelve a leer.
+ */
+export function useImportarYaml(id: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { yaml: string }) =>
+      api.put<{ problemas: Problema[]; borrador: Borrador; yaml: string }>(
+        `/modelos/${id}/borrador`,
+        v,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: claves.definicion(id) })
+      qc.invalidateQueries({ queryKey: claves.yaml(id) })
+    },
+  })
+}
+
 export function useDescartarBorrador(id: number) {
   const qc = useQueryClient()
   return useMutation({
