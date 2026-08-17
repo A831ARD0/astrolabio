@@ -298,6 +298,21 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **El diagnóstico callaba tres problemas que frenan un modelo entero.** Salieron de
+  revisar uno ya armado —catorce tablas, veintidós relaciones— cuyo diagnóstico salía
+  **vacío** mientras nada de lo que se quería medir funcionaba. Un diagnóstico limpio
+  sobre un modelo que no sirve es peor que ninguno: dice que todo está bien.
+
+  - **Una dimensión con columnas de medida** (crítico). El editor sólo ofrece hechos
+    en «Calcula desde», así que esas columnas no se pueden sumar — y no se ve como un
+    error, se ve como que la tabla «no sale en la lista».
+  - **Los dos lados de una unión con tipos distintos** (crítico). Comparar texto con
+    entero no siempre falla, y cuando no falla es peor: no casa ninguna fila y la
+    cifra sale vacía sin una sola señal.
+  - **Una fecha guardada como texto** (aviso). Ordena mal, no se une a un calendario
+    de fechas de verdad y ninguna comparación de periodos funciona encima. Se avisa
+    por el nombre **y** el tipo, no sólo por el nombre.
+
 - **La pestaña YAML enseñaba la versión publicada, no lo que tienes en el lienzo.** Y
   lo decía sólo si había cambios **sin guardar**: con el borrador ya guardado, el
   texto salía sin un solo aviso. Quien tenía trece tablas trabajadas y una publicada

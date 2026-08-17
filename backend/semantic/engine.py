@@ -404,6 +404,70 @@ class Modelo:
                                f"aislada del resto del analisis.",
                 })
 
+        # Una dimension con columnas de medida es, casi siempre, un hecho mal
+        # marcado. Importa porque el editor de metricas solo ofrece hechos en
+        # «Calcula desde»: los objetivos estan ahi, con sus seis columnas de
+        # medida, y no se puede escribir una sola metrica sobre ellos. Y no se ve
+        # como un error, se ve como que la tabla «no aparece en la lista».
+        for nombre, e in self.entidades.items():
+            if e.tipo != "dimension":
+                continue
+            medidas = [c.nombre for c in e.campos.values()
+                       if c.rol == "medida_base"]
+            if medidas:
+                problemas.append({
+                    "tipo": "dimension_con_medidas",
+                    "gravedad": "critico",
+                    "entidad": nombre,
+                    "mensaje": f"'{nombre}' esta marcada como dimension pero "
+                               f"tiene {len(medidas)} columna(s) de medida "
+                               f"({', '.join(sorted(medidas)[:4])}"
+                               f"{'…' if len(medidas) > 4 else ''}). Una metrica "
+                               f"solo se puede calcular desde un hecho, asi que "
+                               f"esas columnas no se pueden sumar: cambiale el "
+                               f"tipo a hecho.",
+                })
+
+        # Los dos lados de una union tienen que ser del mismo tipo. Comparar un
+        # texto con un entero no falla siempre —el motor a veces convierte— y
+        # cuando no falla es peor: no casa ninguna fila y la cifra sale vacia o a
+        # cero, sin una sola señal de por que.
+        for r in self.relaciones:
+            a = self.entidades.get(r.entidad_a)
+            b = self.entidades.get(r.entidad_b)
+            if a is None or b is None:
+                continue
+            ca, cb = a.campos.get(r.campo_a), b.campos.get(r.campo_b)
+            if ca is None or cb is None or ca.tipo == cb.tipo:
+                continue
+            problemas.append({
+                "tipo": "tipos_que_no_casan",
+                "gravedad": "critico",
+                "entidad": f"{r.entidad_a} → {r.entidad_b}",
+                "mensaje": f"La union {r.entidad_a}.{r.campo_a} ({ca.tipo}) con "
+                           f"{r.entidad_b}.{r.campo_b} ({cb.tipo}) compara dos "
+                           f"tipos distintos. Arreglalo en la transformacion: si "
+                           f"no casa ninguna fila, la cifra sale vacia sin "
+                           f"avisar.",
+            })
+
+        # Una fecha guardada como texto. Se ordena mal —'10/01' antes que
+        # '9/12'—, no se puede unir contra un calendario de fechas de verdad, y
+        # ninguna comparacion de periodos funciona encima.
+        for nombre, e in self.entidades.items():
+            for c in e.campos.values():
+                if c.tipo == "texto" and "fecha" in c.nombre.lower():
+                    problemas.append({
+                        "tipo": "fecha_como_texto",
+                        "gravedad": "advertencia",
+                        "entidad": f"{nombre}.{c.nombre}",
+                        "mensaje": f"'{nombre}.{c.nombre}' parece una fecha y "
+                                   f"esta guardada como texto. Asi no se puede "
+                                   f"unir al calendario ni comparar contra otro "
+                                   f"mes, y ordena mal. Conviertela en la "
+                                   f"transformacion.",
+                    })
+
         # Solo importa la ambiguedad hecho → dimension: es la unica que puede
         # afectar a una consulta real, porque toda metrica nace en un hecho.
         hechos = [n for n, e in self.entidades.items() if e.tipo == "hecho"]
