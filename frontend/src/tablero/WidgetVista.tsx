@@ -19,6 +19,7 @@ import { Th } from '../comunes/Th'
 import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
+import { claveCol, cruzar } from './pivote'
 import {
   type Formato,
   type Total,
@@ -177,6 +178,19 @@ function WidgetDatos({
                totalPorOmision(formatoDe(m))} />
     )
   }
+  if (widget.tipo === 'tabla_dinamica') {
+    return (
+      <TablaDinamica
+        widget={widget}
+        datos={datos.data}
+        etiquetaDe={etiquetaDe}
+        formatoDe={formatoDe}
+        totalesDe={(m) =>
+          (propias('totales_de')[m] as Total | undefined) ??
+          totalPorOmision(formatoDe(m))}
+      />
+    )
+  }
   if (TIPOS_GRAFICO.includes(widget.tipo)) {
     return (
       <Grafico
@@ -221,6 +235,193 @@ function Kpi({
           {widget.metricas.length > 1 && <div className="rotulo">{etiquetaDe(m)}</div>}
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Tabla dinámica: un desglose en las filas y otro abierto en columnas.
+ *
+ * La matriz que en Power BI son los meses de arriba y los modelos a la izquierda.
+ * El cruce lo hace `cruzar`; aquí solo se dibuja.
+ *
+ * Una celda vacía se deja **en blanco y no en cero**. No es lo mismo «ese mes no
+ * hubo ninguno» que «no hay fila para ese mes»: un cero afirma algo que el dato no
+ * dice.
+ */
+function TablaDinamica({
+  widget,
+  datos,
+  etiquetaDe,
+  formatoDe,
+  totalesDe,
+}: {
+  widget: Widget
+  datos: ResultadoConsulta
+  etiquetaDe: (c: string) => string
+  formatoDe: (m: string) => Formato
+  totalesDe: (m: string) => Total
+}) {
+  const dims = widget.dimensiones ?? []
+  const metricas = widget.metricas ?? []
+  // Por omisión se abre el último desglose: es el que se agregó pensando en las
+  // columnas, y así el widget dibuja algo sensato antes de tocar nada.
+  const pivote = dims.includes(String(widget.pivote))
+    ? String(widget.pivote)
+    : dims[dims.length - 1]!
+  const dimsFila = dims.filter((d) => d !== pivote)
+
+  if (dimsFila.length === 0 || metricas.length === 0) {
+    return (
+      <div className="vacio chico">
+        Una tabla dinámica necesita dos desgloses —uno en las filas y otro que se
+        abra en columnas— y al menos una métrica.
+      </div>
+    )
+  }
+
+  const cruce = cruzar(datos.filas, dimsFila, pivote, metricas)
+  const conTotal = widget.total_fila !== false
+
+  /** El total de una métrica a lo largo de una fila. */
+  const totalFila = (fila: (typeof cruce.filas)[number], m: string) =>
+    totalizar(
+      cruce.columnas.map((c) => fila.celdas.get(claveCol(c))?.[m]),
+      totalesDe(m),
+    )
+
+  /** El total de una métrica en una columna, a lo largo de todas las filas. */
+  const totalColumna = (col: unknown, m: string) =>
+    totalizar(
+      cruce.filas.map((f) => f.celdas.get(claveCol(col))?.[m]),
+      totalesDe(m),
+    )
+
+  const hayTotales = metricas.some((m) => totalesDe(m) !== 'ninguno')
+  const varias = metricas.length > 1
+
+  return (
+    <div className="tabla-envoltura pivote" style={{ height: '100%', border: 0 }}>
+      {/* Un mes guardado como nombre sale alfabético: abril, agosto, diciembre. Eso
+          no es un orden, es un error que parece un orden, así que se dice en vez de
+          dejar que alguien lea la matriz de izquierda a derecha creyendo otra cosa. */}
+      {cruce.ordenDeLlegada && cruce.columnas.length > 2 && (
+        <div className="aviso-orden chico">
+          Las columnas van en el orden en que el modelo devuelve «{etiquetaDe(pivote)}»,
+          que para texto es alfabético. Si necesitas orden cronológico, abre en columnas
+          una columna numérica (el mes como número, o año-mes).
+        </div>
+      )}
+      <table className="datos">
+        <thead>
+          <tr>
+            {dimsFila.map((d) => (
+              <th key={d} rowSpan={varias ? 2 : 1} className="fija" title={d}>
+                {etiquetaDe(d)}
+              </th>
+            ))}
+            {cruce.columnas.map((c) => (
+              <th key={claveCol(c)} colSpan={metricas.length} className="num grupo">
+                {c === null || c === undefined ? '—' : String(c)}
+              </th>
+            ))}
+            {conTotal && hayTotales && (
+              <th colSpan={metricas.length} rowSpan={varias ? 1 : 1}
+                  className="num grupo total">
+                Total
+              </th>
+            )}
+          </tr>
+          {/* Con una sola métrica no hace falta repetir su nombre en cada columna:
+              ya está en el título del widget. */}
+          {varias && (
+            <tr>
+              {cruce.columnas.map((c) =>
+                metricas.map((m) => (
+                  <th key={`${claveCol(c)}|${m}`} className="num sub">
+                    {etiquetaDe(m)}
+                  </th>
+                )),
+              )}
+              {conTotal &&
+                hayTotales &&
+                metricas.map((m) => (
+                  <th key={`total|${m}`} className="num sub total">
+                    {etiquetaDe(m)}
+                  </th>
+                ))}
+            </tr>
+          )}
+        </thead>
+
+        <tbody>
+          {cruce.filas.map((f, i) => (
+            <tr key={i}>
+              {f.claves.map((v, j) => (
+                <td key={j} className="fija">
+                  {v === null || v === undefined ? '—' : String(v)}
+                </td>
+              ))}
+              {cruce.columnas.map((c) =>
+                metricas.map((m) => {
+                  const v = f.celdas.get(claveCol(c))?.[m]
+                  return (
+                    <td key={`${claveCol(c)}|${m}`} className="num">
+                      {v === undefined ? '' : formatear(v, formatoDe(m))}
+                    </td>
+                  )
+                }),
+              )}
+              {conTotal &&
+                hayTotales &&
+                metricas.map((m) => {
+                  const t = totalFila(f, m)
+                  return (
+                    <td key={`total|${m}`} className="num total">
+                      {t === null ? '—' : formatear(t, formatoDe(m))}
+                    </td>
+                  )
+                })}
+            </tr>
+          ))}
+        </tbody>
+
+        {hayTotales && (
+          <tfoot>
+            <tr>
+              {dimsFila.map((d, i) => (
+                <td key={d} className="fija">
+                  {i === 0 ? 'Totales' : ''}
+                </td>
+              ))}
+              {cruce.columnas.map((c) =>
+                metricas.map((m) => {
+                  const t = totalColumna(c, m)
+                  return (
+                    <td key={`${claveCol(c)}|${m}`} className="num">
+                      {t === null ? '—' : formatear(t, formatoDe(m))}
+                    </td>
+                  )
+                }),
+              )}
+              {conTotal &&
+                metricas.map((m) => {
+                  const t = totalizar(
+                    cruce.filas.flatMap((f) =>
+                      cruce.columnas.map((c) => f.celdas.get(claveCol(c))?.[m]),
+                    ),
+                    totalesDe(m),
+                  )
+                  return (
+                    <td key={`total|${m}`} className="num total">
+                      {t === null ? '—' : formatear(t, formatoDe(m))}
+                    </td>
+                  )
+                })}
+            </tr>
+          </tfoot>
+        )}
+      </table>
     </div>
   )
 }

@@ -482,3 +482,84 @@ def test_una_hoja_no_puede_pedir_mas_columnas_de_las_que_se_leen(cliente,
     cuerpo["definicion"]["hojas"][0]["lienzo"] = {"columnas": 60}
     r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
     assert r.status_code == 422, r.text
+
+
+# --------------------------------------------------------------------------- #
+# Tabla dinamica
+# --------------------------------------------------------------------------- #
+
+def _pivote(modelo_id: int, **cambios) -> dict:
+    cuerpo = _tablero_minimo(modelo_id)
+    cuerpo["nombre"] = "matriz"
+    w = {"id": "p1", "tipo": "tabla_dinamica", "titulo": "Por modelo y mes",
+         "posicion": {"x": 0, "y": 8, "ancho": 12, "alto": 9},
+         "dimensiones": ["dim_vehiculo.modelo", "dim_calendario.mes"],
+         "metricas": ["unidades_vendidas"],
+         "pivote": "dim_calendario.mes"}
+    w.update(cambios)
+    cuerpo["definicion"]["widgets"].append(w)
+    return cuerpo
+
+
+def test_una_tabla_dinamica_se_guarda_con_su_pivote(cliente, cab_admin, modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=_pivote(modelo_dash))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "p1")
+    assert w["pivote"] == "dim_calendario.mes"
+    assert w["dimensiones"] == ["dim_vehiculo.modelo", "dim_calendario.mes"]
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_una_tabla_dinamica_con_un_solo_desglose_se_rechaza(cliente, cab_admin,
+                                                            modelo_dash):
+    """
+    Con un desglose no hay nada que cruzar: lo que se queria era una tabla normal, y
+    dibujar una matriz de una sola columna solo esconde el malentendido.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  dimensiones=["dim_calendario.mes"],
+                                  pivote="dim_calendario.mes"))
+    assert r.status_code == 422, r.text
+    assert "dos desgloses" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_una_tabla_dinamica_sin_metrica_se_rechaza(cliente, cab_admin, modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash, metricas=[]))
+    assert r.status_code == 422, r.text
+    assert "al menos una metrica" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_el_pivote_tiene_que_ser_uno_de_sus_desgloses(cliente, cab_admin,
+                                                      modelo_dash):
+    """
+    Abrir en columnas algo que no se pidio dejaria la matriz con una sola columna
+    sin decir por que.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash, pivote="cat_marca.marca_nombre"))
+    assert r.status_code == 422, r.text
+    assert "no es uno de sus desgloses" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_la_tabla_dinamica_consulta_igual_que_las_demas(cliente, cab_admin,
+                                                        modelo_dash):
+    """
+    El cruce se hace en el navegador: el servidor devuelve las filas planas, con las
+    dos dimensiones y la metrica. Es lo que hace que una tabla dinamica pase por la
+    misma seguridad por fila y el mismo Excel que todo lo demas.
+    """
+    r = cliente.post(f"/api/modelos/{modelo_dash}/consultar", headers=cab_admin,
+                     json={"dimensiones": ["dim_vehiculo.segmento",
+                                           "dim_calendario.mes"],
+                           "metricas": ["unidades_vendidas"]})
+    assert r.status_code == 200, r.text
+    cols = r.json()["columnas"]
+    assert cols == ["dim_vehiculo.segmento", "dim_calendario.mes",
+                    "unidades_vendidas"], cols
+    # Una fila por combinacion, no una por mes ni una por segmento.
+    filas = r.json()["filas"]
+    combos = {(f["dim_vehiculo.segmento"], f["dim_calendario.mes"]) for f in filas}
+    assert len(combos) == len(filas), "el motor ya agrupo: no hay combos repetidos"
+    assert len({c[1] for c in combos}) > 1, "hace falta mas de un mes para cruzar"

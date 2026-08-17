@@ -7,6 +7,25 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Tabla dinámica.** Un desglose en las filas y otro abierto en columnas: la matriz
+  de «inventario por modelo y mes», que no se podía armar de ninguna otra forma. Con
+  varias métricas la cabecera queda en dos pisos, hay columna de total por fila —se
+  puede quitar—, fila de totales abajo, y los desgloses de fila se quedan a la vista
+  al desplazar a lo ancho.
+
+  **El cruce se hace en el navegador**, sobre la misma consulta plana que pide
+  cualquier otro widget. Así pasa por la misma seguridad por fila, el mismo anclaje de
+  versión y el mismo Excel que todo lo demás, en vez de ser el widget especial que
+  trae sus datos por otro lado.
+
+  Una celda sin dato queda **en blanco y no en cero**: no es lo mismo «ese mes no hubo
+  ninguno» que «no hay fila para ese mes».
+
+  Sobre el orden de las columnas: numérico si los valores son números, y si son texto
+  el que devuelve el modelo —alfabético—. Un mes guardado como nombre saldría abril,
+  agosto, diciembre, que no es un orden sino un error que parece un orden, así que la
+  tabla lo avisa y dice cómo arreglarlo en vez de dibujarlo sin más.
+
 - **Las columnas de un widget se ordenan, y cada una tiene sus propiedades.** Una
   lista aparte del catálogo muestra lo elegido en el orden en que sale, numerado y con
   flechas para moverlo — el orden de las columnas de la tabla y de las series del

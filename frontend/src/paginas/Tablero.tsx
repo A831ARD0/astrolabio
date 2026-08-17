@@ -80,6 +80,8 @@ const PLANTILLAS: Record<string, { tipo: TipoWidget; ancho: number; alto: number
   lineas: { tipo: 'lineas', ancho: 6, alto: 9 },
   pastel: { tipo: 'pastel', ancho: 4, alto: 9 },
   tabla: { tipo: 'tabla', ancho: 6, alto: 9 },
+  // Ancha de origen: una matriz con doce meses a lo ancho en media hoja no se lee.
+  'tabla dinámica': { tipo: 'tabla_dinamica', ancho: 12, alto: 9 },
   // Ancho y bajo: un panel de filtros nace como la barra de arriba de una hoja de
   // Qlik —Año, Mes, Sucursal en fila—, no como una columna estrecha. Con este alto
   // colapsa en desplegables desde el primer momento, que es lo que se quiere de

@@ -242,6 +242,7 @@ export type TipoWidget =
   | 'area'
   | 'pastel'
   | 'tabla'
+  | 'tabla_dinamica'
   | 'filtro'
   | 'texto'
 

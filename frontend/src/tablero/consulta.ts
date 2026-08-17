@@ -27,6 +27,7 @@ export const PIDE_DATOS: Widget['tipo'][] = [
   'area',
   'pastel',
   'tabla',
+  'tabla_dinamica',
 ]
 
 export function filtrosDeSelecciones(

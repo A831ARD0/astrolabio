@@ -31,7 +31,7 @@ from app.modelos_db import Dashboard, Rol, Usuario, VersionModelo, iso
 router = APIRouter(prefix="/api/dashboards", tags=["dashboards"])
 
 TIPOS_WIDGET = ("kpi", "barras", "barras_horizontales", "lineas", "area",
-                "pastel", "tabla", "filtro", "texto")
+                "pastel", "tabla", "tabla_dinamica", "filtro", "texto")
 
 # Topes de la rejilla. 24 columnas porque 12 no alcanzan para una fila de mas de
 # cuatro cosas, y mas de 24 da cajas de dos centimetros que nadie puede leer.
@@ -233,6 +233,22 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
                            f"campo.")
         if w.tipo == "tabla" and not (w.dimensiones or w.metricas):
             errores.append(f"La tabla '{w.titulo or w.id}' esta vacia.")
+
+        # Una tabla dinamica cruza dos desgloses: uno en las filas y otro que se
+        # abre en columnas. Con uno solo no hay nada que cruzar, y lo que se queria
+        # era una tabla normal.
+        if w.tipo == "tabla_dinamica":
+            if not w.metricas:
+                errores.append(f"La tabla dinamica '{w.titulo or w.id}' necesita al "
+                               f"menos una metrica.")
+            if len(w.dimensiones) < 2:
+                errores.append(f"La tabla dinamica '{w.titulo or w.id}' necesita dos "
+                               f"desgloses: uno para las filas y otro que se abra en "
+                               f"columnas.")
+            pivote = getattr(w, "pivote", None)
+            if pivote is not None and pivote not in w.dimensiones:
+                errores.append(f"La tabla dinamica '{w.titulo or w.id}' abre en "
+                               f"columnas '{pivote}', que no es uno de sus desgloses.")
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"errores": errores})

@@ -873,6 +873,43 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 .filtro > header .btn { margin-left: auto; }
+/* Tabla dinámica: la matriz con un desglose abierto a lo ancho. */
+.tabla-envoltura.pivote { display: flex; flex-direction: column; }
+.tabla-envoltura.pivote .aviso-orden {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  color: var(--aviso);
+  background: var(--aviso-suave);
+  border-bottom: 1px solid var(--borde);
+}
+
+/* La cabecera del valor de columna, que agrupa una métrica o varias. */
+.pivote table.datos th.grupo {
+  text-align: center;
+  border-left: 1px solid var(--borde);
+}
+.pivote table.datos th.sub {
+  font-weight: 450;
+  color: var(--texto-suave);
+  border-left: 1px solid var(--borde);
+}
+
+/* Los desgloses de fila se quedan a la vista al desplazar a lo ancho: doce meses
+   de columnas sin saber de qué modelo es la fila no sirven de nada. */
+.pivote table.datos th.fija,
+.pivote table.datos td.fija {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--fondo-panel);
+}
+.pivote table.datos thead th.fija { z-index: 3; }
+.pivote table.datos tfoot td.fija { z-index: 3; background: var(--fondo-alto); }
+
+/* La columna de total, separada de los meses. */
+.pivote table.datos .total { border-left: 1px solid var(--borde-fuerte); }
+.pivote table.datos td.total { font-weight: 550; }
+
 /* Las columnas elegidas de un widget, en su orden, cada una con sus propiedades. */
 .columnas-elegidas { display: flex; flex-direction: column; gap: 2px; }
 

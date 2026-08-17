@@ -1001,6 +1001,33 @@ acentos y por trozos en cualquier orden, así que `logro unid` encuentra
 «% Logro Unidades». Lo que ya está elegido no desaparece al buscar; si lo hiciera, no
 habría forma de quitarlo sin acordarse de cómo se llamaba.
 
+### La tabla dinámica: la matriz con los meses a lo ancho
+
+**Tipo → Tabla dinámica.** Lleva **dos desgloses**: uno se queda en las filas y otro
+se abre en columnas, que es la matriz de «inventario por modelo y mes». Cuál se abre
+se elige en **Se abre en columnas**; los demás se quedan a la izquierda, en el orden
+de la lista de columnas de desglose.
+
+Con una métrica, cada celda es esa cifra. Con varias, cada valor de columna se abre en
+tantas subcolumnas como métricas, y la cabecera queda en dos pisos. A la derecha
+aparece una columna **Total** por fila, que se puede quitar.
+
+**Una celda vacía se queda en blanco, no en cero.** No es lo mismo «ese mes no hubo
+ninguno» que «no hay dato para ese mes»: un cero afirma algo que el dato no dice.
+
+Dos cosas que conviene saber:
+
+- **El orden de las columnas.** Si los valores son números —el mes como número,
+  año-mes— van en orden numérico. Si son texto, van en el orden en que el modelo los
+  devuelve, que es alfabético: un mes guardado como nombre saldría abril, agosto,
+  diciembre. Eso no es un orden, es un error que parece un orden, así que la tabla lo
+  avisa arriba y te dice que abras en columnas una columna numérica.
+- **El cruce se hace en el navegador**, sobre la misma consulta plana que pide
+  cualquier otro widget. Es lo que hace que una tabla dinámica pase por la misma
+  seguridad por fila, el mismo anclaje de versión y el mismo Excel que todo lo demás,
+  en vez de ser el widget especial que trae sus datos por otro lado. El **máximo de
+  filas** se aplica a esas filas planas: si lo alcanzas, faltan combinaciones.
+
 ### Las columnas de un widget: orden y propiedades
 
 Debajo del título, **Columnas de cifras** lista lo elegido **en el orden en que

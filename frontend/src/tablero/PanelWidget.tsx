@@ -25,6 +25,7 @@ const TIPOS: { valor: TipoWidget; etiqueta: string }[] = [
   { valor: 'area', etiqueta: 'Área' },
   { valor: 'pastel', etiqueta: 'Pastel' },
   { valor: 'tabla', etiqueta: 'Tabla' },
+  { valor: 'tabla_dinamica', etiqueta: 'Tabla dinámica — un desglose en columnas' },
   { valor: 'filtro', etiqueta: 'Filtro' },
   { valor: 'texto', etiqueta: 'Texto' },
 ]
@@ -189,6 +190,53 @@ export function PanelWidget({
             alAlternar={alternarMet}
             vacio="El modelo no tiene métricas todavía."
           />
+        </>
+      )}
+
+      {widget.tipo === 'tabla_dinamica' && (
+        <>
+          <div className="campo">
+            <label>Se abre en columnas</label>
+            {(widget.dimensiones?.length ?? 0) < 2 ? (
+              <span className="chico tenue">
+                Elige abajo dos desgloses: uno se queda en las filas y el otro se
+                abre a lo ancho. Con uno solo, lo que quieres es una tabla normal.
+              </span>
+            ) : (
+              <>
+                <select
+                  value={
+                    widget.dimensiones.includes(String(widget.pivote))
+                      ? String(widget.pivote)
+                      : widget.dimensiones[widget.dimensiones.length - 1]
+                  }
+                  onChange={(e) => alCambiar({ pivote: e.target.value })}
+                >
+                  {widget.dimensiones.map((d) => (
+                    <option key={d} value={d}>
+                      {dimensiones.find((x) => x.clave === d)?.etiqueta ?? d}
+                    </option>
+                  ))}
+                </select>
+                <span className="chico tenue">
+                  Los demás desgloses se quedan a la izquierda, en el orden de la
+                  lista de abajo.
+                </span>
+              </>
+            )}
+          </div>
+
+          <div className="linea-check">
+            <input
+              type="checkbox"
+              id={`tf-${widget.id}`}
+              checked={widget.total_fila !== false}
+              onChange={(e) => alCambiar({ total_fila: e.target.checked })}
+            />
+            <label htmlFor={`tf-${widget.id}`}>
+              Columna de total a la derecha
+            </label>
+          </div>
         </>
       )}
 
