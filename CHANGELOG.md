@@ -44,6 +44,13 @@ versionado es [semántico](https://semver.org/lang/es/).
   de sucursal_id: sobran 5 040»*. El número importa — «sobran tres» y «sobran cinco
   mil» se arreglan de formas distintas.
 
+  Las columnas del grano se **eligen de una lista** y quedan como etiquetas con su ×.
+  Escribirlas separadas por comas no funcionaba —el campo se comía la coma al
+  teclearla— y además pedía el nombre exacto de memoria: un `Fecha_objetivo` con la o
+  minúscula no es un error de tipografía, es un grano que habla de una columna que no
+  existe. Cambiar el grano borra el resultado de la comprobación anterior, que si no
+  se quedaba afirmando de unas columnas lo que se midió de otras.
+
   Se comprueba con la definición que hay **en pantalla**, sin guardar, porque el
   momento de la duda es mientras se declara. No pasa por las políticas de seguridad
   —filtrar filas cambiaría justo lo que se cuenta— y por eso no devuelve ninguna

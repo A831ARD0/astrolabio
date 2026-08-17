@@ -834,6 +834,11 @@ falso y el motor deja de avisarte cuando una relación duplica filas. Cuando no 
 ninguna columna que valga sola, deja la clave primaria en **(ninguna)** y declara el
 grano con las dos.
 
+Las columnas se **eligen de la lista**, no se escriben: cada una queda como una
+etiqueta con su × para quitarla, y el desplegable de al lado añade la siguiente. Un
+`Fecha_objetivo` con la o minúscula no sería un error de tipografía, sería un grano
+que habla de una columna que no existe.
+
 El grano es una afirmación, así que hay un botón **Comprobar** al lado. Cuenta las
 filas y las combinaciones distintas:
 
@@ -841,7 +846,11 @@ filas y las combinaciones distintas:
 
 Vale la pena hacerlo al declararlo y después de cada carga grande. Si un mes se
 cargó dos veces, el objetivo queda duplicado y el porcentaje de logro sale a la
-mitad **sin que nada falle** — que es la forma de error más caras de encontrar.
+mitad **sin que nada falle** — que es la forma de error más cara de encontrar.
+
+Cambiar el grano borra el resultado anterior. Ese cuadro afirma algo de unas columnas
+concretas; dejarlo puesto tras quitar una sería afirmar de un grano nuevo lo que se
+comprobó del viejo.
 
 ### Ver el modelo como texto
 

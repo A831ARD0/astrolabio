@@ -99,6 +99,19 @@ export function PanelEntidad({
     : clave === 'mes' ? c.grano_tiempo === 'mes'
     : c.pii === true)
 
+  /**
+   * Cambiar el grano tira el resultado de la última comprobación.
+   *
+   * Ese cuadro dice «se cumple» sobre unas columnas concretas. Si se quita una y
+   * el cuadro se queda, está afirmando de un grano nuevo lo que se comprobó del
+   * viejo — y es una afirmación sobre cifras: justo la que no puede quedarse
+   * colgada en pantalla.
+   */
+  const fijarGrano = (cols: string[]) => {
+    grano.reset()
+    cambiar({ grano: cols })
+  }
+
   const cambiarCampo = (campo: string, cambios: Partial<Campo>) =>
     despachar({ t: 'cambiar_campo', entidad: entidad.nombre, campo, cambios })
 
@@ -155,20 +168,49 @@ export function PanelEntidad({
       {entidad.tipo === 'hecho' && (
         <div className="campo">
           <label>Grano — qué identifica una fila</label>
-          <input
-            type="text"
-            className="mono"
-            value={(entidad.grano ?? []).join(', ')}
-            placeholder="venta_id"
-            onChange={(e) =>
-              cambiar({
-                grano: e.target.value
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              })
-            }
-          />
+          {/*
+            Se elige de una lista, no se escribe. Escribirlo era pedir el nombre
+            exacto de una columna de memoria y separarlo por comas: un `Fecha_objetivo`
+            con la o minúscula no es un error de tipografía, es un grano que habla de
+            una columna que no existe. Y comprobarlo sólo puede decir eso mismo.
+          */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            {(entidad.grano ?? []).map((c) => (
+              <span className="chip mono" key={c}>
+                {c}
+                <button
+                  type="button"
+                  title={`Quitar ${c} del grano`}
+                  onClick={() => fijarGrano((entidad.grano ?? []).filter((x) => x !== c))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <select
+              // Vuelve siempre a «(agregar)»: no es un valor elegido, es una acción
+              // que añade uno más. Dejarlo marcado haría creer que se puede cambiar
+              // desde ahí lo que ya está puesto.
+              value=""
+              onChange={(e) => {
+                if (e.target.value)
+                  fijarGrano([...(entidad.grano ?? []), e.target.value])
+              }}
+            >
+              <option value="">
+                {(entidad.grano ?? []).length
+                  ? '+ y también…'
+                  : '+ elige la columna'}
+              </option>
+              {orden.filas
+                .filter((c) => !(entidad.grano ?? []).includes(c.nombre))
+                .map((c) => (
+                  <option key={c.nombre} value={c.nombre}>
+                    {c.nombre}
+                  </option>
+                ))}
+            </select>
+          </div>
           {/*
             El grano es una AFIRMACIÓN, y por eso hay un botón para comprobarla:
             «sucursal y mes juntas no se repiten» es fácil de creer y fácil de que
