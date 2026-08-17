@@ -789,6 +789,37 @@ class Compilador:
                 vistos.add(paso)
         return alias, joins
 
+    def compilar_grano(self, entidad: str) -> ConsultaCompilada:
+        """
+        Cuenta filas y combinaciones distintas del grano declarado.
+
+        El grano es una AFIRMACION: «estas columnas juntas identifican una fila».
+        Hasta ahora se guardaba y nadie la comprobaba, asi que una tabla de
+        objetivos con el mes cargado dos veces duplicaba el objetivo en silencio y
+        el porcentaje de logro salia a la mitad. Comparar el conteo con el de
+        combinaciones distintas lo dice en una consulta.
+
+        No pasa por politicas a proposito: es una revision del MODELO, no una
+        consulta de datos, y filtrar filas cambiaria justo lo que se esta
+        contando. Solo devuelve dos numeros, ninguna fila.
+        """
+        e = self.m.entidades[entidad]
+        if not e.grano:
+            raise ErrorModelo(
+                f"'{entidad}' no declara grano, asi que no hay nada que "
+                f"comprobar. El grano son las columnas que juntas identifican "
+                f"una fila.")
+        faltan = [c for c in e.grano if c not in e.campos]
+        if faltan:
+            raise ErrorModelo(
+                f"El grano de '{entidad}' menciona {', '.join(faltan)}, que no "
+                f"es campo suyo.")
+        cols = ", ".join(_cita(c) for c in e.grano)
+        return ConsultaCompilada(
+            f"SELECT COUNT(*) AS filas, "
+            f"COUNT(DISTINCT ({cols})) AS combinaciones\n"
+            f"FROM {_cita(e.tabla)}", [])
+
     def compilar_muestra(self, entidad: str, limite: int,
                          predicados: list | None = None) -> ConsultaCompilada:
         """

@@ -368,6 +368,22 @@ export function useVistaPrevia(id: number) {
 }
 
 /** Filas crudas de una entidad, sin agregar. */
+/** Comprueba contra los datos que el grano declarado de una entidad se cumpla. */
+export function useComprobarGrano(id: number) {
+  return useMutation({
+    mutationFn: (v: { definicion?: Definicion; entidad: string }) =>
+      api.post<{
+        entidad: string
+        grano: string[]
+        filas: number
+        combinaciones: number
+        repetidas: number
+        cumple: boolean
+        sql: string
+      }>(`/modelos/${id}/comprobar-grano`, v),
+  })
+}
+
 export function useMuestra(id: number) {
   return useMutation({
     mutationFn: (v: { definicion?: Definicion; entidad: string; limite?: number }) =>

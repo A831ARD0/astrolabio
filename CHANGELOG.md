@@ -7,6 +7,26 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Comprobar el grano contra los datos.** El grano son las columnas que **juntas**
+  identifican una fila: en una tabla de objetivos, la sucursal y el mes — por separado
+  las dos se repiten, y juntas no deberían. Es una **afirmación**, y hasta ahora nadie
+  la comprobaba: se guardaba y ya. Si un mes se carga dos veces, el objetivo se
+  duplica, el porcentaje de logro sale a la mitad y nada protesta.
+
+  Ahora hay un botón **Comprobar** al lado del grano. Cuenta las filas y las
+  combinaciones distintas, y dice cuántas sobran: *«5 080 filas para 40 combinaciones
+  de sucursal_id: sobran 5 040»*. El número importa — «sobran tres» y «sobran cinco
+  mil» se arreglan de formas distintas.
+
+  Se comprueba con la definición que hay **en pantalla**, sin guardar, porque el
+  momento de la duda es mientras se declara. No pasa por las políticas de seguridad
+  —filtrar filas cambiaría justo lo que se cuenta— y por eso no devuelve ninguna
+  fila, sólo dos números, y lo pide el rol de editor.
+
+  Y el texto de la pantalla ya no promete lo que no hacía. Decía que declarar el
+  grano permitía detectar una métrica duplicada; el grano se guardaba, se validaba
+  que las columnas existieran, y el motor **no lo miraba nunca**.
+
 - **Una métrica puede elegir por qué relación se une.** Un hecho toca el calendario
   por más de una fecha mucho más a menudo de lo que parece: un contacto tiene fecha
   de primera visita, de asignación y de prueba de manejo, y **cada indicador cuenta

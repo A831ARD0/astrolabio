@@ -225,6 +225,29 @@ def ejecutar_muestra(modelo: Modelo, entidad: str, limite: int,
     )
 
 
+def comprobar_grano(modelo: Modelo, entidad: str) -> dict:
+    """
+    Si el grano declarado de una entidad se cumple en los datos.
+
+    Devuelve cuantas filas hay, cuantas combinaciones distintas del grano, y por
+    tanto cuantas sobran. Que sobre una sola ya significa que cualquier metrica de
+    esa tabla cuenta algo dos veces.
+    """
+    preparar(modelo)
+    compilada = Compilador(modelo).compilar_grano(entidad)
+    filas, combinaciones = conexion().execute(compilada.sql).fetchone()
+    filas, combinaciones = int(filas or 0), int(combinaciones or 0)
+    return {
+        "entidad": entidad,
+        "grano": list(modelo.entidades[entidad].grano),
+        "filas": filas,
+        "combinaciones": combinaciones,
+        "repetidas": filas - combinaciones,
+        "cumple": filas == combinaciones,
+        "sql": compilada.sql,
+    }
+
+
 def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
                         selecciones: dict[str, list], ctx: ContextoUsuario
                         ) -> dict[str, list]:

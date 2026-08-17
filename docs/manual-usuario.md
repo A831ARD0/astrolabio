@@ -791,6 +791,27 @@ ese momento no te interesan; pliegas el que no estás usando y **se queda plegad
 Se recuerda por modelo y por cajón, en tu navegador, así que no es un cambio del
 modelo: no marca cambios sin guardar ni hay que publicar nada.
 
+### El grano, y por qué conviene comprobarlo
+
+El **grano** son las columnas que *juntas* identifican una fila. En una tabla de
+objetivos mensuales son la sucursal y el mes: por separado las dos se repiten —cada
+mes vuelven todas las sucursales— y juntas no deberían.
+
+No es la clave primaria. La clave primaria es **una** columna, y es por donde se
+une; si declaras como clave primaria una que sí se repite, estás afirmando algo
+falso y el motor deja de avisarte cuando una relación duplica filas. Cuando no hay
+ninguna columna que valga sola, deja la clave primaria en **(ninguna)** y declara el
+grano con las dos.
+
+El grano es una afirmación, así que hay un botón **Comprobar** al lado. Cuenta las
+filas y las combinaciones distintas:
+
+> No se cumple. 5 080 filas para 40 combinaciones de `sucursal_id`: sobran 5 040.
+
+Vale la pena hacerlo al declararlo y después de cada carga grande. Si un mes se
+cargó dos veces, el objetivo queda duplicado y el porcentaje de logro sale a la
+mitad **sin que nada falle** — que es la forma de error más caras de encontrar.
+
 ### Ver el modelo como texto
 
 La pestaña **YAML** enseña el modelo tal cual se guarda. Cuando tienes trabajo sin

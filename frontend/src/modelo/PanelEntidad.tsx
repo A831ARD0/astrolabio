@@ -10,7 +10,7 @@
 import { useState } from 'react'
 
 import type { Campo, Definicion, Entidad, RolCampo, TipoEntidad } from '../api/tipos'
-import { useTabla } from '../api/hooks'
+import { useComprobarGrano, useTabla } from '../api/hooks'
 import {
   ETIQUETA_ROL,
   type Accion,
@@ -25,11 +25,13 @@ import { Th } from '../comunes/Th'
 const ROLES: RolCampo[] = ['clave', 'clave_externa', 'dimension', 'medida_base']
 
 export function PanelEntidad({
+  modeloId,
   entidad,
   definicion,
   despachar,
   enRelaciones,
 }: {
+  modeloId: number
   entidad: Entidad
   /** El borrador entero: hace falta para contar a quién afecta cambiar la clave. */
   definicion: Definicion
@@ -44,6 +46,7 @@ export function PanelEntidad({
   // copia que guarda la entidad. Se pide siempre: es una consulta cacheada por
   // TanStack y saber que hay desfase importa antes de que alguien lo pregunte.
   const origen = useTabla(entidad.origen.tabla)
+  const grano = useComprobarGrano(modeloId)
   const [resultado, setResultado] = useState<string | null>(null)
 
   const enOrigen = origen.data?.columnas ?? []
@@ -166,10 +169,61 @@ export function PanelEntidad({
               })
             }
           />
-          <span className="chico tenue">
-            Declararlo es lo que permite detectar que una métrica se está
-            duplicando al cruzarla con otra de grano distinto.
-          </span>
+          {/*
+            El grano es una AFIRMACIÓN, y por eso hay un botón para comprobarla:
+            «sucursal y mes juntas no se repiten» es fácil de creer y fácil de que
+            sea falso, y si es falso todo lo que se sume de esta tabla cuenta algo
+            dos veces. Se comprueba con la definición de pantalla, sin guardar,
+            porque el momento de la duda es mientras se declara.
+          */}
+          <div className="fila" style={{ alignItems: 'center', gap: 8 }}>
+            <span className="chico tenue" style={{ flex: 1 }}>
+              Son las columnas que <strong>juntas</strong> identifican una fila.
+              No es la clave primaria: esa es una sola columna y es por donde se
+              une.
+            </span>
+            <button
+              className="btn chico"
+              style={{ flex: '0 0 auto' }}
+              disabled={(entidad.grano ?? []).length === 0 || grano.isPending}
+              title={
+                (entidad.grano ?? []).length === 0
+                  ? 'Declara el grano para poder comprobarlo'
+                  : 'Cuenta las filas y las combinaciones distintas del grano'
+              }
+              onClick={() =>
+                grano.mutate({ definicion, entidad: entidad.nombre })
+              }
+            >
+              {grano.isPending ? 'Comprobando…' : 'Comprobar'}
+            </button>
+          </div>
+
+          {grano.isError && (
+            <div className="error-caja chico">
+              {(grano.error as Error).message}
+            </div>
+          )}
+          {grano.data && (
+            <div className={grano.data.cumple ? 'aviso-caja chico' : 'error-caja chico'}>
+              {grano.data.cumple ? (
+                <>
+                  Se cumple: {grano.data.filas.toLocaleString('es-MX')} filas y
+                  otras tantas combinaciones de{' '}
+                  <span className="mono">{grano.data.grano.join(' + ')}</span>.
+                </>
+              ) : (
+                <>
+                  <strong>No se cumple.</strong>{' '}
+                  {grano.data.filas.toLocaleString('es-MX')} filas para{' '}
+                  {grano.data.combinaciones.toLocaleString('es-MX')} combinaciones
+                  de <span className="mono">{grano.data.grano.join(' + ')}</span>:
+                  sobran {grano.data.repetidas.toLocaleString('es-MX')}. Todo lo
+                  que se sume de esta tabla está contando algo más de una vez.
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

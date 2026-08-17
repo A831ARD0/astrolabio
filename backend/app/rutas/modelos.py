@@ -17,7 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
-from app.analitico import ejecutar_consulta, ejecutar_muestra, estados_asociativos
+from app.analitico import (comprobar_grano, ejecutar_consulta, ejecutar_muestra,
+                          estados_asociativos)
 from app.auditoria import registrar
 from app.errores_motor import en_castellano
 from app.exportar import (
@@ -168,6 +169,19 @@ class MuestraEntidad(BaseModel):
     definicion: Definicion | None = None
     entidad: str
     limite: int = Field(default=50, le=500)
+
+
+class ComprobarGrano(BaseModel):
+    """
+    Si el grano declarado de una entidad se cumple en los datos.
+
+    `definicion` viene del navegador para poder comprobarlo mientras se declara,
+    sin haber guardado: es justo el momento en que uno duda de si esas dos
+    columnas juntas se repiten o no.
+    """
+
+    definicion: Definicion | None = None
+    entidad: str
 
 
 class PeticionExportar(PeticionConsulta):
@@ -923,6 +937,31 @@ def muestra(modelo_id: int, cuerpo: MuestraEntidad, sesion: SesionDep,
             # Que columnas son datos personales, para poder avisarlo en pantalla.
             "pii": [c.nombre for c in m.entidades[cuerpo.entidad].campos.values()
                     if c.pii and c.visible]}
+
+
+@router.post("/{modelo_id}/comprobar-grano")
+def comprobar_grano_ruta(modelo_id: int, cuerpo: ComprobarGrano,
+                         sesion: SesionDep,
+                         _: Usuario = Depends(exigir_rol(Rol.editor))):
+    """
+    Comprueba contra los datos que el grano declarado se cumpla.
+
+    El grano es una afirmacion —«estas columnas juntas identifican una fila»— y
+    hasta ahora nadie la comprobaba: se guardaba y ya. Una tabla de objetivos con
+    un mes cargado dos veces duplica el objetivo, y el porcentaje de logro sale a
+    la mitad sin que nada proteste. Esto lo dice en una consulta.
+    """
+    m = _modelo_en_curso(sesion, modelo_id, cuerpo.definicion)
+    if cuerpo.entidad not in m.entidades:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"La entidad '{cuerpo.entidad}' no esta en el modelo")
+    try:
+        return comprobar_grano(m, cuerpo.entidad)
+    except ErrorModelo as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+    except Exception as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            f"No se pudo comprobar el grano. {en_castellano(e)}")
 
 
 @router.post("/{modelo_id}/revisar-formula")

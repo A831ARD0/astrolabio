@@ -441,6 +441,7 @@ export function Modelo() {
           </>
         ) : entidadSel ? (
           <PanelEntidad
+            modeloId={modeloId}
             entidad={entidadSel}
             definicion={d}
             despachar={(a) => {
