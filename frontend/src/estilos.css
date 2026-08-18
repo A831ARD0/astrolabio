@@ -1140,12 +1140,17 @@ table.datos tfoot td {
 
 /* Menú de exportación del widget */
 .exportar { margin-left: auto; position: relative; flex: 0 0 auto; }
-.menu-exportar {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 20;
+/* Fijo y en un portal: vive en `body`, así que «pegado al botón» son coordenadas de
+   la ventana y no del contenedor. Colgado dentro, lo recortaban los dos sitios donde
+   aparece — la barra del tablero y un widget, que llevan `overflow: hidden` cada uno
+   por su motivo. Ver `comunes/MenuFlotante.tsx`. */
+.menu-flotante {
+  position: fixed;
+  z-index: 60;
+  /* Ancho declarado, y no solo el mínimo: fuera de la barra el sitio disponible es
+     la ventana entera, así que la nota de abajo salía en una sola línea de 600px. */
   min-width: 190px;
+  max-width: 260px;
   background: var(--fondo-panel);
   border: 1px solid var(--borde);
   border-radius: var(--r);
@@ -1155,7 +1160,7 @@ table.datos tfoot td {
   flex-direction: column;
   gap: 1px;
 }
-.menu-exportar > button {
+.menu-flotante > button {
   padding: 6px 8px;
   background: none;
   border: 0;
@@ -1164,7 +1169,7 @@ table.datos tfoot td {
   cursor: pointer;
   font-size: 12.5px;
 }
-.menu-exportar > button:hover { background: var(--fondo-hover); }
+.menu-flotante > button:hover { background: var(--fondo-hover); }
 
 /* ------------------------------------------------------------------- ETL */
 

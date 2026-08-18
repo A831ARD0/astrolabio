@@ -31,6 +31,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { MenuFlotante } from '../comunes/MenuFlotante'
+import { dentroDelMenu, useMenuFlotante } from '../comunes/sitioDeMenu'
 import type { Filtro } from '../api/tipos'
 
 /**
@@ -156,6 +158,8 @@ export function Imprimir({ hoja }: { hoja: string }) {
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const caja = useRef<HTMLDivElement | null>(null)
+  // Fuera de la barra: la barra recorta lo que desborda. Ver `MenuFlotante`.
+  const { boton, sitio } = useMenuFlotante(abierto)
 
   useEffect(() => {
     const raiz = document.documentElement
@@ -173,7 +177,10 @@ export function Imprimir({ hoja }: { hoja: string }) {
   useEffect(() => {
     if (!abierto) return
     const fuera = (e: MouseEvent) => {
-      if (!caja.current?.contains(e.target as Node)) setAbierto(false)
+      const t = e.target as Node
+      // El menú ya no está dentro de `caja`: hay que preguntarle también a él, o el
+      // primer clic en «Una sola hoja» lo cerraría antes de llegar al botón.
+      if (!caja.current?.contains(t) && !dentroDelMenu(t)) setAbierto(false)
     }
     const escape = (e: KeyboardEvent) => e.key === 'Escape' && setAbierto(false)
     document.addEventListener('mousedown', fuera)
@@ -244,6 +251,7 @@ export function Imprimir({ hoja }: { hoja: string }) {
   return (
     <div className="exportar no-imprimir" ref={caja}>
       <button
+        ref={boton}
         className="btn chico"
         title={`Guardar en PDF la hoja «${hoja}» con los filtros puestos`}
         onClick={() => setAbierto(!abierto)}
@@ -252,16 +260,20 @@ export function Imprimir({ hoja }: { hoja: string }) {
         {ocupado ? '…' : 'PDF'}
       </button>
       {abierto && (
-        <div className="menu-exportar">
+        <MenuFlotante sitio={sitio} clase="no-imprimir">
           <button onClick={unaHoja}>Una sola hoja</button>
           <button onClick={paginas}>Páginas A4</button>
           <div className="chico tenue" style={{ padding: '4px 8px 2px' }}>
             En el diálogo, elige «Guardar como PDF». Una sola hoja no corta nada y es
             la de presentar; A4 es la de papel.
           </div>
-        </div>
+        </MenuFlotante>
       )}
-      {error && <div className="error-caja chico menu-exportar">{error}</div>}
+      {error && (
+        <MenuFlotante sitio={sitio} clase="error-caja chico no-imprimir">
+          {error}
+        </MenuFlotante>
+      )}
     </div>
   )
 }

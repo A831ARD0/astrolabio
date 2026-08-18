@@ -13,6 +13,15 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **El menú del botón PDF no se veía, y el de exportar un widget tampoco del todo.**
+  Los dos colgaban dentro de su contenedor, y los dos contenedores recortan lo que
+  desborda: la barra del tablero para encogerse en una pantalla angosta en vez de
+  empujar al panel de la derecha, y un widget porque es una celda de la rejilla. El
+  del PDF quedaba en una tira de tres píxeles; el de un widget se cortaba en los
+  widgets bajos. Ahora se dibujan fuera, en un portal con las coordenadas del botón —
+  lo mismo que ya hacía la lista de un filtro colapsado, y por lo mismo—, y el
+  comportamiento está en un solo sitio para los dos.
+
 - **Una tabla vacía dice por qué está vacía.** «Sin datos para la selección actual»
   se ve igual venga de donde venga, y viene de cuatro sitios que se arreglan en cuatro
   sitios distintos: la tabla no se ha cargado, la unión no encuentra pareja, una

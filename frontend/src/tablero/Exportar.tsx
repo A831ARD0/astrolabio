@@ -12,6 +12,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { MenuFlotante } from '../comunes/MenuFlotante'
+import { dentroDelMenu, useMenuFlotante } from '../comunes/sitioDeMenu'
+
 import { ErrorApi, token } from '../api/cliente'
 import type { Widget } from '../api/tipos'
 import { filtrosDeSelecciones } from './consulta'
@@ -35,13 +38,17 @@ export function Exportar({
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const caja = useRef<HTMLDivElement | null>(null)
+  const { boton, sitio } = useMenuFlotante(abierto)
 
   // Cerrar al hacer clic fuera y con Escape. Un menú que solo se cierra con el
   // mismo botón se queda abierto tapando el widget de al lado.
   useEffect(() => {
     if (!abierto) return
     const fuera = (e: MouseEvent) => {
-      if (!caja.current?.contains(e.target as Node)) setAbierto(false)
+      // También al menú, que vive en `body` y no dentro de `caja`: sin esto, el
+      // primer clic en «Excel» lo cerraría antes de llegar al botón.
+      const t = e.target as Node
+      if (!caja.current?.contains(t) && !dentroDelMenu(t)) setAbierto(false)
     }
     const escape = (e: KeyboardEvent) => e.key === 'Escape' && setAbierto(false)
     document.addEventListener('mousedown', fuera)
@@ -109,6 +116,7 @@ export function Exportar({
   return (
     <div className="exportar" ref={caja}>
       <button
+        ref={boton}
         className="btn chico"
         title="Exportar los datos de este widget"
         onClick={() => setAbierto(!abierto)}
@@ -116,17 +124,23 @@ export function Exportar({
       >
         {ocupado ? '…' : '↓'}
       </button>
+      {/* Fuera del widget: un widget recorta lo que desborda —es una celda de la
+          rejilla— y en uno bajo este menú salía cortado. Ver `MenuFlotante`. */}
       {abierto && (
-        <div className="menu-exportar">
+        <MenuFlotante sitio={sitio}>
           <button onClick={() => descargar('xlsx')}>Excel (.xlsx)</button>
           <button onClick={() => descargar('csv')}>CSV</button>
           <div className="chico tenue" style={{ padding: '4px 8px 2px' }}>
             Se exporta con los filtros puestos y hasta{' '}
             {FILAS_EXPORTACION.toLocaleString('es-MX')} filas.
           </div>
-        </div>
+        </MenuFlotante>
       )}
-      {error && <div className="error-caja chico menu-exportar">{error}</div>}
+      {error && (
+        <MenuFlotante sitio={sitio} clase="error-caja chico">
+          {error}
+        </MenuFlotante>
+      )}
     </div>
   )
 }
