@@ -25,6 +25,18 @@ versionado es [semántico](https://semver.org/lang/es/).
   Solo sigue siendo un error que el modelo no marque ninguna columna como mes, porque
   entonces no hay contexto del que sacar el periodo.
 
+  Los filtros del periodo se levantan **estén en la columna que estén**, siempre que
+  sean del calendario: la primera versión solo levantaba la columna marcada como mes,
+  así que filtrar por año y por nombre del mes —dos columnas, que es como está armado
+  el informe que se está traduciendo— dejaba la capa de dentro con un solo mes y la
+  comparación salía vacía, sin decir nada. Se levanta la tabla de fechas entera, como
+  en DAX, y para elegir el mes los filtros se vuelven a aplicar contra el calendario.
+  Las columnas de esos filtros ya no bajan como dimensiones escondidas: una que no sea
+  del grano del mes partiría las cifras en pedazos más chicos y la ventana se
+  calcularía por pedazo. Y un filtro de días se rechaza diciéndolo: el mes anterior de
+  un día no existe, y estirarlo al mes entero daría las unidades del mes en una fila
+  que pedía un día.
+
 - **Las métricas del catálogo, agrupadas por la tabla de la que salen y plegables.**
   Con noventa y seis, una lista plana obliga a atravesar las de ventas para llegar a
   las de refacciones y no deja ver de un golpe qué trae cada tabla. La cabecera de un

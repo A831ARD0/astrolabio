@@ -244,6 +244,66 @@ def test_sin_columna_de_meses_el_mes_lo_pone_el_filtro(cliente, cab_editor, mode
     assert not any(c.startswith("__") for c in cuerpo["columnas"])
 
 
+def test_el_mes_lo_puede_poner_un_filtro_de_año_y_mes_por_separado(
+        cliente, cab_editor, modelo):
+    """
+    Filtrando por año y por mes en columnas distintas —no por la de «año-mes»—.
+
+    Es como esta armado el informe que se esta traduciendo: dos filtros arriba, uno
+    de año y otro con el nombre del mes, y ninguno de los dos es la columna marcada
+    como mes. La primera version solo levantaba los filtros de la columna marcada,
+    asi que la capa de dentro se quedaba con un unico mes y «el mes anterior» salia
+    vacio, sin decir nada.
+    """
+    assert guardar(cliente, cab_editor, modelo,
+                   con_tiempo(cliente, cab_editor, modelo)).status_code == 201
+
+    ANIO, MES_1_12 = "dim_calendario.anio", "dim_calendario.mes"
+
+    # La verdad, mes a mes, para una sucursal.
+    r = consultar(cliente, cab_editor, modelo, ["unidades_vendidas"], [MES, SUC])
+    una = r.json()["filas"][0][SUC]
+    por = {f[MES]: f["unidades_vendidas"] for f in r.json()["filas"]
+           if f[SUC] == una}
+    meses = sorted(por)
+    # Dos meses SEGUIDOS del mismo año: es el mes de al lado lo que se compara.
+    mes = next(m for m in reversed(meses) if m % 100 > 1 and m - 1 in por)
+    previo = mes - 1
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["unidades_vendidas", "mes_anterior"], [SUC],
+                  filtros=[{"campo": ANIO, "op": "=", "valor": mes // 100},
+                           {"campo": MES_1_12, "op": "=", "valor": mes % 100}])
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    fila = next(f for f in cuerpo["filas"] if f[SUC] == una)
+
+    assert fila["unidades_vendidas"] == por[mes]
+    assert fila["mes_anterior"] == por[previo], "el mes anterior salio vacio"
+    assert cuerpo["mes_usado"] == mes
+    assert len(cuerpo["filas"]) == len({f[SUC] for f in cuerpo["filas"]})
+
+
+def test_un_filtro_de_dias_no_se_estira_al_mes_en_silencio(
+        cliente, cab_editor, modelo):
+    """
+    Con un dia filtrado, «el mes anterior» no existe — y callarlo es lo peligroso.
+
+    Levantar ese filtro como se levantan los de año y mes convertiria el periodo en
+    el mes entero, y entonces las unidades del dia saldrian siendo las del mes: un
+    numero de otra cosa, en la misma fila, sin nada que lo delate.
+    """
+    assert guardar(cliente, cab_editor, modelo,
+                   con_tiempo(cliente, cab_editor, modelo)).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["unidades_vendidas", "mes_anterior"], [SUC],
+                  filtros=[{"campo": "dim_calendario.fecha", "op": "=",
+                            "valor": "2026-07-15"}])
+    assert r.status_code == 422, r.text
+    assert "es de dias" in r.text and "dim_calendario.anio_mes" in r.text
+
+
 def test_sin_filtro_de_fecha_manda_el_ultimo_mes_con_datos(
         cliente, cab_editor, modelo):
     """

@@ -790,6 +790,18 @@ Cuál manda: **el último mes que sobreviva a los filtros**. Con un mes filtrado
 Con solo el año filtrado, su último mes. Y **sin ningún filtro de fecha, el último
 mes con datos**.
 
+Los filtros valen **estén en la columna que estén**, siempre que sean del calendario:
+filtrar Año = 2026 y Nombre del mes = July elige julio de 2026 igual que filtrar la
+columna «Año-Mes». Lo que se levanta para poder mirar atrás es la tabla de fechas
+entera, no una columna suelta — de otro modo la capa de dentro se quedaría con un solo
+mes y la comparación saldría vacía. Por eso las columnas de esos filtros tienen que
+ser del **mismo origen** que la columna marcada como mes: un «Año» que venga del hecho
+y no del calendario no elige el periodo.
+
+Lo que **no** se puede es filtrar un día: el mes anterior de un día no existe, y
+estirarlo al mes entero devolvería las unidades del mes en una fila que pedía un día.
+Ahí el widget lo dice y no calcula.
+
 Ese último caso tiene una consecuencia que conviene tener presente: la cifra cambia
 en cuanto entre el mes siguiente, sin que nadie toque el informe. Por eso el widget
 dice siempre, encima de la tabla, **«Comparado contra 202607»** — para que un número

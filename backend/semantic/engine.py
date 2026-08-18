@@ -1150,15 +1150,20 @@ class Compilador:
     OPS = {"=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN"}
 
     def _predicados_sql(self, filtros: list[dict], prefijo: str,
-                        ) -> tuple[list[str], list]:
+                        por_columna: bool = False) -> tuple[list[str], list]:
         """
         Los filtros escritos contra columnas ya calculadas —`"ent.col"`—, no contra
         las tablas. Sirve para volver a aplicarlos una capa mas arriba.
+
+        Con `por_columna` se escriben contra la tabla de origen, usando el nombre
+        pelado de la columna: hace falta para volver a aplicarlos sobre el
+        calendario, que ahi todavia no ha pasado por ningun CTE.
         """
         donde: list[str] = []
         params: list = []
         for f in filtros:
-            col = f"{prefijo}{_cita(str(f['campo']))}"
+            campo = str(f["campo"])
+            col = f"{prefijo}{_cita(campo.split('.', 1)[1] if por_columna else campo)}"
             op = str(f["op"]).upper()
             if op not in self.OPS:
                 raise ErrorModelo(f"Operador no soportado: {f['op']}")
@@ -1188,12 +1193,20 @@ class Compilador:
 
         Cual manda: el **maximo** de los meses que sobreviven a los filtros. Con un
         mes filtrado, ese; con un año filtrado, su ultimo mes; sin filtro de fecha
-        ninguno, el ultimo mes con datos. Los filtros de fecha se levantan de la
-        capa de dentro —si no, no habria mes anterior que mirar, igual que `TODO()`
-        levanta un filtro en DAX— y se vuelven a aplicar solo para elegir el mes.
+        ninguno, el ultimo mes con datos. Los filtros del calendario se levantan de
+        la capa de dentro —si no, no habria mes anterior que mirar, igual que
+        `TODO()` levanta un filtro en DAX— y se vuelven a aplicar solo para elegir
+        el mes.
 
-        Devuelve `(mes escondido, filtros de fecha, filtros para el CTE, dims de
-        dentro)`. Con `mes escondido = None` nada cambia respecto de siempre.
+        Se levanta **todo** el calendario, no solo la columna marcada como mes.
+        Filtrar por año y por nombre del mes en dos columnas distintas es lo normal
+        en un informe, y son la misma seleccion de periodo escrita de otra forma:
+        dejar una dentro deja la capa de dentro con un mes solo, y entonces el mes
+        anterior sale vacio. Es la tabla de fechas entera la que se levanta, como en
+        DAX.
+
+        Devuelve `(mes escondido, filtros del calendario, filtros para el CTE, dims
+        de dentro)`. Con `mes escondido = None` nada cambia respecto de siempre.
         """
         if not con_ventana:
             return None, [], c.filtros, dims
@@ -1215,16 +1228,35 @@ class Compilador:
             return None, [], c.filtros, dims
 
         mes = meses[0]
+        # El calendario es la entidad donde vive esa columna: la tabla de fechas.
+        cal = self.m.entidades[mes[0]]
         periodo = [f for f in c.filtros
-                   if grano(*str(f["campo"]).split(".", 1)) is not None]
+                   if str(f["campo"]).split(".", 1)[0] == mes[0]]
         resto = [f for f in c.filtros if f not in periodo]
 
-        # Las columnas de esos filtros bajan tambien como dimensiones escondidas:
-        # sin ellas no se pueden volver a aplicar arriba para elegir el mes.
-        dentro = list(dims)
-        for campo in [mes] + [tuple(str(f["campo"]).split(".", 1)) for f in periodo]:
-            if campo not in dentro:
-                dentro.append(campo)  # type: ignore[arg-type]
+        # Un filtro de dias no se puede levantar sin cambiar de que se habla: el
+        # periodo pasaria a ser el mes entero, y la cifra de al lado —las unidades,
+        # el objetivo— saldria del mes cuando se pidio un dia. Se dice, en vez de
+        # devolver el mes con pinta de dia.
+        for f in periodo:
+            col = str(f["campo"]).split(".", 1)[1]
+            campo = cal.campos.get(col)
+            if campo is not None and (campo.grano_tiempo == "dia"
+                                      or (campo.grano_tiempo is None
+                                          and campo.tipo == "fecha")):
+                raise ErrorModelo(
+                    f"Esta tabla compara contra otro mes y no lleva una columna de "
+                    f"meses, asi que el periodo lo pone el filtro — y el filtro de "
+                    f"'{mes[0]}.{col}' es de dias. El mes anterior de un dia no "
+                    f"existe: filtra por mes o por año, o agrega "
+                    f"{mes[0]}.{mes[1]} a la tabla.")
+
+        # Lo unico que baja escondido es el mes. Las columnas de los filtros NO
+        # bajan como dimensiones: una que no sea del grano del mes —un dia— partiria
+        # las cifras en pedazos mas chicos, y la ventana se calcularia por pedazo.
+        # Para elegir el mes se vuelven a aplicar contra el calendario, que es donde
+        # esos filtros significan algo.
+        dentro = list(dims) + ([mes] if mes not in dims else [])
         return mes, periodo, resto, dentro
 
     def compilar(self, c: Consulta,
@@ -1413,7 +1445,17 @@ class Compilador:
         # con un mes filtrado ese, con un año filtrado su ultimo mes, y sin filtro
         # de fecha el ultimo mes con datos.
         col_mes = _cita(f"{mes_oculto[0]}.{mes_oculto[1]}")
-        donde_mes, params_mes = self._predicados_sql(filtros_periodo, "d.")
+        # Los filtros del calendario se vuelven a aplicar sobre el calendario, no
+        # sobre el detalle: ahi estan todas sus columnas —el año, el nombre del mes,
+        # el dia— y no solo la que bajo escondida. De ahi salen los meses que la
+        # seleccion deja en pie, y de esos manda el ultimo que tenga datos.
+        cal = self.m.entidades[mes_oculto[0]]
+        donde_cal, params_mes = self._predicados_sql(
+            filtros_periodo, "k.", por_columna=True)
+        elegibles = (
+            f"\n  WHERE d.{col_mes} IN (SELECT k.{_cita(mes_oculto[1])}"
+            f" FROM {_cita(cal.tabla)} AS k WHERE " + " AND ".join(donde_cal) + ")"
+        ) if donde_cal else ""
         cols_vistas = [f"{e}.{cc}" for e, cc in dims_vistas]
         # El mes que se uso viaja en su propia columna. Cuando no lo eligio nadie
         # —sin filtro de fecha— la cifra depende de hasta donde llegan los datos, y
@@ -1425,8 +1467,7 @@ class Compilador:
             f"{cuerpo_final},\ndetalle AS (\n  SELECT\n    "
             + ",\n    ".join(sel) + f"\n  FROM {fuente}\n),\n"
             f"mes_que_manda AS (\n  SELECT MAX(d.{col_mes}) AS mes FROM detalle AS d"
-            + (("\n  WHERE " + " AND ".join(donde_mes)) if donde_mes else "")
-            + "\n)\n"
+            + elegibles + "\n)\n"
             f"SELECT\n  " + ",\n  ".join(sel_arriba) +
             f"\nFROM detalle AS d"
             f"\nJOIN mes_que_manda AS x ON d.{col_mes} IS NOT DISTINCT FROM x.mes"
