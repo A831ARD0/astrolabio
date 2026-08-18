@@ -36,7 +36,7 @@ from semantic.formula import (
     revisar as revisar_formula, revisar_compuesta,
 )
 from semantic.politica import PoliticaDef, atributos_requeridos
-from semantic.engine import Consulta, ErrorModelo
+from semantic.engine import Consulta, ErrorModelo, SinRuta
 from semantic.engine import Metrica as MetricaSemantica
 from semantic.engine import Modelo as ModeloSemantico
 
@@ -1055,6 +1055,15 @@ def vista_previa(modelo_id: int, cuerpo: VistaPrevia, sesion: SesionDep,
         detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}
         if hasattr(e, "rutas"):
             detalle["rutas"] = [" → ".join(r) for r in e.rutas]
+        # «No hay relacion» casi siempre significa «la hay, pero no en la version
+        # que se esta consultando»: se dibuja en el borrador, y hasta que no se
+        # publica una version —y el tablero la adopta— aqui no existe. Sin decir
+        # cual version se esta leyendo, el aviso parece contradecir el lienzo.
+        if isinstance(e, SinRuta):
+            detalle["mensaje"] += (
+                f" Se esta consultando la version {v.version} del modelo: si acabas"
+                f" de dibujar la relacion, publica una version y que el tablero la"
+                f" adopte.")
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detalle)
     except PoliticaInvalida as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
@@ -1245,6 +1254,15 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
         detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}
         if hasattr(e, "rutas"):
             detalle["rutas"] = [" → ".join(r) for r in e.rutas]
+        # «No hay relacion» casi siempre significa «la hay, pero no en la version
+        # que se esta consultando»: se dibuja en el borrador, y hasta que no se
+        # publica una version —y el tablero la adopta— aqui no existe. Sin decir
+        # cual version se esta leyendo, el aviso parece contradecir el lienzo.
+        if isinstance(e, SinRuta):
+            detalle["mensaje"] += (
+                f" Se esta consultando la version {v.version} del modelo: si acabas"
+                f" de dibujar la relacion, publica una version y que el tablero la"
+                f" adopte.")
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detalle)
     except PoliticaInvalida as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
@@ -1267,6 +1285,8 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
         # estaba en el desglose. Igual que arriba: la pantalla tiene que poder
         # decirlo, porque si nadie filtro una fecha ese mes lo eligio el dato.
         "mes_usado": res.mes_usado,
+        # Y si no hubo ni una fila, por que no la hubo. Ver `_por_que_vacio`.
+        "vacio_porque": res.vacio_porque,
         "politicas_aplicadas": res.politicas_aplicadas,
         # El SQL se devuelve solo a quien puede leerlo con provecho.
         "sql": res.sql if usuario.rol in (Rol.administrador, Rol.editor) else None,
@@ -1303,6 +1323,15 @@ def exportar(modelo_id: int, cuerpo: PeticionExportar, sesion: SesionDep,
         detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}
         if hasattr(e, "rutas"):
             detalle["rutas"] = [" → ".join(r) for r in e.rutas]
+        # «No hay relacion» casi siempre significa «la hay, pero no en la version
+        # que se esta consultando»: se dibuja en el borrador, y hasta que no se
+        # publica una version —y el tablero la adopta— aqui no existe. Sin decir
+        # cual version se esta leyendo, el aviso parece contradecir el lienzo.
+        if isinstance(e, SinRuta):
+            detalle["mensaje"] += (
+                f" Se esta consultando la version {v.version} del modelo: si acabas"
+                f" de dibujar la relacion, publica una version y que el tablero la"
+                f" adopte.")
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detalle)
     except PoliticaInvalida as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))

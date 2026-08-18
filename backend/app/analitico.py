@@ -187,6 +187,10 @@ class Resultado:
     #: el desglose y lo puso el contexto. `None` si no habia ninguna metrica de
     #: tiempo, o si los meses venian en el propio desglose y cada fila es el suyo.
     mes_usado: Any = None
+    #: Cuando no hubo ni una fila, por que. Vacio se ve igual venga de donde venga
+    #: —tabla sin cargar, union que no casa, politica, filtros— y cada causa se
+    #: arregla en otro sitio: sin decirlo, «Sin datos» manda a buscar a ciegas.
+    vacio_porque: str | None = None
 
 
 def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
@@ -231,7 +235,56 @@ def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
         columnas=columnas, filas=filas, sql=compilada.sql, ms=round(ms, 1),
         politicas_aplicadas=[p.politica for p in predicados],
         truncado=truncado, mes_usado=mes_usado,
+        vacio_porque=(_por_que_vacio(modelo, consulta, predicados)
+                      if not filas else None),
     )
+
+
+def _por_que_vacio(modelo: Modelo, consulta: Consulta, predicados: list) -> str | None:
+    """
+    Por que la consulta no devolvio ni una fila.
+
+    Vacio se ve igual venga de donde venga, y viene de sitios que se arreglan en
+    sitios distintos: la tabla sin cargar, la union que no encuentra pareja, una
+    politica que tapa todo, o los filtros. «Sin datos» a secas manda a buscar a
+    ciegas por los cuatro.
+
+    Cuesta tres conteos por hecho, y solo se paga cuando ya no hubo filas — que es
+    justo cuando la consulta no costo nada.
+    """
+    try:
+        sondas = Compilador(modelo).sondas_de_vacio(consulta, predicados)
+    except Exception:                      # noqa: BLE001
+        # Un diagnostico que falla no puede tapar el resultado: la consulta ya
+        # salio bien y lo que se estaba armando era una explicacion de cortesia.
+        return None
+
+    con = conexion()
+
+    def cuenta(par) -> int:
+        sql, params = par
+        return int(con.execute(sql, params).fetchone()[0])
+
+    for s in sondas:
+        try:
+            if cuenta(s["sola"]) == 0:
+                return (f"«{s['entidad']}» no tiene ni una fila: la tabla esta vacia. "
+                        f"Falta cargarla.")
+            if cuenta(s["unida"]) == 0:
+                por = (" por " + ", ".join(s["uniones"])) if s["uniones"] else ""
+                return (f"«{s['entidad']}» tiene filas, pero ninguna llega al "
+                        f"desglose{por}: la union no encuentra pareja. Suele ser el "
+                        f"tipo o el formato del codigo —texto con ceros delante "
+                        f"contra un entero— y se ve mirando unas filas de cada "
+                        f"tabla.")
+            if cuenta(s["permitida"]) == 0:
+                return (f"«{s['entidad']}» tiene filas y las uniones casan, pero las "
+                        f"politicas de seguridad no te dejan ver ninguna.")
+        except Exception:                  # noqa: BLE001
+            return None
+
+    return ("Los filtros puestos no dejan ninguna fila." if consulta.filtros
+            else None)
 
 
 def ejecutar_muestra(modelo: Modelo, entidad: str, limite: int,

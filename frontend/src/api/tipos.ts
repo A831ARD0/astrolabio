@@ -345,6 +345,14 @@ export interface ResultadoConsulta {
    */
   mes_usado?: string | number | null
   /**
+   * Cuando no hubo ni una fila, por qué no la hubo.
+   *
+   * Vacío se ve igual venga de donde venga —la tabla sin cargar, una unión que no
+   * encuentra pareja, una política, los filtros— y cada causa se arregla en un sitio
+   * distinto. `null` cuando el servidor no lo sabe.
+   */
+  vacio_porque?: string | null
+  /**
    * Solo en una tabla dinámica: cuántas columnas va a tener el cruce. Es con lo que
    * se calculó el límite de filas planas que se pidió, y se guarda para poder
    * explicarlo si aun así se cortó.

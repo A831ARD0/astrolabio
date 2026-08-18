@@ -166,7 +166,14 @@ function WidgetDatos({
     return <div className="vacio chico">Elige una métrica para este widget.</div>
   }
   if (datos.data.filas.length === 0) {
-    return <div className="vacio chico">Sin datos para la selección actual.</div>
+    // Vacío se ve igual venga de donde venga —tabla sin cargar, unión que no casa,
+    // política, filtros— y cada causa se arregla en otro sitio. Cuando el servidor
+    // sabe cuál es, se dice: «Sin datos» a secas manda a buscar a ciegas.
+    return (
+      <div className="vacio chico">
+        {datos.data.vacio_porque ?? 'Sin datos para la selección actual.'}
+      </div>
+    )
   }
 
   // Un recorte se avisa SIEMPRE y encima del dato, no en un pie ni en un tooltip.

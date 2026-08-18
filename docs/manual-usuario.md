@@ -1251,6 +1251,28 @@ Solo se ofrecen columnas de la misma entidad: un orden que viniera de otra tabla
 necesitaría una unión, y entonces el orden de un filtro dependería de por dónde se
 une, que es exactamente lo que no puede pasar.
 
+### Cuando un widget sale vacío
+
+«Sin datos» a secas manda a buscar a ciegas, así que el widget dice **por qué**. Son
+cuatro causas y cada una se arregla en otro sitio:
+
+| Lo que dice | Dónde se arregla |
+|---|---|
+| «`FACT_X` no tiene ni una fila: la tabla está vacía» | En **Flujos**: falta la carga |
+| «…ninguna llega al desglose por `A.col → B.col`: la unión no encuentra pareja» | En el **modelo**: casi siempre el tipo o el formato del código |
+| «las políticas de seguridad no te dejan ver ninguna» | En **Gobierno**: es lo que se pidió |
+| «Los filtros puestos no dejan ninguna fila» | En el propio tablero |
+
+La segunda es la que cuesta encontrar sin ayuda, porque no se parece a un error: se
+parece a «no hubo ventas». Para revisarla, mira unas filas de cada tabla en la
+pestaña **Datos** del modelo y compara los códigos: `0034` guardado como texto no
+encuentra al `34` guardado como entero, y las dos columnas se ven bien.
+
+Y si el aviso es **«no tiene ninguna relación con…»** cuando la relación está
+dibujada en el lienzo: el tablero está anclado a una versión del modelo. Publica una
+versión y adóptala desde el aviso amarillo del tablero. El mensaje dice qué versión se
+está consultando, para que se pueda comparar.
+
 ### Exportar
 
 Cada widget tiene su flecha: **Excel** o **CSV**. El archivo lleva una hoja con el

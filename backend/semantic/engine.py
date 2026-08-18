@@ -920,6 +920,77 @@ class Compilador:
                 vistos.add(paso)
         return alias, joins
 
+    def sondas_de_vacio(self, c: Consulta, predicados: list | None = None,
+                        ) -> list[dict]:
+        """
+        Con que consultas se averigua POR QUE una consulta no devolvio ni una fila.
+
+        Vacio se ve igual en pantalla venga de donde venga, y viene de sitios muy
+        distintos: la tabla no se ha cargado, la union no encuentra pareja —un codigo
+        que en un lado es texto con ceros delante y en el otro un entero—, una
+        politica tapa todo, o los filtros no dejan nada. Las cuatro se arreglan en
+        cuatro sitios distintos, asi que «Sin datos» a secas manda a buscar a ciegas.
+
+        Se devuelve el plan, no el resultado: aqui no se ejecuta nada. Por cada hecho
+        del que sale una cifra, tres conteos —la tabla sola, unida al desglose sin
+        filtros, y lo mismo con las politicas puestas— y con quien se une, para poder
+        nombrarlo.
+        """
+        predicados = predicados or []
+        dims = [tuple(d.split(".")) for d in c.dimensiones]
+        sondas: list[dict] = []
+        vistas: set[str] = set()
+        for nombre in c.metricas:
+            met = self.m.metricas.get(nombre)
+            if met is None:
+                continue
+            bases = ([self.m.metricas[b] for b in self.m.dependencias_base(nombre)]
+                     if met.compuesta else [met])
+            for base in bases:
+                if base.entidad is None or base.entidad in vistas:
+                    continue
+                vistas.add(base.entidad)
+                ent = self.m.entidades[base.entidad]
+                cuerpo, _ = self._cte_metrica(
+                    base.entidad, [base], dims, [], c.rutas_elegidas)
+                con_pol, params_pol = self._cte_metrica(
+                    base.entidad, [base], dims, [], c.rutas_elegidas, predicados)
+                sondas.append({
+                    "entidad": base.entidad,
+                    "metrica": base.etiqueta,
+                    # Con quien se une para llegar al desglose, en palabras: es el
+                    # dato con el que se revisa una union que no casa.
+                    "uniones": self._uniones_legibles(base, dims, c.rutas_elegidas),
+                    "sola": (f"SELECT COUNT(*) FROM {_cita(ent.tabla)}", []),
+                    "unida": (f"SELECT COUNT(*) FROM (\n{cuerpo}\n)", []),
+                    "permitida": (f"SELECT COUNT(*) FROM (\n{con_pol}\n)",
+                                  params_pol),
+                })
+        return sondas
+
+    def _uniones_legibles(self, met: Metrica, dims: list[tuple[str, str]],
+                          rutas_elegidas: dict[str, str]) -> list[str]:
+        """Las uniones que atraviesa esta metrica, escritas para leer."""
+        if met.entidad is None:
+            return []
+        grafo = self.m.grafo_con(met.uniones)
+        fuera: list[str] = []
+        for destino in {e for e, _ in dims} - {met.entidad}:
+            clave = f"{met.entidad}->{destino}"
+            try:
+                ruta = (rutas_elegidas[clave].split(" → ") if clave in rutas_elegidas
+                        else self.m.ruta_unica(met.entidad, destino, grafo))
+            except ErrorModelo:
+                continue
+            for a, b in zip(ruta, ruta[1:]):
+                rel = self.m.relacion_entre(a, b, grafo)
+                ca, cb = ((rel.campo_a, rel.campo_b) if rel.entidad_a == a
+                          else (rel.campo_b, rel.campo_a))
+                texto = f"{a}.{ca} → {b}.{cb}"
+                if texto not in fuera:
+                    fuera.append(texto)
+        return fuera
+
     def compilar_grano(self, entidad: str) -> ConsultaCompilada:
         """
         Cuenta filas y combinaciones distintas del grano declarado.

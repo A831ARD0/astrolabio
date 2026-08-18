@@ -13,6 +13,22 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **Una tabla vacía dice por qué está vacía.** «Sin datos para la selección actual»
+  se ve igual venga de donde venga, y viene de cuatro sitios que se arreglan en cuatro
+  sitios distintos: la tabla no se ha cargado, la unión no encuentra pareja, una
+  política tapa todo, o los filtros no dejan nada. Ahora se dice cuál de los cuatro
+  es — y en el de la unión, **por dónde** se une, que es el dato con el que se revisa:
+  «`FACT_PO` tiene filas, pero ninguna llega al desglose por `FACT_PO.id_sucursal →
+  CAT_SUCURSAL.Id_Sucursal`: la unión no encuentra pareja». El de la unión es el más
+  caro de los cuatro porque no se parece a un error: se parece a «no hubo ventas».
+  Cuesta tres conteos por hecho y solo se pagan cuando ya no hubo filas.
+
+- **«No hay relación entre estas dos tablas» dice qué versión del modelo se está
+  consultando.** Casi siempre significa «la hay, pero no en esta versión»: se dibuja
+  en el borrador, y hasta que no se publica una versión —y el tablero la adopta— para
+  la consulta no existe. Sin decir qué versión se está leyendo, el aviso parece
+  contradecir al lienzo, donde la relación está a la vista.
+
 - **Los valores de un filtro se pueden ordenar por otra columna.** «Enero, febrero,
   marzo» no es el orden alfabético: un filtro con el nombre del mes empezaba en abril
   y terminaba en septiembre, y en esa lista nadie encuentra nada. En la tabla de
