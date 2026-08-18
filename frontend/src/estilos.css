@@ -873,6 +873,25 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 .filtro > header .btn { margin-left: auto; }
+/* El estante: la columna de carpetas a la izquierda y los tableros a la derecha. */
+.con-carpetas { display: flex; gap: 20px; align-items: flex-start; }
+.con-carpetas > .carpetas {
+  flex: 0 0 220px;
+  position: sticky;
+  top: 16px;
+}
+.carpetas .buscar { margin-bottom: 8px; }
+.carpetas .lista button .dcha { font-variant-numeric: tabular-nums; }
+
+.grupo-estante + .grupo-estante { margin-top: 22px; }
+.grupo-estante > h2 { margin: 0 0 8px; font-size: 12px; font-weight: 550; }
+
+/* En una pantalla estrecha las carpetas se apilan encima y dejan de ser columna. */
+@media (max-width: 780px) {
+  .con-carpetas { flex-direction: column; }
+  .con-carpetas > .carpetas { flex: 1 1 auto; position: static; width: 100%; }
+}
+
 /* Semáforos. El color dice el estado y la flecha lo repite: uno de cada doce
    hombres no distingue verde de rojo, y una cifra que solo se lee por el color no
    se lee. */

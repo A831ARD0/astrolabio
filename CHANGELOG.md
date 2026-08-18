@@ -7,6 +7,24 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **El estante: los tableros se guardan en carpetas.** Columna de carpetas a la
+  izquierda con la cuenta de cada una, «Todos» y «Sin carpeta»; buscador por nombre,
+  carpeta y modelo; y al ver todo el estante los resultados se agrupan por carpeta. La
+  carpeta se teclea —si ya existe, se ofrece— al crear el tablero o en
+  **Editar → Tablero → Carpeta**. Una carpeta existe mientras haya algo dentro: no hay
+  que crearla antes ni borrarla después.
+
+  **Una carpeta solo ordena: no da ni quita acceso a nada.** En Qlik un *stream* es a
+  la vez la carpeta y el permiso; aquí no, y se dice en la propia pantalla y no solo en
+  el manual. Una carpeta que parece un permiso y no lo es sería una trampa: alguien
+  pondría los sueldos en una llamada «Dirección» creyendo que ahí quedan guardados.
+  Quién ve qué lo siguen decidiendo el rol y el publicado. Hay una prueba que lo fija:
+  un tablero sin publicar en una carpeta de nombre serio sigue siendo invisible para un
+  lector, y uno publicado se ve esté donde esté.
+
+  La carpeta va en su propia columna de la base y no dentro de la definición del
+  tablero, para que reordenar el estante no cuente como cambiarlo.
+
 - **Semáforos: la flecha verde o roja al lado de una cifra.** Se pone por columna, en
   tablas, tablas dinámicas y KPI. Se compara contra un objetivo fijo o contra otra
   columna del mismo widget, y **la dirección se declara**: «más es mejor» no vale para
@@ -91,6 +109,14 @@ versionado es [semántico](https://semver.org/lang/es/).
   Lo ya elegido nunca se esconde al buscar: si desapareciera de la vista, no habría
   forma de quitarlo sin acordarse de cómo se llamaba. Con noventa y seis métricas, la
   lista sin buscador no era usable.
+
+### Cambiado
+
+- **Renombrar o mover de carpeta un tablero certificado ya no le quita el sello.** Solo
+  lo quita cambiar su **definición**, que es lo que la certificación dice que se
+  revisó. Ninguna de las otras dos toca una cifra, y si descertificaran habría que
+  volver a certificar el estante entero cada vez que alguien lo ordena — con lo que el
+  sello dejaría de significar nada porque nadie podría mantenerlo puesto.
 
 ### Arreglado
 

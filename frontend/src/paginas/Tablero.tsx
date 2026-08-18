@@ -612,12 +612,14 @@ export function Tablero() {
           ) : (
             <PanelTablero
               nombre={d.nombre}
+              carpeta={d.carpeta}
               publicado={d.publicado}
               certificado={d.certificado}
               esAdmin={yo.data?.rol === 'administrador'}
               versiones={versiones.data?.versiones.map((v) => v.version) ?? []}
               versionActual={d.version_modelo}
               alRenombrar={(nombre) => guardar.mutate({ nombre })}
+              alMoverDeCarpeta={(carpeta) => guardar.mutate({ carpeta })}
               alPublicar={(v) => acciones.publicar.mutate(v)}
               alCertificar={(v) => acciones.certificar.mutate(v)}
               alMover={(v) => acciones.moverAVersion.mutate(v)}
@@ -752,30 +754,35 @@ function PanelHoja({
 
 function PanelTablero({
   nombre,
+  carpeta,
   publicado,
   certificado,
   esAdmin,
   versiones,
   versionActual,
   alRenombrar,
+  alMoverDeCarpeta,
   alPublicar,
   alCertificar,
   alMover,
   alBorrar,
 }: {
   nombre: string
+  carpeta: string
   publicado: boolean
   certificado: boolean
   esAdmin: boolean
   versiones: number[]
   versionActual: number
   alRenombrar: (n: string) => void
+  alMoverDeCarpeta: (c: string) => void
   alPublicar: (v: boolean) => void
   alCertificar: (v: boolean) => void
   alMover: (v: number) => void
   alBorrar: () => void
 }) {
   const [texto, setTexto] = useState(nombre)
+  const [carp, setCarp] = useState(carpeta)
   return (
     <div className="inspector">
       <div className="campo">
@@ -791,6 +798,30 @@ function PanelTablero({
             Cambiar
           </button>
         </div>
+      </div>
+
+      <div className="campo">
+        <label>Carpeta</label>
+        <div className="fila">
+          <input
+            type="text"
+            value={carp}
+            placeholder="Sin carpeta"
+            onChange={(e) => setCarp(e.target.value)}
+          />
+          <button
+            className="btn"
+            style={{ flex: '0 0 auto' }}
+            disabled={carp.trim() === carpeta}
+            onClick={() => alMoverDeCarpeta(carp.trim())}
+          >
+            Mover
+          </button>
+        </div>
+        <span className="chico tenue">
+          Solo ordena el estante. No cambia quién puede ver este tablero, y mover de
+          carpeta no le quita la certificación.
+        </span>
       </div>
 
       <div className="campo">

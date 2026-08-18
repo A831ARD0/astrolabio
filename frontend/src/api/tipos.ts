@@ -300,6 +300,8 @@ export interface DefinicionDashboard {
 export interface DashboardResumen {
   id: number
   nombre: string
+  /** Carpeta del estante. Vacía = sin carpeta. **Solo ordena**: no da ni quita acceso. */
+  carpeta: string
   modelo_id: number
   modelo_nombre: string
   version_modelo: number

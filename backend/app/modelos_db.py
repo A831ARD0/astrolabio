@@ -480,6 +480,10 @@ class Dashboard(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(160))
+    # En que carpeta del estante se guarda. **Solo ordena**: no decide quien ve que
+    # —eso es el rol y el publicado— y por eso no va dentro de `definicion`, para
+    # que reordenar el estante no le quite la certificacion a nadie.
+    carpeta: Mapped[str] = mapped_column(String(120), default="", server_default="")
     # Anclado a una version concreta: cambiar el modelo no lo rompe en silencio.
     version_modelo_id: Mapped[int] = mapped_column(ForeignKey("version_modelo.id"))
     definicion: Mapped[dict] = mapped_column(JSON, default=dict)

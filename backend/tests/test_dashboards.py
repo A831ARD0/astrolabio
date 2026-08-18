@@ -636,3 +636,99 @@ def test_un_semaforo_que_compara_contra_una_metrica_ausente_se_rechaza(
     assert r.status_code == 422, r.text
     assert "no es una metrica de este widget" in " ".join(
         r.json()["detail"]["errores"])
+
+
+# --------------------------------------------------------------------------- #
+# Carpetas del estante
+# --------------------------------------------------------------------------- #
+
+def test_un_tablero_sin_carpeta_sale_con_la_carpeta_vacia(tablero):
+    """Lo que ya existia no tiene carpeta, y "sin carpeta" es un unico valor."""
+    assert tablero["carpeta"] == ""
+
+
+def test_se_puede_crear_en_una_carpeta_y_moverlo(cliente, cab_admin, modelo_dash):
+    cuerpo = _tablero_minimo(modelo_dash, carpeta="  Ventas  ")
+    cuerpo["nombre"] = "en_carpeta"
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo)
+    assert r.status_code == 201, r.text
+    # Se recorta: "Ventas " y "Ventas" serian dos carpetas distintas en la pantalla.
+    assert r.json()["carpeta"] == "Ventas"
+    tid = r.json()["id"]
+
+    m = cliente.put(f"/api/dashboards/{tid}", headers=cab_admin,
+                    json={"carpeta": "Postventa"})
+    assert m.status_code == 200, m.text
+    assert m.json()["carpeta"] == "Postventa"
+
+    fuera = cliente.put(f"/api/dashboards/{tid}", headers=cab_admin,
+                        json={"carpeta": ""})
+    assert fuera.json()["carpeta"] == ""
+    cliente.delete(f"/api/dashboards/{tid}", headers=cab_admin)
+
+
+def test_mover_de_carpeta_no_quita_la_certificacion(cliente, cab_admin, tablero):
+    """
+    Lo importante de que la carpeta viva en su propia columna. Si reordenar el
+    estante descertificara, el sello dejaria de significar nada porque nadie podria
+    mantenerlo puesto.
+    """
+    tid = tablero["id"]
+    cliente.post(f"/api/dashboards/{tid}/publicar", headers=cab_admin)
+    cert = cliente.post(f"/api/dashboards/{tid}/certificar", headers=cab_admin)
+    assert cert.json()["certificado"] is True
+
+    r = cliente.put(f"/api/dashboards/{tid}", headers=cab_admin,
+                    json={"carpeta": "Direccion"})
+    assert r.status_code == 200, r.text
+    assert r.json()["carpeta"] == "Direccion"
+    assert r.json()["certificado"] is True, "mover de carpeta no toca ninguna cifra"
+
+    # Renombrar tampoco: tampoco cambia una cifra.
+    n = cliente.put(f"/api/dashboards/{tid}", headers=cab_admin,
+                    json={"nombre": "Comercial (2026)"})
+    assert n.json()["certificado"] is True
+
+    # Cambiar la definicion, si.
+    d = dict(tablero["definicion"])
+    d["widgets"] = [dict(w) for w in d["widgets"]]
+    d["widgets"][0]["titulo"] = "Otro titulo"
+    e = cliente.put(f"/api/dashboards/{tid}", headers=cab_admin, json={"definicion": d})
+    assert e.json()["certificado"] is False, "cambiar las cifras si quita el sello"
+
+
+def test_la_carpeta_no_decide_quien_ve_que(cliente, cab_lector, cab_admin,
+                                           modelo_dash):
+    """
+    La carpeta **solo ordena**. Quien ve que lo siguen decidiendo el rol y el
+    publicado: un tablero sin publicar en una carpeta con nombre serio sigue siendo
+    invisible para un lector, y uno publicado sigue siendo visible aunque este en
+    una carpeta que se llame "Direccion".
+    """
+    cuerpo = _tablero_minimo(modelo_dash, carpeta="Direccion")
+    cuerpo["nombre"] = "carpeta_no_es_permiso"
+    tid = cliente.post("/api/dashboards", headers=cab_admin, json=cuerpo).json()["id"]
+
+    assert cliente.get(f"/api/dashboards/{tid}", headers=cab_lector).status_code == 404
+
+    cliente.post(f"/api/dashboards/{tid}/publicar", headers=cab_admin)
+    visto = cliente.get(f"/api/dashboards/{tid}", headers=cab_lector)
+    assert visto.status_code == 200, "publicado se ve, este en la carpeta que este"
+    assert visto.json()["carpeta"] == "Direccion"
+    cliente.delete(f"/api/dashboards/{tid}", headers=cab_admin)
+
+
+def test_el_estante_sale_ordenado_por_carpeta(cliente, cab_admin, modelo_dash):
+    creados = []
+    for nombre, carpeta in [("zb", "Ventas"), ("za", "Ventas"), ("zc", "Postventa")]:
+        cuerpo = _tablero_minimo(modelo_dash, carpeta=carpeta)
+        cuerpo["nombre"] = nombre
+        creados.append(cliente.post("/api/dashboards", headers=cab_admin,
+                                    json=cuerpo).json()["id"])
+
+    todos = cliente.get("/api/dashboards", headers=cab_admin).json()
+    mios = [(d["carpeta"], d["nombre"]) for d in todos if d["nombre"].startswith("z")]
+    assert mios == [("Postventa", "zc"), ("Ventas", "za"), ("Ventas", "zb")], mios
+
+    for tid in creados:
+        cliente.delete(f"/api/dashboards/{tid}", headers=cab_admin)

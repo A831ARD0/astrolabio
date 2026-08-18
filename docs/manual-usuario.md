@@ -994,6 +994,31 @@ silencio lo ya publicado.
 **Tableros → + Nuevo tablero.** Se arrastran widgets y se colocan a gusto: KPI,
 barras, líneas, pastel, tabla.
 
+### El estante: carpetas
+
+Los tableros se guardan en **carpetas**, y en la columna de la izquierda están todas
+con cuántos tienen dentro, más «Todos» y «Sin carpeta». El buscador de arriba busca
+por el nombre del tablero, por su carpeta y por su modelo.
+
+La carpeta se escribe al crear el tablero, y se cambia después en **Editar → Tablero →
+Carpeta**. Se teclea: si ya existe, se ofrece. No hay que crear la carpeta antes ni
+borrarla después — una carpeta existe mientras haya algo dentro.
+
+> **Una carpeta solo ordena. No da ni quita acceso a nada.**
+>
+> Esto es lo único importante que hay que saber de las carpetas. En Qlik un *stream*
+> es a la vez la carpeta y el permiso; aquí no. Quién ve qué lo siguen decidiendo el
+> **rol** y si el tablero está **publicado**: un lector no ve un borrador aunque esté
+> en una carpeta que se llame «Público», y sí ve uno publicado aunque esté en una que
+> se llame «Dirección».
+>
+> Si hace falta que un tablero lo vean solo unas personas, eso se hace con los roles y
+> las políticas por fila (capítulo 8), no metiéndolo en una carpeta.
+
+Mover un tablero de carpeta **no le quita la certificación**, y tampoco renombrarlo:
+ninguna de las dos cosas toca una cifra. Lo que sí quita el sello es cambiar lo que el
+tablero mide.
+
 Cada widget lleva dimensiones (por qué se desglosa) y métricas (qué se mide), y
 salen de listas del modelo. Cuando la lista es larga —noventa y seis métricas— tiene
 un buscador arriba: busca por el nombre que se ve, por el técnico y por la tabla, sin

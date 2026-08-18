@@ -117,6 +117,7 @@ class DefinicionDashboard(BaseModel):
 
 class CrearDashboard(BaseModel):
     nombre: str = Field(min_length=1, max_length=160)
+    carpeta: str = Field(default="", max_length=120)
     modelo_id: int
     version: int | None = None               # None = la vigente al crearlo
     definicion: DefinicionDashboard = DefinicionDashboard()
@@ -124,12 +125,14 @@ class CrearDashboard(BaseModel):
 
 class ActualizarDashboard(BaseModel):
     nombre: str | None = None
+    carpeta: str | None = Field(default=None, max_length=120)
     definicion: DefinicionDashboard | None = None
 
 
 class DashboardSalida(BaseModel):
     id: int
     nombre: str
+    carpeta: str
     modelo_id: int
     modelo_nombre: str
     version_modelo: int
@@ -166,7 +169,7 @@ def _salida(sesion: SesionDep, d: Dashboard) -> DashboardSalida:
         select(func.max(VersionModelo.version))
         .where(VersionModelo.modelo_id == v.modelo_id))
     return DashboardSalida(
-        id=d.id, nombre=d.nombre, modelo_id=v.modelo_id,
+        id=d.id, nombre=d.nombre, carpeta=d.carpeta, modelo_id=v.modelo_id,
         modelo_nombre=v.modelo.nombre, version_modelo=v.version,
         version_vigente_del_modelo=int(vigente or v.version),
         definicion=d.definicion, publicado=d.publicado,
@@ -279,7 +282,9 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
 
 @router.get("", response_model=list[DashboardSalida])
 def listar(sesion: SesionDep, usuario: UsuarioDep, solo_publicados: bool = False):
-    consulta = select(Dashboard).order_by(Dashboard.nombre)
+    # Por carpeta y luego por nombre: el estante sale ya ordenado, y quien monta la
+    # pantalla no tiene que reordenar cuarenta tableros en el navegador.
+    consulta = select(Dashboard).order_by(Dashboard.carpeta, Dashboard.nombre)
     # Un lector solo ve lo publicado: un borrador a medias no es una cifra que
     # nadie deba usar para decidir.
     if solo_publicados or usuario.rol == Rol.lector:
@@ -301,7 +306,8 @@ def crear(cuerpo: CrearDashboard, sesion: SesionDep,
     _revisar_widgets(cuerpo.definicion)
     v = _version(sesion, cuerpo.modelo_id, cuerpo.version)
 
-    d = Dashboard(nombre=cuerpo.nombre, version_modelo_id=v.id,
+    d = Dashboard(nombre=cuerpo.nombre, carpeta=cuerpo.carpeta.strip(),
+                  version_modelo_id=v.id,
                   definicion=cuerpo.definicion.model_dump(mode="json"),
                   creado_por=actor.id)
     sesion.add(d)
@@ -322,17 +328,26 @@ def actualizar(dashboard_id: int, cuerpo: ActualizarDashboard, sesion: SesionDep
         d.definicion = cuerpo.definicion.model_dump(mode="json")
     if cuerpo.nombre is not None:
         d.nombre = cuerpo.nombre
+    if cuerpo.carpeta is not None:
+        d.carpeta = cuerpo.carpeta.strip()
 
-    # Editar un tablero certificado le quita el sello: la certificacion dice
-    # "esto se reviso", y lo que se reviso ya no es esto.
+    # Cambiar la DEFINICION de un tablero certificado le quita el sello: la
+    # certificacion dice "estas cifras se revisaron", y lo que se reviso ya no es
+    # esto.
+    #
+    # Cambiarle el nombre o la carpeta, no. Ninguna de las dos toca una cifra, y si
+    # lo hicieran habria que descertificar el estante entero cada vez que alguien lo
+    # ordena — con lo que el sello dejaria de significar nada porque nadie podria
+    # mantenerlo puesto.
     perdio_sello = False
-    if d.certificado:
+    if d.certificado and cuerpo.definicion is not None:
         d.certificado = False
         perdio_sello = True
 
     registrar(sesion, accion="dashboard_actualizado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="dashboard", objeto_id=d.id,
               detalle={"widgets": len(d.definicion.get("widgets", [])),
+                       "carpeta": d.carpeta,
                        "perdio_certificacion": perdio_sello})
     return _salida(sesion, d)
 

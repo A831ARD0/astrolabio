@@ -324,7 +324,11 @@ export function useCampos(modeloId: number, version?: number) {
 export function useGuardarDashboard(id: number) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (v: { nombre?: string; definicion?: DefinicionDashboard }) =>
+    mutationFn: (v: {
+      nombre?: string
+      carpeta?: string
+      definicion?: DefinicionDashboard
+    }) =>
       api.put<DashboardResumen>(`/dashboards/${id}`, v),
     onSuccess: (d) => {
       qc.setQueryData(clavesDash.uno(id), d)
@@ -336,7 +340,7 @@ export function useGuardarDashboard(id: number) {
 export function useCrearDashboard() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (v: { nombre: string; modelo_id: number }) =>
+    mutationFn: (v: { nombre: string; carpeta?: string; modelo_id: number }) =>
       api.post<DashboardResumen>('/dashboards', v),
     onSuccess: () => qc.invalidateQueries({ queryKey: clavesDash.lista }),
   })
