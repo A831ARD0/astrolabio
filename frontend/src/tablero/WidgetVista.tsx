@@ -20,6 +20,7 @@ import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
 import { claveCol, cruzar } from './pivote'
+import { type Semaforo, evaluar, flecha, porque } from './semaforo'
 import {
   type Formato,
   type Total,
@@ -127,6 +128,8 @@ function WidgetDatos({
   const etiquetaDe = (c: string) => propias('etiquetas')[c]?.trim() || etiquetaModelo(c)
   const formatoDe = (m: string) =>
     (propias('formatos')[m] as Formato | undefined) ?? formatoModelo(m)
+  const semDe = (m: string) =>
+    (widget.semaforos as Record<string, Semaforo> | undefined)?.[m]
 
   if (datos.isLoading) return <div className="vacio chico">Consultando…</div>
   if (datos.isError) {
@@ -166,13 +169,13 @@ function WidgetDatos({
   if (widget.tipo === 'kpi') {
     return (
       <Kpi widget={widget} datos={datos.data} formatoDe={formatoDe}
-           etiquetaDe={etiquetaDe} />
+           etiquetaDe={etiquetaDe} semDe={semDe} />
     )
   }
   if (widget.tipo === 'tabla') {
     return (
       <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
-             metricas={widget.metricas}
+             metricas={widget.metricas} semDe={semDe}
              totalesDe={(m) =>
                (propias('totales_de')[m] as Total | undefined) ??
                totalPorOmision(formatoDe(m))} />
@@ -185,6 +188,7 @@ function WidgetDatos({
         datos={datos.data}
         etiquetaDe={etiquetaDe}
         formatoDe={formatoDe}
+        semDe={semDe}
         totalesDe={(m) =>
           (propias('totales_de')[m] as Total | undefined) ??
           totalPorOmision(formatoDe(m))}
@@ -207,16 +211,52 @@ function WidgetDatos({
 
 // --------------------------------------------------------------------------- //
 
+/**
+ * Una cifra con su semáforo, si lo tiene. La usan la tabla, la tabla dinámica y el
+ * KPI: si cada una pintara el suyo, tarde o temprano una diría verde donde otra dice
+ * rojo con el mismo dato.
+ */
+function Cifra({
+  valor,
+  formato,
+  sem,
+  fila,
+}: {
+  valor: unknown
+  formato: Formato
+  sem: Semaforo | undefined
+  /** La fila entera, para poder comparar contra otra métrica. */
+  fila?: Record<string, unknown>
+}) {
+  const texto = esNumero(valor) ? formatear(valor, formato) : '—'
+  const d = evaluar(valor, sem, fila)
+  if (!d) return <>{texto}</>
+
+  const conFondo = sem!.mostrar === 'fondo' || sem!.mostrar === 'ambos'
+  // La marca de «sin dato» se dibuja siempre, aunque se pidiera solo el fondo: es
+  // el caso en que el fondo solo no basta para que se note que no es un aprobado.
+  const conFlecha = sem!.mostrar !== 'fondo' || d === 'sin_dato'
+  return (
+    <span className={`sem ${d} ${conFondo ? 'con-fondo' : ''}`}
+          title={porque(d, sem!)}>
+      {texto}
+      {conFlecha && <span className="marca-sem">{flecha(d)}</span>}
+    </span>
+  )
+}
+
 function Kpi({
   widget,
   datos,
   formatoDe,
   etiquetaDe,
+  semDe,
 }: {
   widget: Widget
   datos: ResultadoConsulta
   formatoDe: (m: string) => Formato
   etiquetaDe: (c: string) => string
+  semDe: (m: string) => Semaforo | undefined
 }) {
   // Sin desglose la consulta trae una fila; con desglose se suman las filas,
   // porque un KPI es un total. Sumar aquí solo vale para métricas aditivas: por
@@ -227,14 +267,26 @@ function Kpi({
       0,
     )
 
+  // Los totales de TODAS las metricas, para que un semaforo pueda comparar una
+  // contra otra igual que en una fila de tabla: lo facturado contra su objetivo.
+  const fila = Object.fromEntries(widget.metricas.map((m) => [m, total(m)]))
+
   return (
     <div className={`kpi ${widget.metricas.length > 1 ? 'varios' : ''}`}>
-      {widget.metricas.map((m) => (
-        <div key={m} className="kpi-uno" title={exacto(total(m), formatoDe(m))}>
-          <div className="cifra">{compacto(total(m), formatoDe(m))}</div>
-          {widget.metricas.length > 1 && <div className="rotulo">{etiquetaDe(m)}</div>}
-        </div>
-      ))}
+      {widget.metricas.map((m) => {
+        const d = evaluar(total(m), semDe(m), fila)
+        return (
+          <div key={m} className="kpi-uno" title={exacto(total(m), formatoDe(m))}>
+            <div className={`cifra ${d ? `sem ${d}` : ''}`}>
+              {compacto(total(m), formatoDe(m))}
+              {d && semDe(m)!.mostrar !== 'fondo' && (
+                <span className="marca-sem">{flecha(d)}</span>
+              )}
+            </div>
+            {widget.metricas.length > 1 && <div className="rotulo">{etiquetaDe(m)}</div>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -254,12 +306,14 @@ function TablaDinamica({
   datos,
   etiquetaDe,
   formatoDe,
+  semDe,
   totalesDe,
 }: {
   widget: Widget
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
   formatoDe: (m: string) => Formato
+  semDe: (m: string) => Semaforo | undefined
   totalesDe: (m: string) => Total
 }) {
   const dims = widget.dimensiones ?? []
@@ -364,10 +418,18 @@ function TablaDinamica({
               ))}
               {cruce.columnas.map((c) =>
                 metricas.map((m) => {
-                  const v = f.celdas.get(claveCol(c))?.[m]
+                  const celda = f.celdas.get(claveCol(c))
+                  const v = celda?.[m]
                   return (
                     <td key={`${claveCol(c)}|${m}`} className="num">
-                      {v === undefined ? '' : formatear(v, formatoDe(m))}
+                      {v === undefined ? (
+                        ''
+                      ) : (
+                        // La fila del semaforo es la CELDA: comparar contra otra
+                        // metrica del mismo mes, no contra el total de la fila.
+                        <Cifra valor={v} formato={formatoDe(m)} sem={semDe(m)}
+                               fila={celda} />
+                      )}
                     </td>
                   )
                 }),
@@ -431,12 +493,14 @@ function Tabla({
   etiquetaDe,
   formatoDe,
   metricas,
+  semDe,
   totalesDe,
 }: {
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
   formatoDe: (m: string) => Formato
   metricas: string[]
+  semDe: (m: string) => Semaforo | undefined
   totalesDe: (m: string) => Total
 }) {
   const orden = useOrden(datos.filas, (f, c) => f[c])
@@ -469,8 +533,15 @@ function Tabla({
           {orden.filas.map((f, i) => (
             <tr key={i}>
               {datos.columnas.map((c) => (
-                <td key={c} className={esNumero(f[c]) ? 'num' : ''}>
-                  {esNumero(f[c]) ? formatear(f[c], formatoDe(c)) : String(f[c] ?? '—')}
+                // Una columna de métrica pasa siempre por `Cifra`, aunque venga
+                // vacía: si el nulo no llegara, una sucursal con objetivo y sin
+                // ventas se quedaría sin semáforo, que es como decir que va bien.
+                <td key={c} className={metricas.includes(c) ? 'num' : ''}>
+                  {metricas.includes(c) ? (
+                    <Cifra valor={f[c]} formato={formatoDe(c)} sem={semDe(c)} fila={f} />
+                  ) : (
+                    String(f[c] ?? '—')
+                  )}
                 </td>
               ))}
             </tr>

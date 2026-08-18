@@ -7,6 +7,24 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Semáforos: la flecha verde o roja al lado de una cifra.** Se pone por columna, en
+  tablas, tablas dinámicas y KPI. Se compara contra un objetivo fijo o contra otra
+  columna del mismo widget, y **la dirección se declara**: «más es mejor» no vale para
+  todo —los días que un auto lleva en inventario suben y eso está mal—, así que un
+  semáforo que pintara verde hacia arriba pondría en verde justo la columna que hay que
+  mirar. Si la columna es un porcentaje, el objetivo se escribe como se ve (`100`, no
+  `1`).
+
+  Siempre hay **flecha además de color**: uno de cada doce hombres no distingue verde
+  de rojo, y una cifra que solo se lee por el color no se lee.
+
+  Y el caso que más engaña: una sucursal **con objetivo y sin ninguna venta** no trae
+  cifra, así que no hay nada que comparar. Sale en ámbar con `?` y con la explicación
+  al pasar el ratón. Sin marcarla parecería neutral justo cuando es el peor caso de la
+  tabla —peor que quien vendió poco, que sale en rojo—, y pintarla como cero sería que
+  la pantalla decidiera que «sin filas» significa «cero», que es una decisión de la
+  métrica y no del semáforo.
+
 - **Tabla dinámica.** Un desglose en las filas y otro abierto en columnas: la matriz
   de «inventario por modelo y mes», que no se podía armar de ninguna otra forma. Con
   varias métricas la cabecera queda en dos pisos, hay columna de total por fila —se

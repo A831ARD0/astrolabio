@@ -249,6 +249,25 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
             if pivote is not None and pivote not in w.dimensiones:
                 errores.append(f"La tabla dinamica '{w.titulo or w.id}' abre en "
                                f"columnas '{pivote}', que no es uno de sus desgloses.")
+
+        # Un semaforo que compara contra una columna que no esta en el widget no
+        # pinta nada, y no pintar es indistinguible de "va bien".
+        semaforos = getattr(w, "semaforos", None)
+        if isinstance(semaforos, dict):
+            for columna, sem in semaforos.items():
+                if not isinstance(sem, dict):
+                    continue
+                if columna not in w.metricas:
+                    errores.append(
+                        f"El widget '{w.titulo or w.id}' tiene un semaforo en "
+                        f"'{columna}', que no es una de sus metricas.")
+                if sem.get("comparar") != "metrica":
+                    continue
+                contra = sem.get("metrica")
+                if contra not in w.metricas:
+                    errores.append(
+                        f"El semaforo de '{columna}' en '{w.titulo or w.id}' compara "
+                        f"contra '{contra}', que no es una metrica de este widget.")
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             {"errores": errores})

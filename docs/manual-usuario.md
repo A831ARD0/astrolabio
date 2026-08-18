@@ -1001,6 +1001,33 @@ acentos y por trozos en cualquier orden, así que `logro unid` encuentra
 «% Logro Unidades». Lo que ya está elegido no desaparece al buscar; si lo hiciera, no
 habría forma de quitarlo sin acordarse de cómo se llamaba.
 
+### Semáforos: la flecha verde o roja
+
+En las propiedades de una columna, **Semáforo → Poner semáforo**. Se compara contra
+un **objetivo fijo** (45 días, 100 %, 0) o contra **otra columna del mismo widget**
+(lo facturado contra su objetivo, el mes contra el anterior), y hay que decir **hacia
+dónde está bien**:
+
+- *Más es mejor* — un logro, unas unidades.
+- *Menos es mejor* — los días que un auto lleva en inventario, un gasto.
+
+Esa segunda opción es la razón de que la dirección se declare en vez de adivinarse.
+«Más es mejor» no vale para todo: 224 días en inventario contra un objetivo de 45 es
+el peor número de la tabla, y un semáforo que pintara verde hacia arriba lo pondría en
+verde. Si la columna es un porcentaje, el objetivo se escribe **como se ve** —`100`,
+no `1`—.
+
+Se puede mostrar la flecha, el fondo, o los dos. **Siempre hay flecha además de
+color**: uno de cada doce hombres no distingue verde de rojo, y una cifra que solo se
+lee por el color no se lee.
+
+Un caso que conviene conocer, porque es el que más engaña: **una sucursal con objetivo
+y sin ninguna venta**. No trae cifra —el hecho no tiene filas para ella—, así que no
+hay nada que comparar. Sale en **ámbar con `?`**, no en verde ni en rojo, y al pasar
+el ratón se explica. Dejarla sin marcar la haría parecer neutral justo cuando es el
+peor caso de la tabla, y pintarla como cero sería que la pantalla decidiera que «sin
+filas» significa «cero» — que es una decisión de la métrica, no del semáforo.
+
 ### La tabla dinámica: la matriz con los meses a lo ancho
 
 **Tipo → Tabla dinámica.** Lleva **dos desgloses**: uno se queda en las filas y otro

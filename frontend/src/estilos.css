@@ -873,6 +873,30 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 .filtro > header .btn { margin-left: auto; }
+/* Semáforos. El color dice el estado y la flecha lo repite: uno de cada doce
+   hombres no distingue verde de rojo, y una cifra que solo se lee por el color no
+   se lee. */
+.sem { display: inline-flex; align-items: center; gap: 5px; }
+.sem.con-fondo {
+  padding: 1px 5px;
+  border-radius: var(--r);
+}
+.sem.bueno { color: var(--ok); }
+.sem.malo { color: var(--critico); }
+.sem.igual { color: var(--texto-suave); }
+/* Hay objetivo y no hay cifra. Se marca en ambar y no en rojo: no es un dato malo,
+   es la ausencia del dato — pero tiene que verse, porque suele ser el peor caso. */
+.sem.sin_dato { color: var(--aviso); }
+.sem.sin_dato.con-fondo { background: var(--aviso-suave); }
+.sem.bueno.con-fondo { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+.sem.malo.con-fondo { background: color-mix(in srgb, var(--critico) 15%, transparent); }
+.sem.igual.con-fondo { background: var(--fondo-alto); }
+
+.marca-sem { font-size: 0.8em; line-height: 1; }
+
+/* En un KPI la flecha va al lado de la cifra grande, no debajo. */
+.kpi .cifra.sem { justify-content: center; }
+
 /* Tabla dinámica: la matriz con un desglose abierto a lo ancho. */
 .tabla-envoltura.pivote { display: flex; flex-direction: column; }
 .tabla-envoltura.pivote .aviso-orden {

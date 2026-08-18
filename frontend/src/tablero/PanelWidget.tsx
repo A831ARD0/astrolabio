@@ -16,6 +16,7 @@ import { useCampos } from '../api/hooks'
 import type { Hoja, TipoWidget, Widget } from '../api/tipos'
 import { coincide } from '../comunes/buscar'
 import { type Formato, type Total, totalPorOmision } from './formato'
+import { SEMAFORO_NUEVO, type Semaforo } from './semaforo'
 
 const TIPOS: { valor: TipoWidget; etiqueta: string }[] = [
   { valor: 'kpi', etiqueta: 'KPI — una cifra grande' },
@@ -334,6 +335,7 @@ function Elegidas({
   const etiquetas = mapaDe<string>(widget, 'etiquetas')
   const formatos = mapaDe<Formato>(widget, 'formatos')
   const totales = mapaDe<Total>(widget, 'totales_de')
+  const semaforos = mapaDe<Semaforo>(widget, 'semaforos')
 
   const mover = (i: number, paso: -1 | 1) => {
     const j = i + paso
@@ -432,6 +434,22 @@ function Elegidas({
                   </div>
                   )}
 
+                  {!soloEtiqueta && (
+                    <EditorSemaforo
+                      clave={c}
+                      formato={formato}
+                      otras={claves.filter((x) => x !== c)}
+                      etiquetaDe={etiquetaBase}
+                      sem={semaforos[c]}
+                      alCambiar={(s) => {
+                        const copia = { ...semaforos }
+                        if (s === undefined) delete copia[c]
+                        else copia[c] = s
+                        alCambiar({ semaforos: copia } as Partial<Widget>)
+                      }}
+                    />
+                  )}
+
                   {conTotales && (
                     <div className="campo">
                       <label>Fila de totales</label>
@@ -462,6 +480,133 @@ function Elegidas({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/**
+ * El semáforo de una columna: contra qué se compara y hacia dónde está bien.
+ *
+ * El umbral se teclea **en las unidades que se ven**. Si la columna es un
+ * porcentaje, quien la configura escribe `100` y no `1`: pedirle que traduzca a la
+ * unidad interna es la forma más segura de acabar con un semáforo en verde a un 1 %
+ * de logro.
+ */
+function EditorSemaforo({
+  clave,
+  formato,
+  otras,
+  etiquetaDe,
+  sem,
+  alCambiar,
+}: {
+  clave: string
+  formato: Formato
+  /** Las demás columnas del widget: se puede comparar contra una de ellas. */
+  otras: string[]
+  etiquetaDe: (clave: string) => string
+  sem: Semaforo | undefined
+  alCambiar: (s: Semaforo | undefined) => void
+}) {
+  const esPct = formato === 'porcentaje'
+  const factor = esPct ? 100 : 1
+
+  return (
+    <div className="campo">
+      <label>Semáforo</label>
+      {!sem ? (
+        <button className="btn" onClick={() => alCambiar({ ...SEMAFORO_NUEVO })}>
+          Poner semáforo
+        </button>
+      ) : (
+        <>
+          <select
+            value={sem.comparar}
+            onChange={(e) =>
+              alCambiar({
+                ...sem,
+                comparar: e.target.value as Semaforo['comparar'],
+                // Al pasar a comparar contra otra columna se propone la primera:
+                // dejarlo vacío haría que el semáforo dejara de pintar sin decir
+                // por qué.
+                metrica: e.target.value === 'metrica' ? otras[0] : sem.metrica,
+              })
+            }
+          >
+            <option value="valor">Contra un objetivo fijo</option>
+            <option value="metrica" disabled={otras.length === 0}>
+              Contra otra columna
+            </option>
+          </select>
+
+          {sem.comparar === 'valor' ? (
+            <div className="fila" style={{ marginTop: 6 }}>
+              <input
+                type="number"
+                step="any"
+                value={sem.objetivo === undefined ? '' : sem.objetivo * factor}
+                onChange={(e) =>
+                  alCambiar({
+                    ...sem,
+                    objetivo:
+                      e.target.value === ''
+                        ? undefined
+                        : Number(e.target.value) / factor,
+                  })
+                }
+              />
+              {esPct && <span className="chico tenue" style={{ alignSelf: 'center' }}>%</span>}
+            </div>
+          ) : (
+            <select
+              style={{ marginTop: 6 }}
+              value={sem.metrica ?? ''}
+              onChange={(e) => alCambiar({ ...sem, metrica: e.target.value })}
+            >
+              {otras.map((o) => (
+                <option key={o} value={o}>
+                  {etiquetaDe(o)}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <select
+            style={{ marginTop: 6 }}
+            value={sem.bueno}
+            onChange={(e) =>
+              alCambiar({ ...sem, bueno: e.target.value as Semaforo['bueno'] })
+            }
+          >
+            <option value="mayor">Más es mejor (verde arriba)</option>
+            <option value="menor">Menos es mejor (verde abajo)</option>
+          </select>
+          <span className="chico tenue">
+            «Más es mejor» no vale para todo: los días que un auto lleva en
+            inventario suben y eso está mal. Aquí es donde se dice.
+          </span>
+
+          <select
+            style={{ marginTop: 6 }}
+            value={sem.mostrar}
+            onChange={(e) =>
+              alCambiar({ ...sem, mostrar: e.target.value as Semaforo['mostrar'] })
+            }
+          >
+            <option value="ambos">Flecha y fondo</option>
+            <option value="flecha">Solo la flecha</option>
+            <option value="fondo">Solo el fondo</option>
+          </select>
+
+          <button
+            className="btn"
+            style={{ marginTop: 6 }}
+            onClick={() => alCambiar(undefined)}
+          >
+            Quitar el semáforo de «{etiquetaDe(clave)}»
+          </button>
+        </>
+      )}
     </div>
   )
 }

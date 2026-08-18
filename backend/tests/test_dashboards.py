@@ -563,3 +563,76 @@ def test_la_tabla_dinamica_consulta_igual_que_las_demas(cliente, cab_admin,
     combos = {(f["dim_vehiculo.segmento"], f["dim_calendario.mes"]) for f in filas}
     assert len(combos) == len(filas), "el motor ya agrupo: no hay combos repetidos"
     assert len({c[1] for c in combos}) > 1, "hace falta mas de un mes para cruzar"
+
+
+# --------------------------------------------------------------------------- #
+# Semaforos
+# --------------------------------------------------------------------------- #
+
+def _con_semaforo(modelo_id: int, sem: dict, metricas=None) -> dict:
+    cuerpo = _tablero_minimo(modelo_id)
+    cuerpo["nombre"] = "semaforos"
+    cuerpo["definicion"]["widgets"].append({
+        "id": "s1", "tipo": "tabla", "titulo": "Logro",
+        "posicion": {"x": 0, "y": 8, "ancho": 12, "alto": 6},
+        "dimensiones": ["cat_sucursal.sucursal_nombre"],
+        "metricas": metricas if metricas is not None
+        else ["unidades_vendidas", "objetivo_unidades"],
+        "semaforos": sem})
+    return cuerpo
+
+
+def test_un_semaforo_se_guarda_con_su_direccion(cliente, cab_admin, modelo_dash):
+    """
+    La direccion es el dato que no se puede adivinar: los dias en inventario suben
+    y eso esta mal.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=_con_semaforo(
+        modelo_dash,
+        {"unidades_vendidas": {"comparar": "metrica",
+                               "metrica": "objetivo_unidades",
+                               "bueno": "mayor", "mostrar": "ambos"}}))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "s1")
+    assert w["semaforos"]["unidades_vendidas"]["bueno"] == "mayor"
+    assert w["semaforos"]["unidades_vendidas"]["metrica"] == "objetivo_unidades"
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_un_semaforo_contra_un_objetivo_fijo_se_guarda(cliente, cab_admin,
+                                                       modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=_con_semaforo(
+        modelo_dash,
+        {"unidades_vendidas": {"comparar": "valor", "objetivo": 45,
+                               "bueno": "menor", "mostrar": "flecha"}}))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "s1")
+    assert w["semaforos"]["unidades_vendidas"]["objetivo"] == 45
+    assert w["semaforos"]["unidades_vendidas"]["bueno"] == "menor"
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_un_semaforo_sobre_una_metrica_que_no_esta_se_rechaza(cliente, cab_admin,
+                                                              modelo_dash):
+    """
+    No pintar nada es indistinguible de "va bien", que es el peor fallo posible en
+    un semaforo.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=_con_semaforo(
+        modelo_dash,
+        {"monto_utilidad": {"comparar": "valor", "objetivo": 0,
+                            "bueno": "mayor", "mostrar": "ambos"}}))
+    assert r.status_code == 422, r.text
+    assert "no es una de sus metricas" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_un_semaforo_que_compara_contra_una_metrica_ausente_se_rechaza(
+        cliente, cab_admin, modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin, json=_con_semaforo(
+        modelo_dash,
+        {"unidades_vendidas": {"comparar": "metrica", "metrica": "monto_venta",
+                               "bueno": "mayor", "mostrar": "ambos"}},
+        metricas=["unidades_vendidas"]))
+    assert r.status_code == 422, r.text
+    assert "no es una metrica de este widget" in " ".join(
+        r.json()["detail"]["errores"])
