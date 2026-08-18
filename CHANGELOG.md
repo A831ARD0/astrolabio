@@ -7,6 +7,24 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Un widget avisa cuando le faltan filas.** Banda ámbar encima del dato: «Faltan
+  filas. Se alcanzó el máximo de N filas y hay más. Lo que se ve es una parte, y los
+  totales son los de esa parte.» No se puede cerrar mientras la tabla esté cortada.
+
+  El motor lo sabe con exactitud porque pide **una fila más** de las que enseña, y la
+  descarta. Contando las que vuelven no se distingue «justo caben mil» de «hay diez mil
+  y se cortaron en mil», y en pantalla esas dos cosas se parecen tanto que nadie mira el
+  número dos veces. La respuesta de `/consultar` trae `truncado`, y queda en auditoría.
+
+- **El escenario que lo destapó: en una tabla dinámica el límite contaba filas
+  equivocadas.** El usuario escribe filas de la tabla que ve; el motor limitaba filas
+  planas, una por cada cruce de fila y columna. Con 36 sucursales, 127 meses y un
+  máximo de mil, salían **8 sucursales** y una tabla con toda la pinta de estar entera.
+  Ahora la dinámica averigua primero cuántas columnas va a abrir —con los mismos
+  filtros, porque los meses que quedan tras una selección son los que saldrán— y pide
+  las filas planas que hacen falta. El mismo tablero pasó de 8 a las 36 sucursales que
+  tienen venta, y los totales por mes de 774 a 3 522.
+
 - **El estante: los tableros se guardan en carpetas.** Columna de carpetas a la
   izquierda con la cuenta de cada una, «Todos» y «Sin carpeta»; buscador por nombre,
   carpeta y modelo; y al ver todo el estante los resultados se agrupan por carpeta. La

@@ -17,7 +17,7 @@ import threading
 import time
 from collections.abc import Iterable
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import duckdb
@@ -178,16 +178,29 @@ class Resultado:
     sql: str
     ms: float
     politicas_aplicadas: list[str]
+    #: Si el limite dejo filas fuera. Una tabla recortada que no dice que lo esta
+    #: es la peor clase de error: se lee como completa, se suma y se firma.
+    truncado: bool = False
 
 
 def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
                       ctx: ContextoUsuario) -> Resultado:
-    """Compila y ejecuta. Siempre pasa por la capa de politicas."""
+    """
+    Compila y ejecuta. Siempre pasa por la capa de politicas.
+
+    Se pide **una fila mas** que el limite para poder responder si sobraba. Es la
+    unica manera exacta de saberlo: contando las que vuelven no se distingue
+    "justo caben mil" de "hay diez mil y se cortaron en mil", y esas dos cosas se
+    parecen tanto en pantalla que sin distinguirlas nadie mira el numero dos
+    veces. La fila de sobra se descarta; nunca sale de aqui.
+    """
     preparar(modelo)
     capa = CapaPoliticas(modelo, modelo.politicas)
     predicados = capa.resolver(ctx)               # <- el gancho, sin excepcion
 
-    compilada = Compilador(modelo).compilar(consulta, predicados)
+    tope = consulta.limite
+    compilada = Compilador(modelo).compilar(
+        replace(consulta, limite=tope + 1), predicados)
 
     t0 = time.perf_counter()
     cur = conexion().execute(compilada.sql, compilada.parametros)
@@ -195,9 +208,14 @@ def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
     filas = [dict(zip(columnas, f)) for f in cur.fetchall()]
     ms = (time.perf_counter() - t0) * 1000
 
+    truncado = len(filas) > tope
+    if truncado:
+        del filas[tope:]
+
     return Resultado(
         columnas=columnas, filas=filas, sql=compilada.sql, ms=round(ms, 1),
         politicas_aplicadas=[p.politica for p in predicados],
+        truncado=truncado,
     )
 
 

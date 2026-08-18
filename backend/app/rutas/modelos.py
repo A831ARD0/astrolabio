@@ -1252,10 +1252,14 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
                        "metricas": cuerpo.metricas, "ms": res.ms,
                        "filas": len(res.filas), "version": v.version,
                        "filtros": len(cuerpo.filtros),
+                       "truncado": res.truncado,
                        "politicas": res.politicas_aplicadas})
 
     return {
         "columnas": res.columnas, "filas": res.filas, "ms": res.ms,
+        # Que el limite dejo filas fuera. Va en la respuesta y no solo en el log:
+        # quien mira la cifra tiene que saberlo antes de usarla, no despues.
+        "truncado": res.truncado,
         "politicas_aplicadas": res.politicas_aplicadas,
         # El SQL se devuelve solo a quien puede leerlo con provecho.
         "sql": res.sql if usuario.rol in (Rol.administrador, Rol.editor) else None,

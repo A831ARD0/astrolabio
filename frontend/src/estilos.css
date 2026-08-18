@@ -2155,3 +2155,18 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
 .react-flow__edge.apagada .react-flow__edge-text,
 .react-flow__edge.apagada .react-flow__edge-textbg { opacity: 0; }
 .react-flow__edge { transition: opacity 0.12s ease; }
+
+/* La banda de «faltan filas». Va pegada arriba del dato y no se puede cerrar:
+   mientras la tabla este cortada, el aviso esta. Ambar y no rojo porque no es un
+   fallo —el numero que se ve es correcto— sino incompleto. */
+.recortado {
+  margin: 0;
+  padding: 7px 10px;
+  background: var(--aviso-suave);
+  color: var(--aviso);
+  border-bottom: 1px solid var(--aviso);
+  font-size: 12px;
+  line-height: 1.45;
+  flex: 0 0 auto;
+}
+.recortado strong { color: var(--aviso); }

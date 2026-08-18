@@ -732,3 +732,50 @@ def test_el_estante_sale_ordenado_por_carpeta(cliente, cab_admin, modelo_dash):
 
     for tid in creados:
         cliente.delete(f"/api/dashboards/{tid}", headers=cab_admin)
+
+
+# --------------------------------------------------------------------------- #
+# El limite dice cuando corta
+#
+# Una tabla recortada que no dice que lo esta se lee como completa. Es peor que un
+# error: un error se ve y se arregla, y esto se firma.
+# --------------------------------------------------------------------------- #
+
+
+def _consultar(cliente, cab, modelo_id, **extra):
+    cuerpo = {"dimensiones": ["cat_sucursal.sucursal_nombre"],
+              "metricas": ["monto_venta"], **extra}
+    r = cliente.post(f"/api/modelos/{modelo_id}/consultar", headers=cab, json=cuerpo)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_una_consulta_que_cabe_no_dice_que_se_corto(cliente, cab_admin, modelo_dash):
+    entero = _consultar(cliente, cab_admin, modelo_dash, limite=5000)
+    assert entero["truncado"] is False
+    assert len(entero["filas"]) > 1, "hace falta mas de una fila para la prueba"
+
+
+def test_una_consulta_recortada_lo_dice_y_devuelve_justo_el_limite(
+        cliente, cab_admin, modelo_dash):
+    entero = _consultar(cliente, cab_admin, modelo_dash, limite=5000)
+    n = len(entero["filas"])
+
+    corto = _consultar(cliente, cab_admin, modelo_dash, limite=n - 1)
+    assert corto["truncado"] is True, "dejo filas fuera y no lo dijo"
+    assert len(corto["filas"]) == n - 1, "el limite es el limite, ni una mas"
+
+
+def test_el_limite_exacto_no_se_confunde_con_un_recorte(cliente, cab_admin,
+                                                        modelo_dash):
+    """
+    El caso que separa contar de saber: pedir exactamente las filas que hay.
+    Contando las que vuelven, esto es indistinguible de un recorte; por eso se
+    pide una fila mas de la que se ensena.
+    """
+    entero = _consultar(cliente, cab_admin, modelo_dash, limite=5000)
+    n = len(entero["filas"])
+
+    justo = _consultar(cliente, cab_admin, modelo_dash, limite=n)
+    assert len(justo["filas"]) == n
+    assert justo["truncado"] is False, "caben justas: no se corto nada"

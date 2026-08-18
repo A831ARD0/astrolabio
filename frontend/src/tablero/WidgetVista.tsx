@@ -166,47 +166,104 @@ function WidgetDatos({
     return <div className="vacio chico">Sin datos para la selección actual.</div>
   }
 
+  // Un recorte se avisa SIEMPRE y encima del dato, no en un pie ni en un tooltip.
+  // Lo que hay debajo es una cifra parcial con toda la pinta de estar completa, y
+  // es la clase de número que acaba en una junta.
+  const aviso = datos.data.truncado ? (
+    <Recortado widget={widget} datos={datos.data} />
+  ) : null
+
   if (widget.tipo === 'kpi') {
     return (
-      <Kpi widget={widget} datos={datos.data} formatoDe={formatoDe}
-           etiquetaDe={etiquetaDe} semDe={semDe} />
+      <>
+        {aviso}
+        <Kpi widget={widget} datos={datos.data} formatoDe={formatoDe}
+             etiquetaDe={etiquetaDe} semDe={semDe} />
+      </>
     )
   }
   if (widget.tipo === 'tabla') {
     return (
-      <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
-             metricas={widget.metricas} semDe={semDe}
-             totalesDe={(m) =>
-               (propias('totales_de')[m] as Total | undefined) ??
-               totalPorOmision(formatoDe(m))} />
+      <>
+        {aviso}
+        <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
+               metricas={widget.metricas} semDe={semDe}
+               totalesDe={(m) =>
+                 (propias('totales_de')[m] as Total | undefined) ??
+                 totalPorOmision(formatoDe(m))} />
+      </>
     )
   }
   if (widget.tipo === 'tabla_dinamica') {
     return (
-      <TablaDinamica
-        widget={widget}
-        datos={datos.data}
-        etiquetaDe={etiquetaDe}
-        formatoDe={formatoDe}
-        semDe={semDe}
-        totalesDe={(m) =>
-          (propias('totales_de')[m] as Total | undefined) ??
-          totalPorOmision(formatoDe(m))}
-      />
+      <>
+        {aviso}
+        <TablaDinamica
+          widget={widget}
+          datos={datos.data}
+          etiquetaDe={etiquetaDe}
+          formatoDe={formatoDe}
+          semDe={semDe}
+          totalesDe={(m) =>
+            (propias('totales_de')[m] as Total | undefined) ??
+            totalPorOmision(formatoDe(m))}
+        />
+      </>
     )
   }
   if (TIPOS_GRAFICO.includes(widget.tipo)) {
     return (
-      <Grafico
-        widget={widget}
-        datos={datos.data}
-        formatoMetrica={formatoDe}
-        etiquetaMetrica={etiquetaDe}
-        alSeleccionar={alAlternar}
-      />
+      <>
+        {aviso}
+        <Grafico
+          widget={widget}
+          datos={datos.data}
+          formatoMetrica={formatoDe}
+          etiquetaMetrica={etiquetaDe}
+          alSeleccionar={alAlternar}
+        />
+      </>
     )
   }
   return <div className="vacio chico">Tipo de widget desconocido.</div>
+}
+
+// --------------------------------------------------------------------------- //
+
+/**
+ * La banda que avisa de que lo de abajo está recortado.
+ *
+ * Dice **por qué** y **qué hacer**, porque «se alcanzó el límite» sin más deja a
+ * quien lo lee con la misma duda con la que empezó: si el total que ve es el total.
+ * No se puede cerrar: mientras la tabla esté cortada, el aviso está.
+ */
+function Recortado({
+  widget,
+  datos,
+}: {
+  widget: Widget
+  datos: ResultadoConsulta
+}) {
+  const cols = datos.ancho_pivote
+  return (
+    <div className="recortado" role="status">
+      <strong>Faltan filas.</strong>{' '}
+      {cols && cols > 1 ? (
+        <>
+          El cruce abre {cols} columnas, así que cada fila de la tabla cuesta {cols}{' '}
+          filas de datos y el máximo se agotó antes de terminar. Sube «Máximo de
+          filas» o reduce las columnas —filtrando el desglose que se abre— y las que
+          faltan aparecerán.
+        </>
+      ) : (
+        <>
+          Se alcanzó el máximo de {widget.limite ?? 1000} filas y hay más. Lo que se
+          ve es una parte, y los totales son los de esa parte. Sube el máximo o
+          filtra para que quepa.
+        </>
+      )}
+    </div>
+  )
 }
 
 // --------------------------------------------------------------------------- //

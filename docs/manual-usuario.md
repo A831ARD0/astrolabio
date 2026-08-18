@@ -1108,6 +1108,25 @@ porcentajes de cada fila.
 El total es de **las filas que se trajeron**. Si el widget tiene un máximo de filas y
 se alcanzó, es el total de ésas.
 
+### «Faltan filas»
+
+Si un widget alcanza su **Máximo de filas** y había más, aparece una banda ámbar encima
+del dato:
+
+> **Faltan filas.** Se alcanzó el máximo de 10 filas y hay más. Lo que se ve es una
+> parte, y los totales son los de esa parte. Sube el máximo o filtra para que quepa.
+
+No se puede cerrar: mientras la tabla esté cortada, el aviso está. Una tabla recortada
+que no dice que lo está se lee como completa, se suma y se firma, y eso es peor que un
+error —un error se ve.
+
+En una **tabla dinámica** el aviso dice algo distinto, porque el motivo es otro: cada
+fila de la tabla cuesta tantas filas de datos como columnas abra el cruce. Sube el
+máximo, o reduce las columnas filtrando el desglose que se abre.
+
+El «Máximo de filas» siempre significa **filas de la tabla que ves**, también en la
+dinámica: el cálculo de cuántas filas de datos hacen falta se hace por dentro.
+
 ### Hojas: un tablero es un libro
 
 Un tablero tiene **hojas**, como un libro, y se cambia de una a otra en la barra de

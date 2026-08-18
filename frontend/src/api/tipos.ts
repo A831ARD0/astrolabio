@@ -326,6 +326,17 @@ export interface ResultadoConsulta {
   ms: number
   politicas_aplicadas: string[]
   sql: string | null
+  /**
+   * Que el límite dejó filas fuera. El motor lo sabe con exactitud porque pide una
+   * fila más de las que enseña; no es una suposición hecha contando.
+   */
+  truncado: boolean
+  /**
+   * Solo en una tabla dinámica: cuántas columnas va a tener el cruce. Es con lo que
+   * se calculó el límite de filas planas que se pidió, y se guarda para poder
+   * explicarlo si aun así se cortó.
+   */
+  ancho_pivote?: number
 }
 
 export interface CampoCatalogo {
