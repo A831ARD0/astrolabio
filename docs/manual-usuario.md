@@ -1176,8 +1176,20 @@ cuándo— para que una tabla que alguien manda por correo siga diciendo de dón
 ### La hoja entera en PDF
 
 El botón **PDF** de la barra de arriba saca la hoja que estás viendo como informe,
-con los filtros puestos. Abre el diálogo de impresión del navegador; ahí eliges
-«Guardar como PDF» —o una impresora, si es para papel.
+con los filtros puestos, y da dos formas:
+
+**Una sola hoja.** Para presentar o mandar por correo. Una única página, del alto
+que haga falta y todo lo ancha que necesite la hoja, con **todo dentro**: nada
+queda cortado ni partido entre dos páginas porque no hay dos páginas. Es la que
+quieres para proyectar.
+
+**Páginas A4.** Para papel. Se pagina en apaisado; una tabla larga sigue en la
+página siguiente repitiendo sus encabezados, y la fila de totales sale una sola vez
+y al final.
+
+Las dos abren el diálogo del navegador: ahí eliges **«Guardar como PDF»** —o una
+impresora, si es para papel—. Deja los márgenes y la escala como vienen: la medida
+de la página ya la trae el documento.
 
 El informe empieza por una cabecera que solo existe en el PDF: el nombre del
 tablero, la hoja, **los filtros aplicados**, el modelo y su versión, y quién lo
@@ -1185,18 +1197,18 @@ emitió y cuándo. Es lo mismo que lleva la hoja de procedencia del Excel, y por
 mismo: un PDF que circula por correo tiene que poder decir de qué mes es sin que
 nadie tenga que preguntarlo.
 
-Lo que se imprime es **la hoja activa**, tal como se ve. Los widgets conservan su
-sitio, una tabla larga sigue en la página siguiente repitiendo sus encabezados, y
-la fila de totales se imprime una sola vez y al final. El informe sale siempre en
-claro aunque tengas la pantalla en oscuro.
+Sale **la hoja activa** —si el tablero tiene varias, cambia de pestaña y saca cada
+una—, con sus widgets en el sitio donde los pusiste y en la paleta clara aunque
+tengas la pantalla en oscuro.
 
 Dos cosas que conviene saber:
 
-- **En papel va lo que el widget cargó.** Si a una tabla le faltan filas, se
-  imprime también su aviso ámbar, así que el PDF lo dice; pero para el detalle
-  completo lo que hay es el Excel del widget, que se trae hasta 50 000 filas.
-- **Un gráfico se imprime como imagen**, escalado. El texto de las tablas, en
-  cambio, es texto de verdad: se puede buscar y copiar del PDF.
+- **Va lo que el widget cargó.** Si a una tabla le faltan filas, el aviso ámbar sale
+  con ella, así que el PDF lo dice; pero para el detalle completo lo que hay es el
+  Excel del widget, que se trae hasta 50 000 filas.
+- El texto de las tablas es **texto de verdad**: se puede buscar y copiar del PDF.
+  Los gráficos se redibujan al tamaño que les toca en el informe, así que las
+  etiquetas que en pantalla salían recortadas se leen enteras.
 
 ---
 

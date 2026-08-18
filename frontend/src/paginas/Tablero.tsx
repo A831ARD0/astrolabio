@@ -535,13 +535,16 @@ export function Tablero() {
                 <div
                   key={w.id}
                   className={`widget ${elegido === w.id && editando ? 'sel' : ''}`}
-                  // La posicion en la rejilla, tambien como variables CSS: al
-                  // imprimir, la rejilla se rearma con `grid` y necesita saber la
-                  // columna y el ancho de cada widget. En pantalla no se usan.
+                  // La posicion en la rejilla, tambien como variables CSS: en el
+                  // informe la rejilla se rearma con `grid` y necesita saber la
+                  // columna y el ancho de cada widget, y el alto para darselo a un
+                  // grafico, que sin alto de rejilla no tiene ninguno. En pantalla
+                  // no se usan.
                   style={
                     {
                       '--gx': w.posicion.x,
                       '--gw': w.posicion.ancho,
+                      '--gh': w.posicion.alto,
                     } as CSSProperties
                   }
                   onMouseDown={() => editando && setElegido(w.id)}

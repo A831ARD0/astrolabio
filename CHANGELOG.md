@@ -7,11 +7,20 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
-- **La hoja entera en PDF, como informe.** Botón **PDF** en la barra del tablero:
-  imprime la hoja activa con los filtros puestos, encabezada por una portada que solo
-  existe en el papel —tablero, hoja, filtros aplicados, modelo y versión, quién la
-  emitió y cuándo—. Es la misma procedencia que lleva el Excel, y por lo mismo: un PDF
-  que circula por correo tiene que poder decir de qué mes es.
+- **La hoja entera en PDF, como informe, en una sola página o en A4.** Botón **PDF**
+  en la barra del tablero: saca la hoja activa con los filtros puestos, encabezada por
+  una portada que solo existe en el documento —tablero, hoja, filtros aplicados, modelo
+  y versión, quién lo emitió y cuándo—. Es la misma procedencia que lleva el Excel, y
+  por lo mismo: un PDF que circula por correo tiene que poder decir de qué mes es.
+
+  **Una sola hoja** es la de presentar: una única página del alto que haga falta, con
+  todo dentro y sin un solo corte, porque no hay dos páginas entre las que partir nada.
+  El alto se mide de verdad —se enciende el diseño del informe, se deja que los
+  gráficos se recoloquen y se pregunta al navegador cuánto ocupa— y se le escribe a
+  `@page`. Va con ocho píxeles de holgura: la maquetación de impresión no redondea
+  igual que la de pantalla, y con la medida exacta sobraba una fracción de píxel que
+  se llevaba una segunda página en blanco. Si la hoja pasa de las 200 pulgadas que
+  admite el navegador se dice y se ofrece A4, en vez de entregar un PDF cortado.
 
   Lo hace el navegador y no el servidor: el navegador ya tiene la hoja dibujada, con
   sus gráficos y sus colores, y sale texto de verdad en vez de una imagen. Un PDF
