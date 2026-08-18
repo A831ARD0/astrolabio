@@ -32,6 +32,12 @@ import sqlglot.expressions as exp
 import yaml
 
 from semantic.formula import COL_ANIO, COL_PERIODO
+
+#: Columna que dice con que mes se calcularon las metricas de tiempo cuando el mes
+#: no estaba en el desglose. Se quita de las filas antes de devolverlas —no es un
+#: dato pedido— pero viaja hasta arriba porque quien lee la cifra tiene derecho a
+#: saber de que mes es, sobre todo cuando no lo eligio nadie.
+COL_MES_USADO = "__mes_usado"
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
 from semantic.formula import Compuesta, MARCA_CAPA, compilar_compuesta
@@ -1140,9 +1146,91 @@ class Compilador:
 
         return _resolver_ventanas(sql, periodo, anio, otras)
 
+    #: Operadores que se aceptan en un filtro. Uno solo, en un sitio solo.
+    OPS = {"=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN"}
+
+    def _predicados_sql(self, filtros: list[dict], prefijo: str,
+                        ) -> tuple[list[str], list]:
+        """
+        Los filtros escritos contra columnas ya calculadas —`"ent.col"`—, no contra
+        las tablas. Sirve para volver a aplicarlos una capa mas arriba.
+        """
+        donde: list[str] = []
+        params: list = []
+        for f in filtros:
+            col = f"{prefijo}{_cita(str(f['campo']))}"
+            op = str(f["op"]).upper()
+            if op not in self.OPS:
+                raise ErrorModelo(f"Operador no soportado: {f['op']}")
+            if op == "IN":
+                valores = list(f["valor"])
+                donde.append(f"{col} IN ({', '.join('?' for _ in valores)})")
+                params.extend(valores)
+            else:
+                donde.append(f"{col} {op} ?")
+                params.append(f["valor"])
+        return donde, params
+
+    def _mes_del_contexto(
+        self, c: Consulta, dims: list[tuple[str, str]], con_ventana: bool,
+    ) -> tuple[tuple[str, str] | None, list[dict], list[dict], list[tuple[str, str]]]:
+        """
+        De donde sale «el mes actual» cuando la tabla no lleva una columna de meses.
+
+        Una metrica de tiempo necesita meses para poder mirar al de al lado. Si el
+        desglose los trae, cada fila es su propio mes y no hay nada que decidir. Si
+        no los trae —una tabla de una fila por sucursal, con «Ventas Mes Anterior»
+        al lado, que es como se lee un informe de verdad— el mes lo pone el
+        **contexto**: se mete la columna de meses en la capa de dentro, escondida,
+        donde la ventana si puede calcular, y arriba se deja unicamente el mes que
+        manda. Es lo que hace Power BI, donde el periodo sale del filtro de la
+        pagina y no de las filas de la tabla.
+
+        Cual manda: el **maximo** de los meses que sobreviven a los filtros. Con un
+        mes filtrado, ese; con un año filtrado, su ultimo mes; sin filtro de fecha
+        ninguno, el ultimo mes con datos. Los filtros de fecha se levantan de la
+        capa de dentro —si no, no habria mes anterior que mirar, igual que `TODO()`
+        levanta un filtro en DAX— y se vuelven a aplicar solo para elegir el mes.
+
+        Devuelve `(mes escondido, filtros de fecha, filtros para el CTE, dims de
+        dentro)`. Con `mes escondido = None` nada cambia respecto de siempre.
+        """
+        if not con_ventana:
+            return None, [], c.filtros, dims
+
+        def grano(e: str, col: str) -> str | None:
+            ent = self.m.entidades.get(e)
+            campo = ent.campos.get(col) if ent else None
+            return campo.grano_tiempo if campo else None
+
+        # Si el desglose ya trae los meses, esto no pinta nada: manda la fila.
+        if any(grano(e, col) == "mes" for e, col in dims):
+            return None, [], c.filtros, dims
+
+        meses = [(e.nombre, cc.nombre) for e in self.m.entidades.values()
+                 for cc in e.campos.values() if cc.grano_tiempo == "mes"]
+        # Con ninguna o con varias no se puede elegir por nadie. Se deja seguir para
+        # que `_con_tiempo` lo cuente con su mensaje, que ya dice cual falta.
+        if len(meses) != 1:
+            return None, [], c.filtros, dims
+
+        mes = meses[0]
+        periodo = [f for f in c.filtros
+                   if grano(*str(f["campo"]).split(".", 1)) is not None]
+        resto = [f for f in c.filtros if f not in periodo]
+
+        # Las columnas de esos filtros bajan tambien como dimensiones escondidas:
+        # sin ellas no se pueden volver a aplicar arriba para elegir el mes.
+        dentro = list(dims)
+        for campo in [mes] + [tuple(str(f["campo"]).split(".", 1)) for f in periodo]:
+            if campo not in dentro:
+                dentro.append(campo)  # type: ignore[arg-type]
+        return mes, periodo, resto, dentro
+
     def compilar(self, c: Consulta,
                  predicados: list | None = None) -> ConsultaCompilada:
-        dims = [tuple(d.split(".")) for d in c.dimensiones]
+        dims_vistas = [tuple(d.split(".")) for d in c.dimensiones]
+        dims = dims_vistas
 
         # Las compuestas no agregan nada: se calculan al final, sobre las cifras
         # que ya dejo cada hecho. Lo que hay que meter en los CTE son sus
@@ -1159,6 +1247,19 @@ class Compilador:
                 pedidas.extend(self.m.dependencias_base(nombre))
             else:
                 pedidas.append(nombre)
+
+        # ¿Alguna de las pedidas abre una ventana de tiempo? De eso depende que haga
+        # falta bajar los meses a la capa de dentro.
+        con_ventana = False
+        for met in compuestas:
+            comp = self.m.sql_compuesta(met)
+            if COL_PERIODO in comp.sql or any(
+                    COL_PERIODO in i for i in comp.intermedias.values()):
+                con_ventana = True
+                break
+
+        mes_oculto, filtros_periodo, filtros_cte, dims = self._mes_del_contexto(
+            c, dims_vistas, con_ventana)
 
         # Por entidad Y por uniones, no solo por entidad: dos metricas del mismo
         # hecho que se unen al calendario por fechas distintas —una por la primera
@@ -1178,7 +1279,7 @@ class Compilador:
         cols_dim = [f"{e}.{cc}" for e, cc in dims]
         for i, ((ent, _u), mets) in enumerate(por_grupo.items()):
             cuerpo, params = self._cte_metrica(
-                ent, mets, dims, c.filtros, c.rutas_elegidas, predicados
+                ent, mets, dims, filtros_cte, c.rutas_elegidas, predicados
             )
             ctes.append((f"m{i}", cuerpo, [m.nombre for m in mets]))
             parametros.extend(params)          # el orden importa: CTE por CTE
@@ -1279,30 +1380,62 @@ class Compilador:
             )
             arriba = {**{m: "b" for _n, _b, ms in ctes for m in ms},
                       **{k: "b" for k in intermedias}}
-            sel = ([f"b.{_cita(cd)}" for cd in cols_dim]
-                   + columnas_pedidas(arriba, "b."))
-            sql = (
+            cuerpo_final = (
                 f"WITH {partes},\nespina AS (\n  {espina}\n),\n"
                 f"capa1 AS (\n  SELECT\n    " + ",\n    ".join(sel_capa) +
-                f"\n  FROM espina AS e\n  " + "\n  ".join(joins) + "\n)\n"
-                f"SELECT\n  " + ",\n  ".join(sel) +
-                f"\nFROM capa1 AS b"
-                f"\nORDER BY " + ", ".join(f"b.{_cita(cd)}" for cd in cols_dim) +
+                f"\n  FROM espina AS e\n  " + "\n  ".join(joins) + "\n)"
+            )
+            sel = ([f"b.{_cita(cd)}" for cd in cols_dim]
+                   + columnas_pedidas(arriba, "b."))
+            fuente, alias_f = "capa1 AS b", "b"
+        else:
+            cuerpo_final = f"WITH {partes},\nespina AS (\n  {espina}\n)"
+            sel = ([f"e.{_cita(cd)}" for cd in cols_dim]
+                   + columnas_pedidas(donde, "e."))
+            fuente = "espina AS e\n" + "\n".join(joins)
+            alias_f = "e"
+
+        # El caso normal: se devuelve el desglose tal cual, ordenado por sus
+        # columnas. La espina repite los CTE en su UNION, pero SQL los referencia
+        # por nombre: los parametros se ligan una vez, en el orden de los CTE.
+        if not mes_oculto:
+            sql = (
+                f"{cuerpo_final}\nSELECT\n  " + ",\n  ".join(sel) +
+                f"\nFROM {fuente}"
+                f"\nORDER BY " + ", ".join(f"{alias_f}.{_cita(cd)}" for cd in cols_dim) +
                 f"\nLIMIT {int(c.limite)}"
             )
             return ConsultaCompilada(sql, parametros)
 
-        sel = [f"e.{_cita(cd)}" for cd in cols_dim] + columnas_pedidas(donde, "e.")
+        # Con el mes escondido hay una capa más: lo de dentro esta calculado mes a
+        # mes —hace falta, o no habria mes anterior que mirar— y aqui se deja solo
+        # el mes que manda. El maximo de los que sobreviven a los filtros de fecha:
+        # con un mes filtrado ese, con un año filtrado su ultimo mes, y sin filtro
+        # de fecha el ultimo mes con datos.
+        col_mes = _cita(f"{mes_oculto[0]}.{mes_oculto[1]}")
+        donde_mes, params_mes = self._predicados_sql(filtros_periodo, "d.")
+        cols_vistas = [f"{e}.{cc}" for e, cc in dims_vistas]
+        # El mes que se uso viaja en su propia columna. Cuando no lo eligio nadie
+        # —sin filtro de fecha— la cifra depende de hasta donde llegan los datos, y
+        # eso hay que poder verlo en el informe y no adivinarlo.
+        sel_arriba = ([f"d.{_cita(cd)}" for cd in cols_vistas]
+                      + [f"d.{col_mes} AS {_cita(COL_MES_USADO)}"]
+                      + [f"d.{_cita(n)}" for n in c.metricas])
         sql = (
-            f"WITH {partes},\nespina AS (\n  {espina}\n)\n"
-            f"SELECT\n  " + ",\n  ".join(sel) +
-            f"\nFROM espina AS e\n" + "\n".join(joins) +
-            f"\nORDER BY " + ", ".join(f"e.{_cita(cd)}" for cd in cols_dim) +
-            f"\nLIMIT {int(c.limite)}"
+            f"{cuerpo_final},\ndetalle AS (\n  SELECT\n    "
+            + ",\n    ".join(sel) + f"\n  FROM {fuente}\n),\n"
+            f"mes_que_manda AS (\n  SELECT MAX(d.{col_mes}) AS mes FROM detalle AS d"
+            + (("\n  WHERE " + " AND ".join(donde_mes)) if donde_mes else "")
+            + "\n)\n"
+            f"SELECT\n  " + ",\n  ".join(sel_arriba) +
+            f"\nFROM detalle AS d"
+            f"\nJOIN mes_que_manda AS x ON d.{col_mes} IS NOT DISTINCT FROM x.mes"
+            + (("\nORDER BY " + ", ".join(f"d.{_cita(cd)}" for cd in cols_vistas))
+               if cols_vistas else "")
+            + f"\nLIMIT {int(c.limite)}"
         )
-        # La espina repite los CTE en su UNION, pero SQL los referencia por
-        # nombre: los parametros se ligan una sola vez, en el orden de los CTE.
-        return ConsultaCompilada(sql, parametros)
+        # Los parametros de `mes_que_manda` van al final porque su CTE va despues.
+        return ConsultaCompilada(sql, parametros + params_mes)
 
 
 # --------------------------------------------------------------------------- #

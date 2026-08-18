@@ -7,6 +7,24 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Una métrica de tiempo ya no exige la columna del mes en la tabla: el mes lo pone
+  el contexto.** Antes, «Ventas Mes Anterior» al lado de una fila por sucursal fallaba
+  pidiendo una columna de meses en el desglose — y agregarla convierte una fila por
+  sucursal en una por sucursal y mes, que es otro informe. Ahora, si el desglose trae
+  los meses cada fila compara contra el suyo, como siempre; y si no los trae, los
+  meses bajan a una capa escondida —hacen falta, o no habría mes anterior que mirar,
+  y para eso se levantan los filtros de fecha igual que `TODO()` levanta un filtro en
+  DAX— y arriba se queda solo el mes que manda. Es como funciona Power BI, donde el
+  periodo sale del filtro de la página.
+
+  Cuál manda: el último mes que sobreviva a los filtros. Con un mes filtrado ese, con
+  solo el año su último mes, y **sin filtro de fecha ninguno, el último mes con
+  datos**. Eso último trae que la cifra cambie al cargar el mes siguiente sin que
+  nadie toque el informe, así que el widget dice encima de la tabla «Comparado contra
+  202607» y la respuesta trae `mes_usado`: un número firmado tiene que poder fecharse.
+  Solo sigue siendo un error que el modelo no marque ninguna columna como mes, porque
+  entonces no hay contexto del que sacar el periodo.
+
 - **Las métricas del catálogo, agrupadas por la tabla de la que salen y plegables.**
   Con noventa y seis, una lista plana obliga a atravesar las de ventas para llegar a
   las de refacciones y no deja ver de un golpe qué trae cada tabla. La cabecera de un

@@ -1260,6 +1260,10 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
         # Que el limite dejo filas fuera. Va en la respuesta y no solo en el log:
         # quien mira la cifra tiene que saberlo antes de usarla, no despues.
         "truncado": res.truncado,
+        # Con que mes se resolvieron las metricas de tiempo cuando el mes no
+        # estaba en el desglose. Igual que arriba: la pantalla tiene que poder
+        # decirlo, porque si nadie filtro una fecha ese mes lo eligio el dato.
+        "mes_usado": res.mes_usado,
         "politicas_aplicadas": res.politicas_aplicadas,
         # El SQL se devuelve solo a quien puede leerlo con provecho.
         "sql": res.sql if usuario.rol in (Rol.administrador, Rol.editor) else None,

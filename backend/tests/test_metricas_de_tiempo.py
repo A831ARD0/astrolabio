@@ -202,21 +202,90 @@ def test_cada_sucursal_mira_su_propio_mes_anterior(cliente, cab_editor, modelo):
     assert comparadas > 20
 
 
-def test_sin_una_columna_de_meses_se_explica(cliente, cab_editor, modelo):
+def test_sin_columna_de_meses_el_mes_lo_pone_el_filtro(cliente, cab_editor, modelo):
     """
-    «El mes anterior» de un total sin meses no existe. Devolver el total repetido
-    seria dar algo que parece una comparacion.
+    Una tabla de una fila por sucursal con «el mes anterior» al lado.
+
+    Es como se lee un informe de verdad —y como esta armada la pagina de Power BI
+    que se esta traduciendo—: el periodo lo pone el filtro de arriba, no una columna
+    de meses en la tabla. Antes esto fallaba pidiendo esa columna, y agregarla
+    convertia una fila por sucursal en una por sucursal y mes, que es otro informe.
+
+    Se comprueba contra la aritmetica hecha aparte: la cifra que trae la fila tiene
+    que ser EXACTAMENTE la del mes de antes, sacada de una consulta por meses.
     """
     assert guardar(cliente, cab_editor, modelo,
                    con_tiempo(cliente, cab_editor, modelo)).status_code == 201
 
+    # La verdad, mes a mes, para una sucursal.
+    r = consultar(cliente, cab_editor, modelo, ["unidades_vendidas"], [MES, SUC])
+    assert r.status_code == 200, r.text
+    una = r.json()["filas"][0][SUC]
+    por = {f[MES]: f["unidades_vendidas"] for f in r.json()["filas"]
+           if f[SUC] == una}
+    meses = sorted(por)
+    assert len(meses) >= 2, "hacen falta dos meses para que haya uno anterior"
+    mes, previo = meses[-1], meses[-2]
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["unidades_vendidas", "mes_anterior"], [SUC],
+                  filtros=[{"campo": MES, "op": "=", "valor": mes}])
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    fila = next(f for f in cuerpo["filas"] if f[SUC] == una)
+
+    assert fila["unidades_vendidas"] == por[mes]
+    assert fila["mes_anterior"] == por[previo]
+    # Y una fila por sucursal, no una por sucursal y mes.
+    assert len(cuerpo["filas"]) == len({f[SUC] for f in cuerpo["filas"]})
+    # El mes que se uso se cuenta, pero no se cuela como columna de la tabla.
+    assert cuerpo["mes_usado"] == mes
+    assert MES not in cuerpo["columnas"]
+    assert not any(c.startswith("__") for c in cuerpo["columnas"])
+
+
+def test_sin_filtro_de_fecha_manda_el_ultimo_mes_con_datos(
+        cliente, cab_editor, modelo):
+    """
+    Sin filtro de fecha, el mes lo pone el dato: el ultimo que tiene.
+
+    Es lo que se decidio, y trae una consecuencia que hay que poder ver: la cifra
+    cambia al cargar el mes siguiente sin que nadie toque el informe. Por eso el mes
+    usado viaja en la respuesta — y por eso esta prueba lo exige.
+    """
+    assert guardar(cliente, cab_editor, modelo,
+                   con_tiempo(cliente, cab_editor, modelo)).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["unidades_vendidas"], [MES])
+    por = {f[MES]: f["unidades_vendidas"] for f in r.json()["filas"]}
+    ultimo = max(por)
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["unidades_vendidas", "mes_anterior"], [])
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["mes_usado"] == ultimo
+    assert len(cuerpo["filas"]) == 1
+    assert cuerpo["filas"][0]["unidades_vendidas"] == por[ultimo]
+
+
+def test_si_el_modelo_no_marca_ningun_mes_se_explica(cliente, cab_editor, modelo):
+    """
+    Sin ninguna columna marcada como mes no hay contexto del que sacar el periodo, y
+    entonces «el mes anterior» no significa nada. Se dice, en vez de devolver el
+    total repetido con pinta de comparacion.
+    """
+    d = con_tiempo(cliente, cab_editor, modelo)
+    for ent in d["entidades"]:
+        for campo in ent.get("campos", []):
+            campo.pop("grano_tiempo", None)
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
     r = consultar(cliente, cab_editor, modelo, ["mes_anterior"], [SUC])
     assert r.status_code == 422, r.text
-    assert "columna de meses" in r.text
-    # Y tiene que decir CUAL agregar, con su nombre y nada mas: la primera
-    # version imprimia la entidad entera —campos, tipos, claves— y el mensaje
-    # util quedaba sepultado en media pantalla de texto.
-    assert "dim_calendario.anio_mes" in r.text
+    assert "grano de tiempo" in r.text
+    # Y el mensaje se lee: la primera version imprimia la entidad entera —campos,
+    # tipos, claves— y lo util quedaba sepultado en media pantalla de texto.
     assert "Campo(" not in r.text and "Entidad(" not in r.text
 
 

@@ -332,6 +332,12 @@ export interface ResultadoConsulta {
    */
   truncado: boolean
   /**
+   * Con qué mes se calcularon las métricas de tiempo, cuando el mes no estaba en el
+   * desglose y lo puso el contexto. `null` si no había ninguna métrica de tiempo, o
+   * si los meses venían en el desglose y cada fila es el suyo.
+   */
+  mes_usado?: string | number | null
+  /**
    * Solo en una tabla dinámica: cuántas columnas va a tener el cruce. Es con lo que
    * se calculó el límite de filas planas que se pidió, y se guarda para poder
    * explicarlo si aun así se cortó.

@@ -24,7 +24,9 @@ import duckdb
 
 from app.config import config
 from app.politicas import CapaPoliticas, ContextoUsuario
-from semantic.engine import Compilador, Consulta, Modelo, MotorAsociativo
+from semantic.engine import (
+    COL_MES_USADO, Compilador, Consulta, Modelo, MotorAsociativo,
+)
 
 _local = threading.local()
 
@@ -181,6 +183,10 @@ class Resultado:
     #: Si el limite dejo filas fuera. Una tabla recortada que no dice que lo esta
     #: es la peor clase de error: se lee como completa, se suma y se firma.
     truncado: bool = False
+    #: Con que mes se calcularon las metricas de tiempo, cuando el mes no estaba en
+    #: el desglose y lo puso el contexto. `None` si no habia ninguna metrica de
+    #: tiempo, o si los meses venian en el propio desglose y cada fila es el suyo.
+    mes_usado: Any = None
 
 
 def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
@@ -212,10 +218,19 @@ def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
     if truncado:
         del filas[tope:]
 
+    # El mes con el que se resolvieron las ventanas de tiempo no es una columna que
+    # nadie haya pedido: se saca de las filas y se cuenta aparte. Se queda dentro
+    # seria una columna de mas en la tabla y en el Excel.
+    mes_usado = None
+    if COL_MES_USADO in columnas:
+        columnas = [c for c in columnas if c != COL_MES_USADO]
+        for f in filas:
+            mes_usado = f.pop(COL_MES_USADO, None)
+
     return Resultado(
         columnas=columnas, filas=filas, sql=compilada.sql, ms=round(ms, 1),
         politicas_aplicadas=[p.politica for p in predicados],
-        truncado=truncado,
+        truncado=truncado, mes_usado=mes_usado,
     )
 
 

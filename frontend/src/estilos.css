@@ -2184,6 +2184,19 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
 }
 .recortado strong { color: var(--aviso); }
 
+/* Con que mes se calcularon las metricas de tiempo. Neutro y no ambar: la cifra no
+   esta mal ni incompleta —solo hay que saber de que mes es—. Pero se ve, porque sin
+   filtro de fecha ese mes lo eligio el dato y cambia solo al cargar el siguiente. */
+.mes-usado {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--texto-suave);
+  background: var(--fondo-alto);
+  border-bottom: 1px solid var(--borde);
+}
+.mes-usado strong { color: var(--texto); font-variant-numeric: tabular-nums; }
+
 /* =================================================== el informe (papel y PDF)
  *
  * Una hoja convertida en informe es otro documento, y tiene reglas que la pantalla

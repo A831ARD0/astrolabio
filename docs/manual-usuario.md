@@ -772,9 +772,32 @@ mes concreto —`Periodo_YYYYMM`, o una fecha—. **No** se marca un `Mes` de 1 
 ese se repite todos los años, y correrlo un mes hacia atrás no significa nada. Por
 eso la casilla sólo se puede marcar donde el tipo lo permite.
 
-Y en la consulta, esa columna tiene que estar en el desglose. Sin meses no hay «mes
-anterior», y en vez de repetirte el total —que parecería una comparación— te lo
-dice.
+#### ¿De qué mes se compara?
+
+Hay dos formas, y no hace falta elegir: el motor usa la que corresponda.
+
+**Si la columna del mes está en el desglose**, cada fila es su propio mes y compara
+contra el suyo. Es la tabla de «ventas por sucursal y mes».
+
+**Si no está** —una tabla de una fila por sucursal, con «Ventas Mes Anterior» al
+lado, que es como se lee un informe de dirección— el mes lo pone el **contexto**: el
+que esté filtrado arriba. Es lo que hace Power BI, donde el periodo sale del
+segmentador de la página y no de las filas de la tabla. Por dentro el cálculo baja
+los meses a una capa escondida —hacen falta, o no habría mes anterior que mirar— y
+arriba se queda solo el mes que manda.
+
+Cuál manda: **el último mes que sobreviva a los filtros**. Con un mes filtrado, ese.
+Con solo el año filtrado, su último mes. Y **sin ningún filtro de fecha, el último
+mes con datos**.
+
+Ese último caso tiene una consecuencia que conviene tener presente: la cifra cambia
+en cuanto entre el mes siguiente, sin que nadie toque el informe. Por eso el widget
+dice siempre, encima de la tabla, **«Comparado contra 202607»** — para que un número
+firmado se pueda fechar. Si quieres que no se mueva, filtra el mes.
+
+Lo único que sigue dando error es que el modelo **no marque ninguna** columna como
+mes: entonces no hay contexto del que sacar el periodo, y en vez de repetirte el
+total —que parecería una comparación— te lo dice.
 
 Tres cosas que conviene saber, porque son decisiones y no accidentes:
 

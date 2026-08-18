@@ -171,6 +171,14 @@ function WidgetDatos({
   // es la clase de número que acaba en una junta.
   const aviso = datos.data.truncado ? (
     <Recortado widget={widget} datos={datos.data} />
+  ) : datos.data.mes_usado != null ? (
+    // Con qué mes se compararon las cifras de tiempo. Va a la vista y no en un
+    // tooltip porque cuando nadie filtró una fecha ese mes lo eligió el dato: la
+    // misma tabla dirá otra cosa en cuanto entre el mes siguiente, y quien firma
+    // el número tiene que saber de qué mes es.
+    <div className="mes-usado" role="status">
+      Comparado contra <strong>{String(datos.data.mes_usado)}</strong>
+    </div>
   ) : null
 
   if (widget.tipo === 'kpi') {
