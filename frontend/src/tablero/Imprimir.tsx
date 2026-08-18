@@ -46,11 +46,28 @@ import type { Filtro } from '../api/tipos'
 const ANCHO = 1600
 
 /**
+ * Y si no cabe, se ensancha. 1600 es el ANCHO DE SALIDA, no un tope: una tabla de
+ * veinte columnas no entra ahí, y en pantalla eso se resuelve desplazándola dentro
+ * del widget. En una sola hoja no hay dónde desplazar, así que lo que sobra se
+ * quedaba cortado por el borde de la página — un PDF que enseña doce columnas de
+ * veinte y no dice que faltan ocho.
+ *
+ * Se mide lo que se sale por la derecha y se ensancha la hoja hasta que quepa. En
+ * bucle, porque al ensanchar la hoja el widget también se ensancha y la tabla
+ * necesita menos de lo que pidió: dos o tres pasadas llegan al ancho justo, y
+ * cualquiera de ellas es ya un ancho que no corta.
+ */
+const PASADAS_DE_ANCHO = 3
+
+/**
  * Tope de alto. Chrome no genera páginas de más de 200 pulgadas (unos 19 200 px) y
  * lo que hace al pasarse es recortar sin avisar, así que por encima de esto se dice
  * y se ofrece la otra forma en vez de entregar un PDF cortado.
  */
 const ALTO_MAXIMO = 19_000
+
+/** El mismo tope, para el ancho: el límite de Chrome es de página, no de alto. */
+const ANCHO_MAXIMO = 19_000
 
 /** Cómo se lee un filtro en la portada. `cat_sucursal.nombre` no le dice nada a nadie. */
 function comoSeLee(f: Filtro): { campo: string; valores: string } {
@@ -141,10 +158,56 @@ export function PortadaInforme({
 }
 
 /** Dos cuadros de pintura, para que el navegador aplique el diseño del informe. */
+/**
+ * Cuánto habría que ensanchar la HOJA para que no se corte nada por la derecha.
+ *
+ * No es lo mismo que cuánto se sale: un widget de tres columnas de doce crece un
+ * cuarto de lo que crece la hoja, así que ensanchar la hoja lo que sobresale la tabla
+ * se queda corto tres veces. Lo que se devuelve ya está escalado por la fracción de
+ * la rejilla que ocupa el widget, y así una sola pasada acierta.
+ *
+ * Y no vale `scrollWidth` del contenedor: en el informe el desbordamiento está
+ * liberado a propósito —una tabla no puede quedarse dentro de una caja que se
+ * desplaza— así que la tabla sobresale de su widget sin que nadie lo cuente.
+ */
+function faltaDeAncho(centro: HTMLElement): number {
+  const relleno = parseFloat(getComputedStyle(centro).paddingRight) || 0
+  const limite = centro.getBoundingClientRect().right - relleno
+  const cols = Number(getComputedStyle(centro).getPropertyValue('--cols')) || 12
+  let falta = Math.max(0, centro.scrollWidth - centro.clientWidth)
+
+  for (const el of centro.querySelectorAll('.rejilla .widget')) {
+    const caja = el.getBoundingClientRect()
+    const gw = Number(getComputedStyle(el).getPropertyValue('--gw')) || cols
+    // Lo que se sale del propio widget hay que dárselo al widget, y para eso la
+    // hoja tiene que crecer `cols / gw` veces más.
+    let dentro = 0
+    for (const hijo of el.querySelectorAll('table, .grafico, .lista-valores')) {
+      dentro = Math.max(dentro, hijo.getBoundingClientRect().right - caja.right)
+    }
+    falta = Math.max(falta, (dentro * cols) / Math.max(gw, 1))
+    // Y lo que el widget mismo se sale de la hoja va tal cual: es la hoja.
+    falta = Math.max(falta, caja.right - limite)
+  }
+  return falta
+}
+
 const dosCuadros = () =>
   new Promise<void>((listo) =>
     requestAnimationFrame(() => requestAnimationFrame(() => listo())),
   )
+
+/**
+ * Poner la clase y esperar a que la página se quede quieta.
+ *
+ * Los gráficos se redibujan solos —su `ResizeObserver`— pero no en el mismo cuadro:
+ * sin esta espera, lo que se mide es la hoja de antes de que se recolocaran.
+ */
+async function asentarse() {
+  await dosCuadros()
+  await new Promise((listo) => setTimeout(listo, 350))
+  await dosCuadros()
+}
 
 /**
  * El botón. Abre el diálogo del navegador, donde se elige «Guardar como PDF».
@@ -208,14 +271,35 @@ export function Imprimir({ hoja }: { hoja: string }) {
       // tablas enteras. Medir la pantalla daría el alto de la ventana.
       raiz.style.setProperty('--ancho-informe', `${ANCHO}px`)
       raiz.classList.add('informe', 'una-hoja')
-      await dosCuadros()
-      // Los gráficos se redibujan solos (su `ResizeObserver`), pero no en el mismo
-      // cuadro: sin esta espera el alto medido es el de antes de que se recolocaran.
-      await new Promise((listo) => setTimeout(listo, 350))
-      await dosCuadros()
+      await asentarse()
 
       const centro = document.querySelector('.centro') as HTMLElement | null
-      const medido = Math.max(centro?.scrollHeight ?? 0, document.body.scrollHeight)
+      if (!centro) throw new Error('No se pudo medir la hoja.')
+
+      // Primero el ancho: el alto depende de él —una tabla que cabe no parte
+      // renglones— así que medirlo antes sería medir otra hoja.
+      let ancho = ANCHO
+      for (let i = 0; i < PASADAS_DE_ANCHO; i++) {
+        const falta = Math.ceil(faltaDeAncho(centro))
+        if (falta <= 1 || ancho >= ANCHO_MAXIMO) break
+        ancho = Math.min(ancho + falta, ANCHO_MAXIMO)
+        raiz.style.setProperty('--ancho-informe', `${ancho}px`)
+        await asentarse()
+      }
+      const cortaria = Math.ceil(faltaDeAncho(centro))
+      if (cortaria > 1) {
+        throw new Error(
+          ancho >= ANCHO_MAXIMO
+            ? `La hoja necesita más de ${ANCHO_MAXIMO} px de ancho y el navegador no ` +
+              `hace páginas tan grandes. Cortaría las últimas columnas sin avisar, ` +
+              `así que mejor «Páginas A4», o quita columnas de la tabla.`
+            : `No se pudo encajar el ancho de la hoja: le faltan ${cortaria} px y ` +
+              `cortaría las últimas columnas sin avisar. Usa «Páginas A4», o quita ` +
+              `columnas de la tabla.`,
+        )
+      }
+
+      const medido = Math.max(centro.scrollHeight, document.body.scrollHeight)
       // La holgura no es por si acaso: la maquetación de impresión no redondea igual
       // que la de pantalla, y con la medida exacta sobraba una fracción de píxel que
       // se llevaba una segunda página en blanco al PDF. Ocho píxeles no se ven; una
@@ -232,7 +316,7 @@ export function Imprimir({ hoja }: { hoja: string }) {
 
       // Va después de la hoja de estilos, así que gana al `@page` de A4.
       estilo.id = 'tamano-una-hoja'
-      estilo.textContent = `@page { size: ${ANCHO}px ${alto}px; margin: 0; }`
+      estilo.textContent = `@page { size: ${ancho}px ${alto}px; margin: 0; }`
       document.head.appendChild(estilo)
       setAbierto(false)
       window.print()

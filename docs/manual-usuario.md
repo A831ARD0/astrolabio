@@ -1289,6 +1289,12 @@ que haga falta y todo lo ancha que necesite la hoja, con **todo dentro**: nada
 queda cortado ni partido entre dos páginas porque no hay dos páginas. Es la que
 quieres para proyectar.
 
+Sale de 1600 px de ancho —fijo, para que el mismo tablero dé el mismo PDF en un
+portátil y en un monitor— y **se ensancha si algo no cabe**: una tabla de veinte
+columnas, que en pantalla se desplaza dentro de su widget, aquí no tiene dónde
+desplazarse, así que la página crece hasta que entra. Si ni así entra, lo dice y no
+entrega un PDF cortado.
+
 **Páginas A4.** Para papel. Se pagina en apaisado; una tabla larga sigue en la
 página siguiente repitiendo sus encabezados, y la fila de totales sale una sola vez
 y al final.
@@ -1296,6 +1302,11 @@ y al final.
 Las dos abren el diálogo del navegador: ahí eliges **«Guardar como PDF»** —o una
 impresora, si es para papel—. Deja los márgenes y la escala como vienen: la medida
 de la página ya la trae el documento.
+
+Ese diálogo no se puede saltar desde el navegador, y es a propósito que no lo
+intentamos por otro camino: un PDF hecho con una foto de la pantalla pesa diez veces
+más y no deja buscar ni copiar una cifra. Si el diálogo sale con una impresora en vez
+de «Guardar como PDF», cámbialo una vez y el navegador lo recuerda.
 
 El informe empieza por una cabecera que solo existe en el PDF: el nombre del
 tablero, la hoja, **los filtros aplicados**, el modelo y su versión, y quién lo

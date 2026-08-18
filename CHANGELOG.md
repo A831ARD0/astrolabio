@@ -13,6 +13,16 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **El PDF de una sola hoja se ensancha si algo no cabe.** Salía siempre de 1600 px, y
+  una tabla de veinte columnas no entra ahí: en pantalla se desplaza dentro de su
+  widget, pero en una sola hoja no hay dónde desplazar, así que las últimas columnas
+  se quedaban cortadas por el borde de la página — un PDF que enseña doce de veinte y
+  no dice que faltan ocho. Ahora se mide lo que se sale y la página crece hasta que
+  entra; y si necesitara más de lo que el navegador puede hacer, se dice en vez de
+  entregarlo cortado. La medida va escalada por la fracción de rejilla del widget: un
+  widget de tres columnas de doce crece un cuarto de lo que crece la hoja, así que
+  ensancharla solo lo que sobresale se quedaba corto tres veces.
+
 - **El menú del botón PDF no se veía, y el de exportar un widget tampoco del todo.**
   Los dos colgaban dentro de su contenedor, y los dos contenedores recortan lo que
   desborda: la barra del tablero para encogerse en una pantalla angosta en vez de
