@@ -307,7 +307,7 @@ def test_un_filtro_de_dias_no_se_estira_al_mes_en_silencio(
 def test_sin_filtro_de_fecha_manda_el_ultimo_mes_con_datos(
         cliente, cab_editor, modelo):
     """
-    Sin filtro de fecha, el mes lo pone el dato: el ultimo que tiene.
+    Sin filtro de fecha, el mes lo pone el dato: el ultimo que tiene LA cifra.
 
     Es lo que se decidio, y trae una consecuencia que hay que poder ver: la cifra
     cambia al cargar el mes siguiente sin que nadie toque el informe. Por eso el mes
@@ -327,6 +327,49 @@ def test_sin_filtro_de_fecha_manda_el_ultimo_mes_con_datos(
     assert cuerpo["mes_usado"] == ultimo
     assert len(cuerpo["filas"]) == 1
     assert cuerpo["filas"][0]["unidades_vendidas"] == por[ultimo]
+
+
+def test_manda_el_ultimo_mes_con_LA_CIFRA_y_no_con_cualquier_dato(
+        cliente, cab_editor, modelo):
+    """
+    Un objetivo cargado hasta diciembre no hace que diciembre sea el mes del que
+    hablar cuando lo que se compara son ventas.
+
+    Es el caso real: la tabla de objetivos trae el año completo desde enero y las
+    ventas llegan hasta donde llego la ultima carga. Con «el ultimo mes con datos» a
+    secas mandaba el ultimo mes del objetivo, y la fila salia con el objetivo puesto
+    y todas las columnas de venta vacias — una tabla en blanco que no dice por que.
+    Manda el ultimo mes que tenga LA cifra que se compara.
+
+    Aqui las ventas se cortan a mano con un CASE, porque en los datos de
+    demostracion los dos hechos acaban el mismo mes.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    corte = 202605
+    d["metricas"] += [
+        {"nombre": "unidades_cortas", "etiqueta": "Unidades (hasta el corte)",
+         "entidad": "fact_venta", "formato": "entero",
+         "expresion": f"SUM(CASE WHEN YEAR(fecha_emision) * 100 + "
+                      f"MONTH(fecha_emision) <= {corte} THEN unidades END)"},
+        {"nombre": "cortas_mes_ant", "etiqueta": "Mes anterior", "formato": "entero",
+         "expresion": "MESANTERIOR([unidades_cortas])"},
+    ]
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    # El objetivo llega mas lejos que las ventas cortadas: es lo que hace la prueba.
+    r = consultar(cliente, cab_editor, modelo, ["objetivo_unidades"], [MES])
+    assert max(f[MES] for f in r.json()["filas"]) > corte
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["unidades_cortas", "cortas_mes_ant", "objetivo_unidades"], [SUC])
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["mes_usado"] == corte
+    # Y la fila trae cifra, que es el punto: no sale en blanco.
+    assert any(f["unidades_cortas"] for f in cuerpo["filas"])
+    assert any(f["cortas_mes_ant"] for f in cuerpo["filas"])
+    # Las cifras escondidas para elegir el mes no se cuelan en la respuesta.
+    assert not any(c.startswith("__") for c in cuerpo["columnas"])
 
 
 def test_si_el_modelo_no_marca_ningun_mes_se_explica(cliente, cab_editor, modelo):

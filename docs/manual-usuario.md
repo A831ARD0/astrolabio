@@ -787,8 +787,10 @@ los meses a una capa escondida —hacen falta, o no habría mes anterior que mir
 arriba se queda solo el mes que manda.
 
 Cuál manda: **el último mes que sobreviva a los filtros**. Con un mes filtrado, ese.
-Con solo el año filtrado, su último mes. Y **sin ningún filtro de fecha, el último
-mes con datos**.
+Con solo el año filtrado, su último mes. Y **sin ningún filtro de fecha, el último mes
+que tenga la cifra que se compara** — no el último con datos de cualquier tabla: si el
+objetivo está cargado hasta diciembre y las ventas llegan a agosto, manda agosto,
+porque diciembre daría una fila con el objetivo puesto y todo lo demás en blanco.
 
 Los filtros valen **estén en la columna que estén**, siempre que sean del calendario:
 filtrar Año = 2026 y Nombre del mes = July elige julio de 2026 igual que filtrar la
@@ -803,7 +805,8 @@ estirarlo al mes entero devolvería las unidades del mes en una fila que pedía 
 Ahí el widget lo dice y no calcula.
 
 Ese último caso tiene una consecuencia que conviene tener presente: la cifra cambia
-en cuanto entre el mes siguiente, sin que nadie toque el informe. Por eso el widget
+en cuanto entre el mes siguiente —en cuanto la primera venta lo estrene—, sin que
+nadie toque el informe. Por eso el widget
 dice siempre, encima de la tabla, **«Comparado contra 202607»** — para que un número
 firmado se pueda fechar. Si quieres que no se mueva, filtra el mes.
 
@@ -1238,7 +1241,9 @@ los demás tableros.
 campo de texto es el orden alfabético, y para los meses no sirve: «abril, agosto,
 diciembre» no es como va el año. Eso se arregla en el modelo, no en el tablero:
 en la tabla de campos de la entidad, la columna **orden** dice por qué OTRA columna
-se ordena. Para el nombre del mes, por el número del mes. Es el «ordenar por
+se ordena. Y como vive en el modelo, hay que **publicar** una versión y que el tablero
+la **adopte** —el aviso amarillo de arriba lo ofrece—: mientras el tablero siga
+anclado a la versión vieja, el filtro sigue saliendo como salía. Para el nombre del mes, por el número del mes. Es el «ordenar por
 columna» de Power BI, y vale para cualquier campo con un orden propio: los rangos de
 antigüedad, las etapas de un embudo, las tallas.
 

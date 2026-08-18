@@ -23,6 +23,33 @@ def test_catalogo_de_campos(cliente, cab_admin, modelo_id):
     assert "cat_sucursal.nombre_conexion" not in dims
 
 
+def test_una_compuesta_se_agrupa_por_su_tabla_de_medidas(cliente, cab_editor,
+                                                        modelo_id):
+    """
+    Una compuesta no sale de ningun hecho, asi que en el catalogo la ordena la tabla
+    de medidas donde se guardo — la misma con la que se agrupa en el modelo. Sin
+    esto, cincuenta y ocho compuestas caian todas en un mismo monton llamado
+    «compuesta», que dice de que NO son y no de que son.
+    """
+    r = cliente.get(f"/api/modelos/{modelo_id}/definicion", headers=cab_editor)
+    d = r.json()["definicion"]
+    d.setdefault("tablas_medidas", []).append({"nombre": "Medidas Ventas"})
+    d["metricas"].append(
+        {"nombre": "logro", "etiqueta": "% Logro", "formato": "porcentaje",
+         "tabla_medidas": "Medidas Ventas",
+         "expresion": "DIVIDIR([unidades_vendidas], [objetivo_unidades])"})
+    r = cliente.put(f"/api/modelos/{modelo_id}/definicion", headers=cab_editor,
+                    json={"definicion": d})
+    assert r.status_code == 201, r.text
+
+    cat = cliente.get(f"/api/modelos/{modelo_id}/campos", headers=cab_editor).json()
+    por_clave = {m["clave"]: m["entidad"] for m in cat["metricas"]}
+    assert por_clave["logro"] == "Medidas Ventas"
+    # Y una de un hecho sigue diciendo de que hecho sale: es la nota con la que se
+    # comprueba una cifra.
+    assert por_clave["unidades_vendidas"] == "fact_venta"
+
+
 def test_version_nueva_no_sobreescribe(cliente, cab_editor, modelo_id, yaml_modelo):
     antes = next(m for m in cliente.get("/api/modelos", headers=cab_editor).json()
                  if m["id"] == modelo_id)["version_actual"]

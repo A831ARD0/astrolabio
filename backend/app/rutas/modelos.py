@@ -1208,11 +1208,14 @@ def campos(modelo_id: int, sesion: SesionDep, _: UsuarioDep):
             if c.rol == "dimension" and c.visible
         ],
         "metricas": [
-            # Una compuesta no sale de ningun hecho, y en la lista de metricas de
-            # un tablero esa nota es lo que dice de donde viene la cifra: se pone
-            # «compuesta» y no un hueco, que se leeria como un dato que falta.
+            # Una compuesta no sale de ningun hecho. Lo que la ordena es la tabla
+            # de medidas donde el usuario la guardo, que es como se agrupan en el
+            # modelo; y si no esta en ninguna, «compuesta» y no un hueco, que se
+            # leeria como un dato que falta. Las de un hecho siguen diciendo de que
+            # hecho salen: es la nota que permite comprobar una cifra.
             {"clave": mt.nombre, "etiqueta": mt.etiqueta,
-             "entidad": mt.entidad or "compuesta", "formato": mt.formato}
+             "entidad": mt.entidad or mt.tabla_medidas or "compuesta",
+             "formato": mt.formato}
             for mt in m.metricas.values()
         ],
     }

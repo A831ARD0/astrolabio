@@ -7,6 +7,12 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Las métricas compuestas se agrupan por su tabla de medidas.** Una compuesta no
+  sale de ningún hecho, así que caían todas en un montón llamado «compuesta» — con
+  cincuenta y ocho, eso dice de qué NO son y no de qué son. Ahora las ordena la tabla
+  de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
+  siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
+
 - **Los valores de un filtro se pueden ordenar por otra columna.** «Enero, febrero,
   marzo» no es el orden alfabético: un filtro con el nombre del mes empezaba en abril
   y terminaba en septiembre, y en esa lista nadie encuentra nada. En la tabla de
@@ -28,8 +34,12 @@ versionado es [semántico](https://semver.org/lang/es/).
   periodo sale del filtro de la página.
 
   Cuál manda: el último mes que sobreviva a los filtros. Con un mes filtrado ese, con
-  solo el año su último mes, y **sin filtro de fecha ninguno, el último mes con
-  datos**. Eso último trae que la cifra cambie al cargar el mes siguiente sin que
+  solo el año su último mes, y **sin filtro de fecha ninguno, el último mes que tenga
+  la cifra que se compara** — no el último con datos de cualquier tabla: un objetivo
+  cargado hasta diciembre haría mandar a diciembre, y la fila saldría con el objetivo
+  puesto y todas las columnas de venta vacías. Para eso las cifras de las que sale la
+  comparación bajan escondidas al detalle, y si ninguna tiene dato en ningún mes manda
+  el último que haya, que es mejor que una tabla vacía sin explicación. Eso último trae que la cifra cambie al cargar el mes siguiente sin que
   nadie toque el informe, así que el widget dice encima de la tabla «Comparado contra
   202607» y la respuesta trae `mes_usado`: un número firmado tiene que poder fecharse.
   Solo sigue siendo un error que el modelo no marque ninguna columna como mes, porque

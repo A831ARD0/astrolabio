@@ -38,6 +38,11 @@ from semantic.formula import COL_ANIO, COL_PERIODO
 #: dato pedido— pero viaja hasta arriba porque quien lee la cifra tiene derecho a
 #: saber de que mes es, sobre todo cuando no lo eligio nadie.
 COL_MES_USADO = "__mes_usado"
+
+#: Prefijo de las cifras que se bajan escondidas para saber si un mes trae dato de
+#: ELLAS. Ver `Compilador.compilar`. Nunca salen del compilador: se leen dentro del
+#: propio SQL y no aparecen en el SELECT de arriba.
+COL_BASE = "__base_"
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
 from semantic.formula import Compuesta, MARCA_CAPA, compilar_compuesta
@@ -139,6 +144,10 @@ class Metrica:
     formato: str = "numero"
     #: Relaciones que ESTA metrica usa en vez de la activa. Ver `Modelo.grafo_con`.
     uniones: tuple[str, ...] = ()
+    #: La tabla de medidas donde el usuario la guardo, si la guardo en alguna. El
+    #: compilador no la mira: es para agrupar en la interfaz. Una compuesta no sale
+    #: de ningun hecho, asi que es lo unico que la ordena.
+    tabla_medidas: str | None = None
 
     @property
     def compuesta(self) -> bool:
@@ -181,7 +190,8 @@ class Modelo:
         self.metricas: dict[str, Metrica] = {
             m["nombre"]: Metrica(m["nombre"], m["etiqueta"], m.get("entidad"),
                                  m["expresion"], m.get("formato", "numero"),
-                                 tuple(m.get("uniones", []) or ()))
+                                 tuple(m.get("uniones", []) or ()),
+                                 m.get("tabla_medidas"))
             for m in crudo.get("metricas", [])
         }
 
@@ -1284,14 +1294,20 @@ class Compilador:
                 pedidas.append(nombre)
 
         # ¿Alguna de las pedidas abre una ventana de tiempo? De eso depende que haga
-        # falta bajar los meses a la capa de dentro.
+        # falta bajar los meses a la capa de dentro. Y de que cifras salen esas
+        # ventanas, porque «el ultimo mes con datos» significa el ultimo mes con
+        # ESAS cifras: un objetivo cargado hasta diciembre no hace que diciembre sea
+        # el mes del que hablar cuando lo que se compara son ventas.
         con_ventana = False
+        bases_ventana: list[str] = []
         for met in compuestas:
             comp = self.m.sql_compuesta(met)
             if COL_PERIODO in comp.sql or any(
                     COL_PERIODO in i for i in comp.intermedias.values()):
                 con_ventana = True
-                break
+                for d in self.m.dependencias_base(met.nombre):
+                    if d not in bases_ventana:
+                        bases_ventana.append(d)
 
         mes_oculto, filtros_periodo, filtros_cte, dims = self._mes_del_contexto(
             c, dims_vistas, con_ventana)
@@ -1422,13 +1438,13 @@ class Compilador:
             )
             sel = ([f"b.{_cita(cd)}" for cd in cols_dim]
                    + columnas_pedidas(arriba, "b."))
-            fuente, alias_f = "capa1 AS b", "b"
+            fuente, alias_f, sitio_final = "capa1 AS b", "b", arriba
         else:
             cuerpo_final = f"WITH {partes},\nespina AS (\n  {espina}\n)"
             sel = ([f"e.{_cita(cd)}" for cd in cols_dim]
                    + columnas_pedidas(donde, "e."))
             fuente = "espina AS e\n" + "\n".join(joins)
-            alias_f = "e"
+            alias_f, sitio_final = "e", donde
 
         # El caso normal: se devuelve el desglose tal cual, ordenado por sus
         # columnas. La espina repite los CTE en su UNION, pero SQL los referencia
@@ -1448,6 +1464,14 @@ class Compilador:
         # con un mes filtrado ese, con un año filtrado su ultimo mes, y sin filtro
         # de fecha el ultimo mes con datos.
         col_mes = _cita(f"{mes_oculto[0]}.{mes_oculto[1]}")
+        # Las cifras de las que sale la comparacion, escondidas en el detalle. No
+        # las pidio nadie: estan para saber si el mes trae dato de ELLAS. Un mes con
+        # objetivo cargado y sin una sola venta no es «el ultimo mes con datos»
+        # cuando lo que se compara son ventas — la fila saldria en blanco.
+        bases = [b for b in bases_ventana if b in sitio_final]
+        col_base = {b: f"{COL_BASE}{b}" for b in bases}
+        sel = sel + [f"{sitio_final[b]}.{_cita(b)} AS {_cita(col_base[b])}"
+                     for b in bases]
         # Los filtros del calendario se vuelven a aplicar sobre el calendario, no
         # sobre el detalle: ahi estan todas sus columnas —el año, el nombre del mes,
         # el dia— y no solo la que bajo escondida. De ahi salen los meses que la
@@ -1459,6 +1483,11 @@ class Compilador:
             f"\n  WHERE d.{col_mes} IN (SELECT k.{_cita(mes_oculto[1])}"
             f" FROM {_cita(cal.tabla)} AS k WHERE " + " AND ".join(donde_cal) + ")"
         ) if donde_cal else ""
+        # El ultimo mes CON esas cifras; y si ninguno las tiene, el ultimo que haya,
+        # que es mejor que devolver la tabla vacia sin decir por que.
+        con_dato = " OR ".join(f"d.{_cita(col_base[b])} IS NOT NULL" for b in bases)
+        cual_mes = (f"COALESCE(MAX(CASE WHEN {con_dato} THEN d.{col_mes} END), "
+                    f"MAX(d.{col_mes}))") if bases else f"MAX(d.{col_mes})"
         cols_vistas = [f"{e}.{cc}" for e, cc in dims_vistas]
         # El mes que se uso viaja en su propia columna. Cuando no lo eligio nadie
         # —sin filtro de fecha— la cifra depende de hasta donde llegan los datos, y
@@ -1469,7 +1498,7 @@ class Compilador:
         sql = (
             f"{cuerpo_final},\ndetalle AS (\n  SELECT\n    "
             + ",\n    ".join(sel) + f"\n  FROM {fuente}\n),\n"
-            f"mes_que_manda AS (\n  SELECT MAX(d.{col_mes}) AS mes FROM detalle AS d"
+            f"mes_que_manda AS (\n  SELECT {cual_mes} AS mes FROM detalle AS d"
             + elegibles + "\n)\n"
             f"SELECT\n  " + ",\n  ".join(sel_arriba) +
             f"\nFROM detalle AS d"

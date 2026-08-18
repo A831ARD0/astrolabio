@@ -626,7 +626,14 @@ const BUSCADOR_DESDE = 8
  */
 const AGRUPAR_DESDE = 3
 
-/** El grupo de una métrica que no sale de ninguna tabla. Lo pone el servidor. */
+/**
+ * El grupo de una métrica que no sale de ninguna tabla NI está en una tabla de
+ * medidas. Lo pone el servidor.
+ *
+ * Una compuesta guardada en una tabla de medidas se agrupa por ella —«Medidas
+ * Ventas»—, que es como se agrupa en el modelo. Cincuenta y ocho compuestas en un
+ * montón llamado «compuesta» dicen de qué NO son, no de qué son.
+ */
 const COMPUESTA = 'compuesta'
 
 type Item = { clave: string; etiqueta: string; nota: string }
@@ -636,7 +643,9 @@ type Item = { clave: string; etiqueta: string; nota: string }
  *
  * `compuesta` va al final y no entre las tablas: no es una tabla, es una cifra
  * calculada sobre otras métricas. Ponerla en medio, con el mismo aspecto que
- * `FACT_VENTAS`, haría pensar que existe un origen con ese nombre.
+ * `FACT_VENTAS`, haría pensar que existe un origen con ese nombre. Las tablas de
+ * medidas sí van entre las demás, en el orden en que el modelo las declara — que
+ * las deja después de las métricas de las que dependen.
  */
 function porTabla(items: Item[]): [string, Item[]][] {
   const grupos = new Map<string, Item[]>()
