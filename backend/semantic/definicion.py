@@ -23,7 +23,8 @@ import difflib
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (BaseModel, ConfigDict, Field, field_validator,
+                      model_validator)
 
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
@@ -72,6 +73,13 @@ class CampoDef(_Base):
     #: Solo se marca una columna que identifique el periodo POR COMPLETO: una
     #: fecha, un `202601`, un año. Nunca `Mes`, `Trimestre` ni `Dia_Semana`.
     grano_tiempo: Literal[GRANOS_TIEMPO] | None = None   # type: ignore[valid-type]
+    #: Por que otra columna de la MISMA entidad se ordenan sus valores.
+    #:
+    #: «Enero, febrero, marzo» no es el orden alfabetico, y ordenar el nombre de un
+    #: mes por su nombre da «abril, agosto, diciembre», que en un filtro es
+    #: inservible. Con `ordenar_por: mes` la lista sale como va el año. Es el
+    #: «ordenar por columna» de Power BI.
+    ordenar_por: str | None = None
 
 
 class OrigenDef(_Base):
@@ -94,6 +102,26 @@ class EntidadDef(_Base):
         if repetidos:
             raise ValueError(f"campos repetidos: {', '.join(sorted(repetidos))}")
         return v
+
+    @model_validator(mode="after")
+    def ordenar_por_existe(self) -> "EntidadDef":
+        """
+        `ordenar_por` apuntando a una columna que no existe seria un ORDER BY roto en
+        cada consulta del filtro, y el aviso saldria al usarlo y no al guardarlo.
+        """
+        nombres = {c.nombre for c in self.campos}
+        for c in self.campos:
+            if c.ordenar_por is None:
+                continue
+            if c.ordenar_por not in nombres:
+                raise ValueError(
+                    f"'{self.nombre}.{c.nombre}' se ordena por '{c.ordenar_por}', "
+                    f"que no es una columna de '{self.nombre}'")
+            if c.ordenar_por == c.nombre:
+                raise ValueError(
+                    f"'{self.nombre}.{c.nombre}' se ordena por si mismo: quita "
+                    f"'ordenar_por' y se ordena igual")
+        return self
 
 
 class RelacionDef(_Base):

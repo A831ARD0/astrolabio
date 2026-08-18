@@ -169,10 +169,18 @@ def generar(rapido: bool = False) -> Path:
             CAST(d AS DATE)                              AS fecha,
             YEAR(d)                                      AS anio,
             MONTH(d)                                     AS mes,
-            MONTHNAME(d)                                 AS mes_nombre,
+            -- En español, y a mano: `MONTHNAME` devuelve el nombre en ingles
+            -- —«July»— haga lo que haga la configuracion de la maquina, asi que
+            -- traducirlo con una lista es lo unico que da el mismo resultado en
+            -- todas. Ojo con el orden: se ordena por `mes`, no por el nombre, o el
+            -- año empieza en abril.
+            ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+             'agosto', 'septiembre', 'octubre', 'noviembre',
+             'diciembre'][MONTH(d)]                      AS mes_nombre,
             QUARTER(d)                                   AS trimestre,
             YEAR(d) * 100 + MONTH(d)                     AS anio_mes,
-            DAYNAME(d)                                   AS dia_nombre,
+            ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado',
+             'domingo'][ISODOW(d)]                       AS dia_nombre,
             CASE WHEN DAYOFWEEK(d) = 0 THEN FALSE ELSE TRUE END AS es_habil
         FROM generate_series(DATE '2016-01-01', DATE '2026-07-31', INTERVAL 1 DAY) AS t(d)
     """)

@@ -241,7 +241,16 @@ function aplicar(d: Definicion, a: Accion): Definicion {
             ? e
             : {
                 ...e,
-                campos: e.campos.filter((c) => !fuera.has(c.nombre)),
+                // Y quien se ordenaba por una de las que se van vuelve a
+                // ordenarse por su valor: apuntar a una columna que ya no está
+                // impide guardar el modelo, y el aviso saldría lejos de aquí.
+                campos: e.campos
+                  .filter((c) => !fuera.has(c.nombre))
+                  .map((c) =>
+                    c.ordenar_por && fuera.has(c.ordenar_por)
+                      ? { ...c, ordenar_por: null }
+                      : c,
+                  ),
                 clave_primaria: fuera.has(e.clave_primaria ?? '')
                   ? null
                   : e.clave_primaria,

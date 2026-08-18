@@ -38,6 +38,13 @@ export interface Campo {
    * no significa nada — por eso se marca una y no la otra.
    */
   grano_tiempo?: 'dia' | 'mes' | 'trimestre' | 'anio' | null
+  /**
+   * Por qué otra columna de la misma entidad se ordenan sus valores.
+   *
+   * «Enero, febrero, marzo» no es el orden alfabético: un filtro de meses ordenado
+   * por su nombre empieza en abril. Es el «ordenar por columna» de Power BI.
+   */
+  ordenar_por?: string | null
 }
 
 export interface Entidad {

@@ -105,6 +105,7 @@ function CampoCerrado({
 
 export function PanelFiltros({
   campos,
+  etiquetas,
   modeloId,
   version,
   selecciones,
@@ -112,6 +113,8 @@ export function PanelFiltros({
   alLimpiar,
 }: {
   campos: string[]
+  /** Los nombres que puso el widget, que pesan más que los del modelo. */
+  etiquetas: Record<string, string>
   modeloId: number
   version: number
   selecciones: Record<string, unknown[]>
@@ -140,8 +143,9 @@ export function PanelFiltros({
   }, [campos.length])
 
   const etiquetaDe = (clave: string) =>
-    catalogo.data?.dimensiones.find((d) => d.clave === clave)?.etiqueta ??
-    clave.split('.').pop() ??
+    etiquetas[clave]?.trim() ||
+    catalogo.data?.dimensiones.find((d) => d.clave === clave)?.etiqueta ||
+    clave.split('.').pop() ||
     clave
 
   // Antes de la primera medida (alto 0) se asume que hay sitio: un parpadeo de

@@ -98,6 +98,9 @@ function WidgetFiltro({
   return (
     <PanelFiltros
       campos={widget.dimensiones}
+      // Renombrar un campo vale para el filtro igual que para una tabla: el
+      // inspector ofrece la etiqueta en los dos, y solo la usaba la tabla.
+      etiquetas={(widget.etiquetas as Record<string, string> | undefined) ?? {}}
       modeloId={modeloId}
       version={version}
       selecciones={selecciones}

@@ -7,6 +7,16 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Los valores de un filtro se pueden ordenar por otra columna.** «Enero, febrero,
+  marzo» no es el orden alfabético: un filtro con el nombre del mes empezaba en abril
+  y terminaba en septiembre, y en esa lista nadie encuentra nada. En la tabla de
+  campos de la entidad, la columna **orden** dice por qué otra columna de la misma
+  entidad se ordena — el nombre del mes por el número del mes. Es el «ordenar por
+  columna» de Power BI. Se ofrecen solo columnas de la misma entidad: un orden que
+  viniera de otra tabla necesitaría una unión, y entonces el orden de un filtro
+  dependería de por dónde se une. El modelo no se guarda si apunta a una columna que
+  no existe, ni a sí misma.
+
 - **Una métrica de tiempo ya no exige la columna del mes en la tabla: el mes lo pone
   el contexto.** Antes, «Ventas Mes Anterior» al lado de una fila por sucursal fallaba
   pidiendo una columna de meses en el desglose — y agregarla convierte una fila por
@@ -218,6 +228,11 @@ versionado es [semántico](https://semver.org/lang/es/).
   sello dejaría de significar nada porque nadie podría mantenerlo puesto.
 
 ### Arreglado
+
+- **El widget de filtro ya respeta la etiqueta que le pusiste al campo.** El inspector
+  la ofrece —«Solo cambia el nombre en este widget»— y solo la usaban las tablas: el
+  panel de filtros seguía enseñando `NOMBRE_MES` por más veces que se escribiera
+  «Mes».
 
 - **Un panel de filtros con varios campos no se podía guardar.** La pantalla dejaba
   poner los campos que quepan y los dibujaba bien, pero el servidor seguía exigiendo

@@ -677,7 +677,7 @@ table.campos { width: 100%; border-collapse: collapse; font-size: 12px; table-la
    nada: se encoge hasta cero y el encabezado se pisa con el siguiente, asi que
    quedaban unas casillas sin saber de que columna eran. Con este minimo la tabla
    desborda y su caja la desplaza, que es lo que ya sabe hacer. */
-table.campos { min-width: 450px; }
+table.campos { min-width: 546px; }
 table.campos th:first-child { width: 152px; }
 /* Y el nombre se queda quieto al desplazar: es lo unico que dice de que fila son
    las casillas. Sin esto, desplazarse para llegar a «ver» dejaba fuera el nombre
@@ -703,6 +703,10 @@ table.campos th:nth-child(4),
 table.campos th:nth-child(5),
 table.campos th:nth-child(6),
 table.campos th:nth-child(7) { width: 34px; }
+/* «orden» lleva un desplegable con nombres de columna: sin ancho declarado se
+   quedaba en la flecha sola, porque los anchos de las otras siete suman todo el
+   minimo de la tabla y a esta no le sobraba nada. */
+table.campos th:nth-child(8) { width: 96px; }
 table.campos select { width: 100%; }
 table.campos td:first-child { overflow: hidden; text-overflow: ellipsis; }
 table.campos th {

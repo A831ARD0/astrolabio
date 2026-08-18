@@ -1229,6 +1229,23 @@ elegido. Si lo estiras hacia abajo, los desplegables se convierten en listas abi
 que se reparten el alto. No hay que configurar nada: lo decide el espacio que le
 dejes.
 
+**El nombre de cada campo lo pone el widget.** En el inspector, cada campo del panel
+tiene su **Etiqueta**: sirve para que el filtro diga «Mes» y no `NOMBRE_MES`. Cambia
+el nombre solo en ese widget; en el modelo sigue llamándose igual, que es lo que ven
+los demás tableros.
+
+**En qué orden salen los valores.** Por omisión, por su propio valor — que en un
+campo de texto es el orden alfabético, y para los meses no sirve: «abril, agosto,
+diciembre» no es como va el año. Eso se arregla en el modelo, no en el tablero:
+en la tabla de campos de la entidad, la columna **orden** dice por qué OTRA columna
+se ordena. Para el nombre del mes, por el número del mes. Es el «ordenar por
+columna» de Power BI, y vale para cualquier campo con un orden propio: los rangos de
+antigüedad, las etapas de un embudo, las tallas.
+
+Solo se ofrecen columnas de la misma entidad: un orden que viniera de otra tabla
+necesitaría una unión, y entonces el orden de un filtro dependería de por dónde se
+une, que es exactamente lo que no puede pasar.
+
 ### Exportar
 
 Cada widget tiene su flecha: **Excel** o **CSV**. El archivo lleva una hoja con el

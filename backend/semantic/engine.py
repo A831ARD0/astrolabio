@@ -91,6 +91,8 @@ class Campo:
     unico: bool = False
     #: Que periodo identifica, si identifica alguno. Ver `CampoDef.grano_tiempo`.
     grano_tiempo: str | None = None
+    #: Por que otra columna se ordenan sus valores. Ver `CampoDef.ordenar_por`.
+    ordenar_por: str | None = None
 
 
 @dataclass
@@ -157,6 +159,7 @@ class Modelo:
                     etiqueta=c.get("etiqueta"), visible=c.get("visible", True),
                     pii=c.get("pii", False), unico=c.get("unico", False),
                     grano_tiempo=c.get("grano_tiempo"),
+                    ordenar_por=c.get("ordenar_por"),
                 )
                 for c in e["campos"]
             }
@@ -1499,12 +1502,25 @@ class MotorAsociativo:
         self.con = con
 
     def _valores(self, entidad: str, campo: str) -> list[Any]:
-        tabla = self.m.entidades[entidad].tabla
-        filas = self.con.execute(
-            f"SELECT DISTINCT {_cita(campo)} FROM {_cita(tabla)} "
-            f"WHERE {_cita(campo)} IS NOT NULL ORDER BY 1"
-        ).fetchall()
-        return [f[0] for f in filas]
+        """
+        Los valores del campo, en el orden en que se van a leer.
+
+        Por su propio valor, salvo que el modelo diga por cual otro: «enero, febrero,
+        marzo» no es el orden alfabetico, y un filtro de meses ordenado por su nombre
+        empieza en abril. Se agrupa y se ordena por el MINIMO de esa otra columna
+        —cada nombre de mes aparece en muchas filas— y el valor queda de desempate,
+        para que el orden sea siempre el mismo aunque la otra columna repita.
+        """
+        ent = self.m.entidades[entidad]
+        por = ent.campos[campo].ordenar_por if campo in ent.campos else None
+        col = _cita(campo)
+        if por:
+            sql = (f"SELECT {col} FROM {_cita(ent.tabla)} WHERE {col} IS NOT NULL "
+                   f"GROUP BY {col} ORDER BY MIN({_cita(por)}), {col}")
+        else:
+            sql = (f"SELECT DISTINCT {col} FROM {_cita(ent.tabla)} "
+                   f"WHERE {col} IS NOT NULL ORDER BY 1")
+        return [f[0] for f in self.con.execute(sql).fetchall()]
 
     def _alcanzables(self, entidad: str, campo: str,
                      selecciones: dict[str, list[Any]]) -> set[Any] | None:

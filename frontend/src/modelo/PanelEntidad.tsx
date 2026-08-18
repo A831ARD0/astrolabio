@@ -463,6 +463,9 @@ export function PanelEntidad({
               >
                 mes
               </Th>
+              <th title="Por qué otra columna se ordenan sus valores en un filtro. «Enero, febrero, marzo» no es el orden alfabético">
+                orden
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -534,6 +537,28 @@ export function PanelEntidad({
                       })
                     }
                   />
+                </td>
+                <td>
+                  {/* Se ofrecen las demás columnas de esta entidad y nada más: un
+                      orden que viniera de otra tabla necesitaría una unión, y
+                      entonces el orden de un filtro dependería de por dónde se
+                      une — que es exactamente lo que no puede pasar. */}
+                  <select
+                    value={c.ordenar_por ?? ''}
+                    title="Por su propio valor, o por otra columna: el nombre del mes por el número del mes"
+                    onChange={(e) =>
+                      cambiarCampo(c.nombre, { ordenar_por: e.target.value || null })
+                    }
+                  >
+                    <option value="">por su valor</option>
+                    {entidad.campos
+                      .filter((o) => o.nombre !== c.nombre)
+                      .map((o) => (
+                        <option key={o.nombre} value={o.nombre}>
+                          {o.nombre}
+                        </option>
+                      ))}
+                  </select>
                 </td>
               </tr>
             ))}
