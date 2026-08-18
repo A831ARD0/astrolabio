@@ -1080,13 +1080,40 @@ Dos cosas que conviene saber:
   en vez de ser el widget especial que trae sus datos por otro lado. El **máximo de
   filas** se aplica a esas filas planas: si lo alcanzas, faltan combinaciones.
 
+### El catálogo: las métricas por la tabla de la que salen
+
+Debajo de **Métricas** y de **Dimensiones**, lo que se puede elegir viene agrupado
+por la tabla de la que sale —`fact_venta`, `fact_servicio`, `fact_refaccion`…— y cada
+grupo se abre y se cierra pulsando su nombre. Con casi cien métricas, una lista
+plana obliga a atravesar las de ventas para llegar a las de refacciones y no deja ver de
+un golpe qué trae cada tabla.
+
+Tres detalles que importan:
+
+- La cabecera de un grupo cerrado **sigue diciendo cuántas hay dentro y cuántas usa
+  este widget** («2 de 12»). Un grupo cerrado que esconde una métrica en uso sería
+  una trampa.
+- Nacen abiertos los grupos que aportan algo a este widget, y cerrados los demás. En
+  cuanto abres o cierras uno a mano, se acuerda —en este navegador— y manda tu
+  decisión.
+- **Al buscar se abren todos**, y lo ya elegido no desaparece nunca de la lista
+  aunque no coincida con lo que buscas.
+
+**`compuesta`** no es una tabla: son las métricas calculadas sobre otras métricas.
+Por eso va al final y con ese nombre, en vez de mezclada entre las tablas como si
+existiera un origen que se llama así.
+
 ### Las columnas de un widget: orden y propiedades
 
 Debajo del título, **Columnas de cifras** lista lo elegido **en el orden en que
-sale**, numerado, con flechas para subir y bajar. Es una lista aparte del catálogo a
-propósito: en el catálogo el orden es el del modelo, y aquí importa otro —el de las
-columnas de la tabla y de las series del gráfico—. Mezclarlos obligaría a elegir
-entre poder buscar y poder ordenar.
+sale**, numerado, con flechas `↑` y `↓` para subir y bajar. Ese es el orden de las
+columnas de la tabla: si quieres «Unidades Vendidas» antes de «Objetivo de Ventas»,
+se cambia ahí y se guarda con el tablero. Igual con **Columnas de desglose**, que
+son las de la izquierda.
+
+Es una lista aparte del catálogo a propósito: en el catálogo el orden es el del
+modelo, y aquí importa otro —el de las columnas de la tabla y de las series del
+gráfico—. Mezclarlos obligaría a elegir entre poder buscar y poder ordenar.
 
 Cada columna se abre con `▸` y tiene sus propias propiedades:
 

@@ -14,14 +14,25 @@
  * Quien lo use debe darle a su elemento un `key` que dependa del nombre. Al renombrar
  * un cajón cambia la clave, y es el remontaje lo que hace que se lea la nueva —el
  * valor inicial de `useState` solo se calcula al montar.
+ *
+ * `porOmision` es para cuando el estado de partida depende del contenido y no del
+ * gusto: en el catálogo de métricas, un grupo que no aporta ninguna de las que el
+ * widget usa nace plegado, y los que sí, abiertos. Solo vale mientras nadie lo haya
+ * tocado —en cuanto se pliega o se abre a mano, queda escrito y manda lo escrito—,
+ * que es lo que evita que un grupo se vuelva a cerrar solo al quitarle su última
+ * métrica.
  */
 
 import { useCallback, useState } from 'react'
 
-export function usePlegado(clave: string): [boolean, () => void] {
-  const [plegado, setPlegado] = useState(
-    () => localStorage.getItem(`astrolabio.grupo.${clave}`) === '1',
-  )
+export function usePlegado(
+  clave: string,
+  porOmision = false,
+): [boolean, () => void] {
+  const [plegado, setPlegado] = useState(() => {
+    const guardado = localStorage.getItem(`astrolabio.grupo.${clave}`)
+    return guardado === null ? porOmision : guardado === '1'
+  })
   const alternar = useCallback(() => {
     setPlegado((previo) => {
       localStorage.setItem(`astrolabio.grupo.${clave}`, previo ? '0' : '1')

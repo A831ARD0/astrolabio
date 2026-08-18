@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useCampos } from '../api/hooks'
 import type { Hoja, TipoWidget, Widget } from '../api/tipos'
 import { coincide } from '../comunes/buscar'
+import { Grupo } from '../comunes/Panel'
 import { type Formato, type Total, totalPorOmision } from './formato'
 import { SEMAFORO_NUEVO, type Semaforo } from './semaforo'
 
@@ -185,6 +186,8 @@ export function PanelWidget({
           />
           <Seleccionables
             titulo={`Métricas${widget.metricas?.length ? ` (${widget.metricas.length})` : ''}`}
+            clave="metricas"
+
             items={metricas.map((m) => ({ clave: m.clave, etiqueta: m.etiqueta,
                                           nota: m.entidad }))}
             elegidos={widget.metricas ?? []}
@@ -259,6 +262,7 @@ export function PanelWidget({
       )}
 
       <Seleccionables
+        clave="dimensiones"
         titulo={
           soloUna
             ? 'Desglosar por (una)'
@@ -614,32 +618,106 @@ function EditorSemaforo({
 /** Desde cuántos elementos vale la pena el buscador. Con menos, estorba. */
 const BUSCADOR_DESDE = 8
 
+/**
+ * Desde cuántas tablas vale la pena agrupar.
+ *
+ * Con dos, las cabeceras cuestan más de lo que ordenan: se ve la lista entera de un
+ * golpe y la columna de la derecha ya dice de dónde sale cada cosa.
+ */
+const AGRUPAR_DESDE = 3
+
+/** El grupo de una métrica que no sale de ninguna tabla. Lo pone el servidor. */
+const COMPUESTA = 'compuesta'
+
+type Item = { clave: string; etiqueta: string; nota: string }
+
+/**
+ * Las métricas por la tabla de la que salen, en el orden en que las da el modelo.
+ *
+ * `compuesta` va al final y no entre las tablas: no es una tabla, es una cifra
+ * calculada sobre otras métricas. Ponerla en medio, con el mismo aspecto que
+ * `FACT_VENTAS`, haría pensar que existe un origen con ese nombre.
+ */
+function porTabla(items: Item[]): [string, Item[]][] {
+  const grupos = new Map<string, Item[]>()
+  for (const i of items) {
+    const tabla = i.nota || 'sin tabla'
+    const ya = grupos.get(tabla)
+    if (ya) ya.push(i)
+    else grupos.set(tabla, [i])
+  }
+  // `sort` es estable, así que lo único que se mueve es `compuesta`.
+  return [...grupos.entries()].sort(
+    (a, b) => Number(a[0] === COMPUESTA) - Number(b[0] === COMPUESTA),
+  )
+}
+
+/**
+ * El catálogo: lo que se puede elegir, agrupado por la tabla de la que sale.
+ *
+ * Con noventa y seis métricas una lista plana es un pozo: para llegar a las de
+ * refacciones hay que atravesar las de ventas y las de objetivos con la rueda del ratón,
+ * y no hay forma de ver de un golpe qué trae cada tabla. Agrupadas, cada grupo se
+ * pliega una vez y se queda plegado —se acuerda en el navegador—, y su cabecera
+ * sigue diciendo cuántas hay dentro y cuántas usa este widget aunque esté cerrado.
+ * Un grupo plegado que esconde una métrica en uso sería una trampa.
+ *
+ * Los que no aportan nada a este widget nacen plegados; los que sí, abiertos. Y al
+ * buscar se abren todos, porque un grupo cerrado que esconde el único resultado se
+ * lee como «no hay nada», que es lo contrario de lo que pasa.
+ */
 function Seleccionables({
   titulo,
+  clave,
   items,
   elegidos,
   alAlternar,
   vacio,
 }: {
   titulo: string
-  items: { clave: string; etiqueta: string; nota: string }[]
+  /** Para acordarse de qué grupos están plegados sin confundir dos catálogos. */
+  clave: string
+  items: Item[]
   elegidos: string[]
   alAlternar: (clave: string) => void
   vacio: string
 }) {
   const [busca, setBusca] = useState('')
+  const buscando = busca.trim().length > 0
 
   // Se busca por etiqueta, por nombre técnico y por tabla: con noventa y seis
   // métricas, un trozo del nombre es lo que uno recuerda, no el nombre exacto.
-  const visibles = busca.trim()
-    ? items.filter((i) => coincide(`${i.etiqueta} ${i.clave} ${i.nota}`, busca))
-    : items
+  //
+  // Lo ya elegido no se esconde nunca, y se queda en SU sitio en vez de irse al
+  // final de la lista: si al buscar desapareciera, no habría forma de quitarlo sin
+  // adivinar cómo se llamaba.
+  const sale = (i: Item) =>
+    !buscando ||
+    coincide(`${i.etiqueta} ${i.clave} ${i.nota}`, busca) ||
+    elegidos.includes(i.clave)
 
-  // Lo ya elegido no se esconde nunca: si al buscar desapareciera de la vista,
-  // no habría forma de quitarlo sin adivinar cómo se llamaba.
-  const fuera = busca.trim()
-    ? items.filter((i) => elegidos.includes(i.clave) && !visibles.includes(i))
-    : []
+  const grupos = porTabla(items)
+  const agrupado = grupos.length >= AGRUPAR_DESDE
+
+  const lista = (dentro: Item[]) => (
+    <div className="lista">
+      {dentro.map((i) => (
+        <button
+          key={i.clave}
+          className={elegidos.includes(i.clave) ? 'sel' : ''}
+          onClick={() => alAlternar(i.clave)}
+          title={i.clave}
+        >
+          <span className="nom">{i.etiqueta}</span>
+          {/* Agrupado, la tabla ya está en la cabecera: repetirla en cada renglón
+              es ruido, y el sitio se aprovecha para el nombre. */}
+          {!agrupado && <span className="dcha">{i.nota}</span>}
+        </button>
+      ))}
+    </div>
+  )
+
+  const visibles = items.filter(sale)
 
   return (
     <div>
@@ -659,22 +737,28 @@ function Seleccionables({
               onChange={(e) => setBusca(e.target.value)}
             />
           )}
-          {visibles.length === 0 && fuera.length === 0 ? (
+          {visibles.length === 0 ? (
             <div className="chico tenue">Nada coincide con «{busca.trim()}».</div>
+          ) : !agrupado ? (
+            lista(visibles)
           ) : (
-            <div className="lista">
-              {[...visibles, ...fuera].map((i) => (
-                <button
-                  key={i.clave}
-                  className={elegidos.includes(i.clave) ? 'sel' : ''}
-                  onClick={() => alAlternar(i.clave)}
-                  title={i.clave}
+            grupos.map(([tabla, todos]) => {
+              const dentro = todos.filter(sale)
+              if (dentro.length === 0) return null
+              const usadas = todos.filter((i) => elegidos.includes(i.clave)).length
+              return (
+                <Grupo
+                  key={tabla}
+                  clave={`campos.${clave}.${tabla}`}
+                  titulo={tabla}
+                  cuenta={usadas > 0 ? `${usadas} de ${todos.length}` : todos.length}
+                  forzarAbierto={buscando}
+                  plegadoPorOmision={usadas === 0}
                 >
-                  <span className="nom">{i.etiqueta}</span>
-                  <span className="dcha">{i.nota}</span>
-                </button>
-              ))}
-            </div>
+                  {lista(dentro)}
+                </Grupo>
+              )
+            })
           )}
         </>
       )}

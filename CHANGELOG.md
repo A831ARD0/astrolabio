@@ -7,6 +7,18 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Las métricas del catálogo, agrupadas por la tabla de la que salen y plegables.**
+  Con noventa y seis, una lista plana obliga a atravesar las de ventas para llegar a
+  las de refacciones y no deja ver de un golpe qué trae cada tabla. La cabecera de un
+  grupo cerrado sigue diciendo cuántas hay dentro y cuántas usa el widget —un grupo
+  cerrado que esconde una métrica en uso sería una trampa—; nacen abiertos los que
+  aportan algo al widget y cerrados los demás, hasta que alguien decida a mano, que
+  entonces manda y se acuerda; y al buscar se abren todos, porque un grupo cerrado
+  que esconde el único resultado se lee como «no hay nada». `compuesta` va al final
+  y no entre las tablas: no es una tabla, y ponerla en medio haría pensar que existe
+  un origen con ese nombre. Mismo mecanismo de plegado que los grupos del ETL y del
+  panel del modelo, misma clave y mismo sitio.
+
 - **La hoja entera en PDF, como informe, en una sola página o en A4.** Botón **PDF**
   en la barra del tablero: saca la hoja activa con los filtros puestos, encabezada por
   una portada que solo existe en el documento —tablero, hoja, filtros aplicados, modelo

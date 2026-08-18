@@ -1720,6 +1720,19 @@ table.datos tfoot td {
 .grupo > header .cuenta { margin-left: auto; font-variant-numeric: tabular-nums; }
 .grupo > header .plegar { flex: 0 0 9px; font-size: 9px; }
 
+/* En el inspector de un widget, los grupos son las tablas de las que sale cada
+   metrica. La lista se sangra para que se vea de un golpe que cuelga de su tabla:
+   sin sangrado, una metrica y una cabecera de tabla se leen al mismo nivel y el
+   grupo deja de agrupar nada. */
+.inspector .grupo > header {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 2px 3px;
+  border-bottom: 1px solid var(--borde);
+}
+.inspector .grupo .lista { padding-left: 10px; }
+.inspector .grupo + .grupo { margin-top: 2px; }
+
 /* ------------------------------------------------- el editor de una metrica
 
    Dos columnas: se escribe a la izquierda y se consulta a la derecha, con las

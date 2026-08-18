@@ -188,6 +188,7 @@ export function Grupo({
   cuenta,
   clave,
   forzarAbierto = false,
+  plegadoPorOmision = false,
   children,
 }: {
   titulo: string
@@ -195,9 +196,11 @@ export function Grupo({
   cuenta?: React.ReactNode
   clave: string
   forzarAbierto?: boolean
+  /** Cómo nace mientras nadie lo haya plegado ni abierto a mano. */
+  plegadoPorOmision?: boolean
   children: React.ReactNode
 }) {
-  const [plegado, alternar] = usePlegado(clave)
+  const [plegado, alternar] = usePlegado(clave, plegadoPorOmision)
   const abierto = forzarAbierto || !plegado
 
   return (
