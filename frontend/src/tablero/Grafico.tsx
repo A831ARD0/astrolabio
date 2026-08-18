@@ -167,6 +167,8 @@ export function Grafico({
     alSeleccionar && dim ? (nombre) => alSeleccionar(dim, nombre) : undefined,
   )
 
-  return <div ref={ref} style={{ height: '100%', width: '100%' }} />
+  // La clase es para el CSS de impresion: hay que poder distinguir el lienzo del
+  // grafico de cualquier otro div del cuerpo del widget.
+  return <div ref={ref} className="grafico" style={{ height: '100%', width: '100%' }} />
 }
 

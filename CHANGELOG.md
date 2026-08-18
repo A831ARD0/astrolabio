@@ -7,6 +7,24 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **La hoja entera en PDF, como informe.** Botón **PDF** en la barra del tablero:
+  imprime la hoja activa con los filtros puestos, encabezada por una portada que solo
+  existe en el papel —tablero, hoja, filtros aplicados, modelo y versión, quién la
+  emitió y cuándo—. Es la misma procedencia que lleva el Excel, y por lo mismo: un PDF
+  que circula por correo tiene que poder decir de qué mes es.
+
+  Lo hace el navegador y no el servidor: el navegador ya tiene la hoja dibujada, con
+  sus gráficos y sus colores, y sale texto de verdad en vez de una imagen. Un PDF
+  hecho en el servidor pediría un navegador headless instalado allí.
+
+  El papel no es la pantalla, y de ahí casi todo el trabajo: la rejilla conserva las
+  columnas de la hoja pero suelta los altos; nada se queda dentro de una caja que se
+  desplaza; una tabla larga repite sus encabezados en cada página y su fila de totales
+  se imprime **una** vez y al final —un `tfoot` se repite por omisión, y eso pone el
+  total de treinta y seis sucursales debajo de las diez que caben en la primera hoja—;
+  y el informe sale en la paleta clara aunque la pantalla esté en oscuro, porque el
+  tema es de la pantalla y un informe en negativo es un cartucho por hoja.
+
 - **Un widget avisa cuando le faltan filas.** Banda ámbar encima del dato: «Faltan
   filas. Se alcanzó el máximo de N filas y hay más. Lo que se ve es una parte, y los
   totales son los de esa parte.» No se puede cerrar mientras la tabla esté cortada.

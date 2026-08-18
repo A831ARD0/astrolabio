@@ -115,7 +115,8 @@ export function FiltroCampo({
   alAlternar: (valor: unknown) => void
   alLimpiar: () => void
 }) {
-  const elegidos = estados?.seleccionado.length ?? 0
+  const sel = estados?.seleccionado ?? []
+  const elegidos = sel.length
 
   return (
     <div className="filtro">
@@ -129,6 +130,17 @@ export function FiltroCampo({
           </button>
         )}
       </header>
+
+      {/* En papel un filtro no imprime su lista de cuarenta valores: imprime en
+          qué quedó. Un informe que enseña las opciones y no la elección no dice
+          nada, y ocupa una página entera para no decirlo. */}
+      <div className="solo-papel">
+        {elegidos === 0
+          ? 'todos'
+          : elegidos <= 6
+            ? sel.map(String).join(', ')
+            : `${elegidos} valores elegidos`}
+      </div>
 
       <ListaValores
         estados={estados}

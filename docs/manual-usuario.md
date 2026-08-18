@@ -1173,6 +1173,31 @@ Cada widget tiene su flecha: **Excel** o **CSV**. El archivo lleva una hoja con 
 contexto —qué filtros estaban puestos, qué versión del modelo, quién lo exportó y
 cuándo— para que una tabla que alguien manda por correo siga diciendo de dónde salió.
 
+### La hoja entera en PDF
+
+El botón **PDF** de la barra de arriba saca la hoja que estás viendo como informe,
+con los filtros puestos. Abre el diálogo de impresión del navegador; ahí eliges
+«Guardar como PDF» —o una impresora, si es para papel.
+
+El informe empieza por una cabecera que solo existe en el PDF: el nombre del
+tablero, la hoja, **los filtros aplicados**, el modelo y su versión, y quién lo
+emitió y cuándo. Es lo mismo que lleva la hoja de procedencia del Excel, y por lo
+mismo: un PDF que circula por correo tiene que poder decir de qué mes es sin que
+nadie tenga que preguntarlo.
+
+Lo que se imprime es **la hoja activa**, tal como se ve. Los widgets conservan su
+sitio, una tabla larga sigue en la página siguiente repitiendo sus encabezados, y
+la fila de totales se imprime una sola vez y al final. El informe sale siempre en
+claro aunque tengas la pantalla en oscuro.
+
+Dos cosas que conviene saber:
+
+- **En papel va lo que el widget cargó.** Si a una tabla le faltan filas, se
+  imprime también su aviso ámbar, así que el PDF lo dice; pero para el detalle
+  completo lo que hay es el Excel del widget, que se trae hasta 50 000 filas.
+- **Un gráfico se imprime como imagen**, escalado. El texto de las tablas, en
+  cambio, es texto de verdad: se puede buscar y copiar del PDF.
+
 ---
 
 ## 8. Quién ve qué

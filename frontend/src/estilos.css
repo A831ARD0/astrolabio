@@ -2170,3 +2170,221 @@ table.datos.relaciones tr.conflicto { box-shadow: inset 3px 0 0 var(--critico); 
   flex: 0 0 auto;
 }
 .recortado strong { color: var(--aviso); }
+
+/* ============================================================== impresión
+ *
+ * Una hoja impresa es un informe, y un informe tiene reglas que la pantalla no
+ * tiene. Cuatro, y ninguna es estética:
+ *
+ * **La rejilla se rearma.** En pantalla los widgets están posicionados en absoluto,
+ * y un elemento posicionado en absoluto no sabe que existen las páginas: el salto
+ * cae por donde toque. Aquí se rehace como una `grid` de las mismas columnas que
+ * declara la hoja —tres KPI que estaban en fila siguen en fila— y se sueltan los
+ * altos, porque en papel lo que manda es el contenido y no la pantalla.
+ *
+ * **Nada se queda dentro de una caja que se desplaza.** En pantalla una tabla vive
+ * en un recuadro con barra de desplazamiento; si eso se imprime tal cual, sale la
+ * primera pantalla de filas y el resto no existe, sin decirlo. Todos los recortes
+ * por alto se sueltan, y de paso todo pasa a `display: block`: Chrome no fragmenta
+ * lo que hay dentro de un contenedor flex, y con la tabla dentro de un flex su
+ * cabecera dejaba de repetirse en la segunda página.
+ *
+ * **Los colores son datos.** El ahorro de tinta del navegador borra los fondos, y
+ * con ellos el ámbar de «faltan filas» y el verde y rojo de los semáforos. Un
+ * semáforo en gris no es un semáforo, así que se fuerza a que se impriman.
+ *
+ * **El papel no tiene tema.** El informe sale en la paleta clara pase lo que pase,
+ * porque el tema oscuro es de quien mira la pantalla y no de quien lee la hoja.
+ */
+@media print {
+  /* El informe es un documento claro, siempre. El tema por omisión de la
+     aplicación es el oscuro, así que sin esto quien tenga su Windows en oscuro
+     imprime el informe en negativo: texto blanco sobre negro, ilegible en papel y
+     un cartucho por hoja. El tema es de la pantalla; el papel no tiene tema. */
+  :root {
+    --fondo: #f7f8fa;
+    --fondo-panel: #ffffff;
+    --fondo-alto: #f0f2f5;
+    --fondo-hover: #e8ebef;
+    --borde: #dde1e7;
+    --borde-fuerte: #c3cad4;
+    --texto: #1a1f28;
+    --texto-suave: #5a6472;
+    --texto-tenue: #8a94a3;
+    --acento: #1f6feb;
+    --acento-suave: #dbe8ff;
+    --hecho: #b45309;
+    --hecho-suave: #fdf0dd;
+    --medida: #0f766e;
+    --critico: #cf222e;
+    --critico-suave: #ffe3e5;
+    --aviso: #9a6700;
+    --aviso-suave: #fff5d6;
+    --sombra: 0 8px 24px rgba(16, 24, 40, 0.12);
+  }
+
+  /* Horizontal por omisión: una tabla de una sucursal y cuatro métricas ya no cabe
+     de pie, y una tabla que se corta a lo ancho es peor que una hoja apaisada. */
+  @page { size: A4 landscape; margin: 12mm 10mm; }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html, body, .app, .cuerpo, .editor, .centro {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Todo lo que es aplicación y no informe: la navegación, la barra del tablero,
+     las pestañas de las hojas, los paneles de edición, los botones. */
+  .barra,
+  .editor > .barra-editor,
+  .centro > .barra-editor,
+  .hojas,
+  aside.izq,
+  aside.der,
+  .tirador,
+  .exportar,
+  .react-resizable-handle,
+  .filtro-colapsado .limpiar,
+  .filtro > header .btn,
+  .pop-filtro,
+  .filtro .lista-valores,
+  .no-imprimir {
+    display: none !important;
+  }
+
+  .solo-papel { display: block !important; }
+
+  .portada-informe { display: block !important; }
+
+  /* El papel es blanco. El gris de la aplicación, impreso, es tinta que no dice
+     nada y encima le quita contraste a todo lo que sí dice algo. */
+  html, body, .app, .editor, .centro, .rejilla { background: #fff !important; }
+
+  .rejilla, .rejilla.fija {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* La rejilla se rearma como `grid` y conserva las columnas de la hoja: tres KPI
+     que estaban en fila siguen en fila. Apilarlo todo a lo ancho de la página era
+     más simple, pero desarma el diseño de quien hizo la hoja y estira un gráfico
+     de un cuarto de ancho hasta dejarlo con media página en blanco al lado. El
+     alto sí se suelta: en papel lo que manda es el contenido. */
+  .rejilla .layout {
+    position: static !important;
+    display: grid !important;
+    grid-template-columns: repeat(var(--cols, 12), 1fr) !important;
+    gap: 4mm !important;
+    align-items: start !important;
+    height: auto !important;
+    width: auto !important;
+  }
+  /* react-grid-layout posiciona con estilos en línea: de ahí los !important. */
+  .rejilla .react-grid-item,
+  .rejilla .widget {
+    position: static !important;
+    transform: none !important;
+    grid-column: calc(var(--gx, 0) + 1) / span var(--gw, 12) !important;
+    /* En bloque y no en flex: Chrome no fragmenta lo que hay dentro de un
+       contenedor flex, y eso rompe algo que no se ve venir —la cabecera de una
+       tabla deja de repetirse en la segunda página y quedan columnas de números
+       sin nombre—. Se encontró comparando con una página mínima, donde sí se
+       repetía. */
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  .widget.sel { border-color: var(--borde) !important; }
+  .cuerpo-widget,
+  .widget-texto,
+  .tabla-envoltura,
+  .lista-valores .valores {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Una tabla que no cabe en una página repite su cabecera en la siguiente. Sin
+     esto, la segunda página son columnas de números sin nombre. */
+  table.datos thead { display: table-header-group; }
+  /* La fila de totales, en cambio, se imprime UNA vez y al final. Un `tfoot` se
+     repite en cada página por omisión, y eso pone el total de las treinta y seis
+     sucursales debajo de las diez que caben en la primera hoja: se lee como el
+     total de esas diez, que es la clase de cifra que nadie vuelve a comprobar. */
+  table.datos tfoot { display: table-row-group; }
+  table.datos tr { break-inside: avoid; page-break-inside: avoid; }
+  /* La cabecera pegajosa es de la pantalla; en papel se pega arriba de la página. */
+  table.datos th { position: static !important; }
+  /* El rótulo de una columna vive dentro de un `<button>` para poder ordenar con el
+     teclado. En la cabecera repetida de la segunda página Chrome pinta el fondo de
+     la fila pero no ese botón, y quedaba una banda gris vacía encima de treinta
+     filas de números. En papel no se ordena nada, así que el botón se va —con su
+     flecha, que en pantalla dice «pulsa aquí»— y se enseña la copia del rótulo que
+     `Th` deja puesta para esto. */
+  table.datos th button.ordenar { display: none !important; }
+  table.datos th .solo-papel { display: inline !important; }
+
+  /* El gráfico es un lienzo de píxeles del tamaño que tenía en la pantalla, y no
+     se redibuja al imprimir. Echarts lo mete en un contenedor de ancho fijo y lo
+     coloca en absoluto, así que un `max-width` sobre el lienzo no lo toca: el
+     contenedor se sale del margen y la página lo corta por donde acabe el papel.
+     Neutralizando las dos cosas, el lienzo se escala como una imagen —conserva su
+     proporción porque la trae en sus atributos— y cabe. */
+  .widget .grafico,
+  .widget .grafico > div,
+  .widget .grafico canvas {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Un KPI sin alto de rejilla se queda en un renglón; la cifra sigue mandando. */
+  .kpi { height: auto !important; padding: 12px 6px !important; }
+
+  /* En qué quedó el filtro, que es lo único suyo que interesa en papel. */
+  .filtro .solo-papel { font-size: 12px; font-weight: 550; padding: 2px 2px 4px; }
+}
+
+/* Lo que solo existe en papel: la portada del informe, el resumen de un filtro y la
+   copia del rótulo de una columna. */
+.portada-informe { display: none; }
+.solo-papel { display: none; }
+.portada-informe .titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 2px solid var(--texto);
+  padding-bottom: 4px;
+}
+.portada-informe h1 { margin: 0; font-size: 17px; font-weight: 650; }
+.portada-informe .hoja { font-size: 12px; color: var(--texto-suave); }
+.portada-informe .procedencia {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 7mm;
+  font-size: 10.5px;
+}
+.portada-informe .procedencia dt {
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+.portada-informe .procedencia dd { margin: 0; }
+.portada-informe .procedencia dd .uno + .uno::before {
+  content: ' · ';
+  color: var(--texto-tenue);
+}

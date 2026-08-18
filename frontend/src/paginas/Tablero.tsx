@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 // En react-grid-layout 2, `Layout` es la lista completa (de solo lectura) y cada
 // caja es un `LayoutItem`. En la versión 1 `Layout` era la caja: de ahí el lío.
 import GridLayout, { type Layout } from 'react-grid-layout'
@@ -39,6 +40,7 @@ import type {
   Widget,
 } from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
+import { Imprimir, PortadaInforme } from '../tablero/Imprimir'
 import { PanelWidget } from '../tablero/PanelWidget'
 import { WidgetVista } from '../tablero/WidgetVista'
 import { PIDE_DATOS, filtrosDeSelecciones } from '../tablero/consulta'
@@ -163,6 +165,17 @@ export function Tablero() {
   // El id vacío de la hoja implícita es el que llevan los widgets de antes.
   const enLaHoja = (w: Widget) => (w.hoja || hojas[0]!.id) === activa.id
   const mios = borrador.widgets.filter(enLaHoja)
+  /**
+   * Los widgets en orden de lectura: de arriba abajo y de izquierda a derecha.
+   *
+   * En pantalla no cambia nada —la rejilla los coloca en absoluto por su posicion—
+   * pero al imprimir la rejilla se convierte en una columna y entonces el orden del
+   * DOM ES el orden del informe. Sin esto, un informe sale en el orden en que se
+   * fueron agregando los widgets, que no es ningun orden.
+   */
+  const enOrden = [...mios].sort(
+    (a, b) => a.posicion.y - b.posicion.y || a.posicion.x - b.posicion.x,
+  )
 
   const altoFila =
     lienzo.modo === 'pantalla'
@@ -357,6 +370,9 @@ export function Tablero() {
                 Quitar {activos.length} filtro(s)
               </button>
             )}
+            {/* No se esconde al editar: quien acaba de armar la hoja es justo quien
+                quiere ver como queda en papel antes de mandarla. */}
+            <Imprimir hoja={activa.nombre || 'la hoja'} />
             {/* Solo a quien puede guardar. Un lector puede elegir un camino para
                 su sesión, pero decirle que tiene cambios pendientes que no puede
                 guardar solo confunde. */}
@@ -466,9 +482,23 @@ export function Tablero() {
           </div>
         )}
 
+        {/* Solo se ve en el papel. Va aqui dentro, y no fuera del area de la hoja,
+            para que encabece el informe sin colarse en la pantalla. */}
+        <PortadaInforme
+          tablero={d.nombre}
+          hoja={activa.nombre || 'Hoja 1'}
+          modelo={d.modelo_nombre}
+          version={d.version_modelo}
+          certificado={d.certificado}
+          publicado={d.publicado}
+          filtros={activos}
+          usuario={yo.data?.email}
+        />
+
         <div
           id="rejilla"
           className={`rejilla ${lienzo.modo === 'pantalla' && !noCabe ? 'fija' : ''}`}
+          style={{ '--cols': lienzo.columnas } as CSSProperties}
         >
           {mios.length === 0 ? (
             <div className="vacio">
@@ -493,7 +523,7 @@ export function Tablero() {
               dragConfig={{ enabled: editando, handle: '.widget > header' }}
               resizeConfig={{ enabled: editando }}
               onLayoutChange={editando ? alMoverRejilla : undefined}
-              layout={mios.map((w) => ({
+              layout={enOrden.map((w) => ({
                 i: w.id,
                 x: w.posicion.x,
                 y: w.posicion.y,
@@ -501,10 +531,19 @@ export function Tablero() {
                 h: w.posicion.alto,
               }))}
             >
-              {mios.map((w) => (
+              {enOrden.map((w) => (
                 <div
                   key={w.id}
                   className={`widget ${elegido === w.id && editando ? 'sel' : ''}`}
+                  // La posicion en la rejilla, tambien como variables CSS: al
+                  // imprimir, la rejilla se rearma con `grid` y necesita saber la
+                  // columna y el ancho de cada widget. En pantalla no se usan.
+                  style={
+                    {
+                      '--gx': w.posicion.x,
+                      '--gw': w.posicion.ancho,
+                    } as CSSProperties
+                  }
                   onMouseDown={() => editando && setElegido(w.id)}
                 >
                   <header>
