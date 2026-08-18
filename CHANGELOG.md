@@ -13,13 +13,37 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **El widget de texto sirve de título de sección: tamaño, color, negrita y
+  alineación.** Los tamaños van con nombre —Nota, Normal, Subtítulo, Título, Título
+  grande, Portada— y no como número libre, para que los títulos de dos hojas salgan
+  del mismo juego. Un texto sin título propio **no dibuja tarjeta** en la vista: se
+  lee como parte de la hoja y no como un widget más; al editar recupera el marco, que
+  es el asa con la que se arrastra. El color es opcional: sin poner ninguno sigue el
+  tema y se lee igual en claro y en oscuro.
+
+- **Los widgets de una hoja se pueden subir y bajar con ↑ / ↓.** Mueven la **banda**
+  —los widgets que empiezan en la misma fila, como los tres filtros de arriba—, y las
+  dos bandas se reparten el sitio que ocupaban, así que nada de lo que hay más arriba
+  o más abajo se mueve. Por bandas y no por posición en una lista porque una hoja es
+  una rejilla: dos widgets pueden estar uno al lado del otro, y en una lista eso no se
+  puede decir. La lista, además, sale ahora en el orden en que se lee la hoja — el
+  mismo en que sale el PDF— y no en el que se fueron agregando.
+
+- **Una columna renombrada dice de qué métrica es.** Con noventa y seis métricas y la
+  columna renombrada a «% CONV LEAD A TRAF M ANT», el inspector ya no decía cuál se
+  había puesto. El nombre del modelo se queda a la vista, atenuado, y al abrirla se
+  lee completo con su nombre técnico.
+
 - **El PDF de una sola hoja se ensancha si algo no cabe.** Salía siempre de 1600 px, y
   una tabla de veinte columnas no entra ahí: en pantalla se desplaza dentro de su
   widget, pero en una sola hoja no hay dónde desplazar, así que las últimas columnas
   se quedaban cortadas por el borde de la página — un PDF que enseña doce de veinte y
   no dice que faltan ocho. Ahora se mide lo que se sale y la página crece hasta que
-  entra; y si necesitara más de lo que el navegador puede hacer, se dice en vez de
-  entregarlo cortado. La medida va escalada por la fracción de rejilla del widget: un
+  entra. Lo que quede después de las pasadas se le da a la **página** y no a la hoja:
+  la hoja ya no se recompone —cada vez que se ensancha, la tabla pide un poco más y el
+  resto no baja de unos pocos píxeles— y una página con tres píxeles de aire a la
+  derecha no le hace daño a nadie, mientras que negarse a hacer el PDF por tres
+  píxeles sí. Solo se dice que no cuando de verdad se pasa del máximo del navegador. La medida va escalada por la fracción de rejilla del widget: un
   widget de tres columnas de doce crece un cuarto de lo que crece la hoja, así que
   ensancharla solo lo que sobresale se quedaba corto tres veces.
 

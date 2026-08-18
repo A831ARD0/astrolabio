@@ -1251,6 +1251,29 @@ Solo se ofrecen columnas de la misma entidad: un orden que viniera de otra tabla
 necesitaría una unión, y entonces el orden de un filtro dependería de por dónde se
 une, que es exactamente lo que no puede pasar.
 
+### Títulos y subtítulos
+
+El widget **Texto** hace de título de sección. Lleva tamaño —desde «Nota» hasta
+«Portada»—, color, negrita y alineación, y cuando no le pones título propio **no
+dibuja tarjeta**: se lee como parte de la hoja, no como un widget más. Al editar sí
+aparece su marco, que es el asa con la que se arrastra.
+
+El color es opcional a propósito: sin color puesto sigue el tema y se lee igual en
+claro y en oscuro. Con uno puesto manda el tuyo en los dos, que es lo que quieres
+cuando el título va en el color de la marca.
+
+### Ordenar los widgets de la hoja
+
+En la lista de widgets de la izquierda, cada uno lleva **↑ / ↓**. Sube o baja su
+**banda** —los widgets que empiezan en la misma fila, como los tres filtros de
+arriba—, y las dos bandas se reparten el sitio que ocupaban: nada de lo que hay más
+arriba o más abajo se mueve.
+
+Se mueve por bandas y no por posición en una lista porque una hoja es una rejilla, no
+una lista: dos widgets pueden estar uno al lado del otro, y eso en una lista no se
+puede decir. La lista sale en el orden en que se lee la hoja, que es el mismo en que
+sale el informe en PDF.
+
 ### Cuando un widget sale vacío
 
 «Sin datos» a secas manda a buscar a ciegas, así que el widget dice **por qué**. Son

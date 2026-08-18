@@ -150,14 +150,83 @@ export function PanelWidget({
       )}
 
       {widget.tipo === 'texto' && (
-        <div className="campo">
-          <label>Texto</label>
-          <textarea
-            rows={4}
-            value={String(widget.texto ?? '')}
-            onChange={(e) => alCambiar({ texto: e.target.value })}
-          />
-        </div>
+        <>
+          <div className="campo">
+            <label>Texto</label>
+            <textarea
+              rows={3}
+              value={String(widget.texto ?? '')}
+              onChange={(e) => alCambiar({ texto: e.target.value })}
+            />
+          </div>
+          <div className="campo">
+            <label>Tamaño</label>
+            <select
+              value={String(widget.tamano_texto ?? '')}
+              onChange={(e) =>
+                alCambiar({ tamano_texto: e.target.value ? Number(e.target.value) : null })
+              }
+            >
+              <option value="">Normal</option>
+              {TAMANOS.map((x) => (
+                <option key={x.px} value={x.px}>
+                  {x.nombre} — {x.px} px
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label>Color</label>
+            {/* Un selector de color del sistema y un campo al lado: el selector es
+                cómodo, y el campo es el que permite escribir el color exacto de la
+                marca en vez de acertarlo con el ratón. */}
+            <div className="fila-color">
+              <input
+                type="color"
+                value={String(widget.color_texto ?? '#111827')}
+                onChange={(e) => alCambiar({ color_texto: e.target.value })}
+              />
+              <input
+                type="text"
+                value={String(widget.color_texto ?? '')}
+                placeholder="el del tema"
+                onChange={(e) => alCambiar({ color_texto: e.target.value || null })}
+              />
+              {!!widget.color_texto && (
+                <button
+                  className="btn chico"
+                  title="Volver al color del tema"
+                  onClick={() => alCambiar({ color_texto: null })}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <span className="chico tenue">
+              Sin color puesto sigue el tema, así que se lee igual en claro y en
+              oscuro. Con uno puesto, manda el tuyo en los dos.
+            </span>
+          </div>
+          <div className="campo">
+            <label>Alineación</label>
+            <select
+              value={String(widget.alineacion ?? 'left')}
+              onChange={(e) => alCambiar({ alineacion: e.target.value })}
+            >
+              <option value="left">Izquierda</option>
+              <option value="center">Centrado</option>
+              <option value="right">Derecha</option>
+            </select>
+          </div>
+          <label className="casilla">
+            <input
+              type="checkbox"
+              checked={!!widget.negrita}
+              onChange={(e) => alCambiar({ negrita: e.target.checked })}
+            />
+            Negrita
+          </label>
+        </>
       )}
 
       {widget.tipo === 'kpi' && (widget.dimensiones?.length ?? 0) > 0 && (
@@ -367,6 +436,12 @@ function Elegidas({
           const base = formatoBase(c)
           const formato = formatos[c] ?? base
           const total = totales[c] ?? totalPorOmision(formato)
+          // Al renombrar una columna se pierde de vista QUÉ cifra es, y con noventa
+          // y seis métricas «% CONV LEAD A TRAF M ANT» no basta para saber cuál de
+          // ellas se puso. El nombre del modelo se queda a la vista, atenuado.
+          const propia = etiquetas[c]?.trim()
+          const delModelo = etiquetaBase(c)
+          const renombrada = !!propia && propia !== delModelo
           return (
             <div key={c} className={`col-elegida ${abierta === c ? 'abierta' : ''}`}>
               <div className="cabeza">
@@ -376,7 +451,8 @@ function Elegidas({
                   onClick={() => setAbierta(abierta === c ? null : c)}
                 >
                   <span className="pos">{i + 1}</span>
-                  <span className="nom">{etiquetas[c] || etiquetaBase(c)}</span>
+                  <span className="nom">{propia || delModelo}</span>
+                  {renombrada && <span className="del-modelo">{delModelo}</span>}
                   <span className="flecha">{abierta === c ? '▾' : '▸'}</span>
                 </button>
                 <button
@@ -410,8 +486,9 @@ function Elegidas({
                       }
                     />
                     <span className="chico tenue">
-                      Solo cambia el nombre en este widget. En el modelo sigue
-                      llamándose igual, y ahí es donde lo ven los demás tableros.
+                      Solo cambia el nombre en este widget. En el modelo se llama{' '}
+                      <strong>{delModelo}</strong> <code>{c}</code>, y así es como lo
+                      ven los demás tableros.
                     </span>
                   </div>
 
@@ -614,6 +691,22 @@ function EditorSemaforo({
     </div>
   )
 }
+
+/**
+ * Los tamaños que se ofrecen, con nombre.
+ *
+ * Una lista y no un número libre: así los títulos de dos hojas distintas salen del
+ * mismo juego y la hoja no acaba con seis tamaños que se parecen. Los nombres son
+ * los del uso —título, subtítulo— porque es lo que se está buscando al elegir.
+ */
+const TAMANOS = [
+  { nombre: 'Nota', px: 11 },
+  { nombre: 'Normal', px: 13 },
+  { nombre: 'Subtítulo', px: 16 },
+  { nombre: 'Título', px: 22 },
+  { nombre: 'Título grande', px: 30 },
+  { nombre: 'Portada', px: 42 },
+]
 
 /** Desde cuántos elementos vale la pena el buscador. Con menos, estorba. */
 const BUSCADOR_DESDE = 8

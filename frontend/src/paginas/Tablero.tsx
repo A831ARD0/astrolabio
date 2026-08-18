@@ -204,6 +204,47 @@ export function Tablero() {
       widgets: borrador.widgets.map((w) => (w.id === wid ? { ...w, ...cambios } : w)),
     })
 
+  /**
+   * Sube o baja un widget en la hoja, cambiando de sitio su BANDA con la de al lado.
+   *
+   * Una banda son los widgets que empiezan en la misma fila —los tres filtros de
+   * arriba son una—, y se mueve entera: mover uno solo de los tres lo sacaría de la
+   * fila y dejaría un hueco donde estaba. Las dos bandas se reparten el sitio que
+   * ocupaban entre las dos, así que nada de lo que hay más arriba o más abajo se
+   * mueve; y si había un hueco entre ellas, se cierra.
+   *
+   * Se mueve por bandas y no por posición en una lista porque la hoja es una rejilla,
+   * no una lista: dos widgets pueden estar uno al lado del otro, y en una lista eso
+   * no se puede decir.
+   */
+  const moverWidget = (wid: string, paso: -1 | 1) => {
+    const yo = mios.find((w) => w.id === wid)
+    if (!yo) return
+    const bandas = [...new Set(enOrden.map((w) => w.posicion.y))].sort((a, b) => a - b)
+    const i = bandas.indexOf(yo.posicion.y)
+    const j = i + paso
+    if (i < 0 || j < 0 || j >= bandas.length) return
+
+    const [arriba, abajo] = paso === -1 ? [bandas[j]!, bandas[i]!] : [bandas[i]!, bandas[j]!]
+    const de = (y: number) => mios.filter((w) => w.posicion.y === y)
+    const altoDe = (y: number) => Math.max(...de(y).map((w) => w.posicion.alto))
+
+    // La de abajo pasa a empezar donde empezaba la de arriba, y la de arriba justo
+    // después: el alto de cada una manda, no el hueco que hubiera.
+    const nuevos = new Map<string, number>()
+    for (const w of de(abajo)) nuevos.set(w.id, arriba)
+    for (const w of de(arriba)) nuevos.set(w.id, arriba + altoDe(abajo))
+
+    setBorrador({
+      ...borrador,
+      widgets: borrador.widgets.map((w) =>
+        nuevos.has(w.id)
+          ? { ...w, posicion: { ...w.posicion, y: nuevos.get(w.id)! } }
+          : w,
+      ),
+    })
+  }
+
   const cambiarHoja = (hid: string, cambios: Partial<Hoja>) => {
     const base = conHojas(borrador)
     setBorrador({
@@ -334,16 +375,36 @@ export function Tablero() {
               <span className="cuenta">{mios.length}</span>
             </header>
             <div className="contenido">
-              <div className="lista">
-                {mios.map((w) => (
-                  <button
-                    key={w.id}
-                    className={elegido === w.id ? 'sel' : ''}
-                    onClick={() => setElegido(w.id)}
-                  >
-                    <span className="nom">{w.titulo || w.tipo}</span>
-                    <span className="dcha">{w.tipo}</span>
-                  </button>
+              {/* En el orden en que se leen —de arriba abajo—, no en el que se
+                  fueron agregando: es la lista con la que se ordena la hoja, así que
+                  tiene que enseñar el orden que va a salir en el informe. */}
+              <div className="lista con-mover">
+                {enOrden.map((w, i) => (
+                  <div key={w.id} className="fila-widget">
+                    <button
+                      className={elegido === w.id ? 'sel' : ''}
+                      onClick={() => setElegido(w.id)}
+                    >
+                      <span className="nom">{w.titulo || w.tipo}</span>
+                      <span className="dcha">{w.tipo}</span>
+                    </button>
+                    <button
+                      className="mueve"
+                      disabled={i === 0}
+                      title="Subir en la hoja"
+                      onClick={() => moverWidget(w.id, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="mueve"
+                      disabled={i === enOrden.length - 1}
+                      title="Bajar en la hoja"
+                      onClick={() => moverWidget(w.id, 1)}
+                    >
+                      ↓
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -534,7 +595,11 @@ export function Tablero() {
               {enOrden.map((w) => (
                 <div
                   key={w.id}
-                  className={`widget ${elegido === w.id && editando ? 'sel' : ''}`}
+                  className={
+                    `widget tipo-${w.tipo}` +
+                    (elegido === w.id && editando ? ' sel' : '') +
+                    (editando ? ' editando' : '')
+                  }
                   // La posicion en la rejilla, tambien como variables CSS: en el
                   // informe la rejilla se rearma con `grid` y necesita saber la
                   // columna y el ancho de cada widget, y el alto para darselo a un
@@ -549,7 +614,11 @@ export function Tablero() {
                   }
                   onMouseDown={() => editando && setElegido(w.id)}
                 >
-                  <header>
+                  {/* Un texto sin título no lleva cabecera: es un título de
+                      sección, no una tarjeta, y una barra que dice «texto» encima de
+                      «1.- VENTAS» sobra. Al editar sí se dibuja, porque es el asa
+                      con la que se arrastra y sin ella no se podría mover. */}
+                  <header hidden={w.tipo === 'texto' && !w.titulo && !editando}>
                     <span className="nom">{w.titulo || <i className="tenue">{w.tipo}</i>}</span>
                     {PIDE_DATOS.includes(w.tipo) && (
                       <Exportar

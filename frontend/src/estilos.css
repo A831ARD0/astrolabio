@@ -415,6 +415,16 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
   line-height: 1;
 }
 .lista button.puesta .nom { color: var(--texto-suave); }
+/* Una fila de la lista con sus flechas al lado. El nombre sigue siendo un botón —el
+   que selecciona— y las flechas son otros dos: un botón dentro de otro botón no es
+   HTML válido, y el navegador se lo inventa. */
+.lista.con-mover { gap: 1px; }
+.fila-widget { display: flex; align-items: stretch; gap: 1px; }
+.fila-widget > button:first-child { flex: 1; min-width: 0; }
+/* El tipo fuera: el panel es angosto y no caben nombre, tipo y dos flechas. El tipo
+   no se pierde de vista —un widget sin título se llama por su tipo, y el del elegido
+   está en el inspector—, pero el nombre sí hay que poder leerlo. */
+.fila-widget .dcha { display: none; }
 
 /* Encadenar: poner este flujo como paso del que se edita. Se mantiene discreto
    —el uso normal de la lista es abrir un flujo, no encadenarlo— y aparece al
@@ -837,7 +847,41 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   white-space: nowrap;
 }
 
-.widget-texto { padding: 10px 12px; white-space: pre-wrap; overflow: auto; height: 100%; }
+.widget-texto {
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow: auto;
+  height: 100%;
+  /* Un título ocupa su renglón y no el widget entero: centrado en vertical se lee
+     como parte de la sección que encabeza, y no flotando en medio de un hueco. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.3;
+}
+
+/* Un título de sección no es una tarjeta: sin marco ni fondo, se lee como parte de
+   la hoja. Al editar recupera el marco, que es lo que dice dónde está para moverlo. */
+.widget.tipo-texto:not(.editando) {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+}
+/* `hidden` no basta: la cabecera lleva `display: flex` declarado, y eso gana al
+   `display: none` que el atributo trae del navegador. */
+.widget > header[hidden] { display: none; }
+
+.fila-color { display: flex; align-items: center; gap: 6px; }
+.fila-color input[type='color'] {
+  flex: 0 0 32px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  background: none;
+  cursor: pointer;
+}
+.fila-color input[type='text'] { flex: 1; min-width: 0; }
 
 /* Asas de redimensionado de react-grid-layout */
 .react-resizable-handle {
@@ -982,6 +1026,17 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   color: var(--texto);
 }
 .col-elegida .titulo:hover { background: var(--fondo-hover); }
+/* El nombre del modelo, cuando el widget la renombró: cede sitio antes que el nombre
+   puesto —que es el que se está buscando— y desaparece antes de apretarlo. */
+.col-elegida .del-modelo {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--texto-tenue);
+}
 /* El número es el orden en que sale la columna, no un adorno. */
 .col-elegida .pos {
   flex: 0 0 16px;
@@ -999,7 +1054,8 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
 }
 .col-elegida .flecha { color: var(--texto-tenue); font-size: 10px; }
 
-.col-elegida .mueve {
+.col-elegida .mueve,
+.fila-widget .mueve {
   flex: 0 0 auto;
   padding: 0 5px;
   background: none;
@@ -1008,11 +1064,17 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   color: var(--texto-tenue);
   cursor: pointer;
 }
-.col-elegida .mueve:hover:not(:disabled) {
+.col-elegida .mueve:hover:not(:disabled),
+.fila-widget .mueve:hover:not(:disabled) {
   background: var(--fondo-hover);
   color: var(--texto);
 }
-.col-elegida .mueve:disabled { opacity: 0.25; cursor: default; }
+.col-elegida .mueve:disabled,
+.fila-widget .mueve:disabled { opacity: 0.25; cursor: default; }
+/* Ancho fijo, y va DESPUÉS del aspecto compartido: los botones de una lista llevan
+   `width: 100%` declarado, y con `flex: 0 0 auto` ese ancho gana — cada flecha se
+   quedaba con la fila entera y el nombre desaparecía. */
+.fila-widget .mueve { flex: 0 0 17px; width: 17px; padding: 0; }
 
 .col-elegida .cuerpo {
   display: flex;

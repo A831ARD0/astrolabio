@@ -69,6 +69,16 @@ const ALTO_MAXIMO = 19_000
 /** El mismo tope, para el ancho: el límite de Chrome es de página, no de alto. */
 const ANCHO_MAXIMO = 19_000
 
+/**
+ * Holgura, en píxeles, entre lo medido y lo que se escribe en `@page`.
+ *
+ * No es por si acaso: la maquetación de impresión no redondea igual que la de
+ * pantalla, y con la medida exacta sobraba una fracción de píxel que se llevaba una
+ * segunda página en blanco. Ocho píxeles no se ven; una página vacía en una
+ * presentación, sí.
+ */
+const HOLGURA = 8
+
 /** Cómo se lee un filtro en la portada. `cat_sucursal.nombre` no le dice nada a nadie. */
 function comoSeLee(f: Filtro): { campo: string; valores: string } {
   const campo = f.campo.includes('.') ? f.campo.split('.').slice(1).join('.') : f.campo
@@ -286,25 +296,23 @@ export function Imprimir({ hoja }: { hoja: string }) {
         raiz.style.setProperty('--ancho-informe', `${ancho}px`)
         await asentarse()
       }
-      const cortaria = Math.ceil(faltaDeAncho(centro))
-      if (cortaria > 1) {
+      // Lo que quede después de las pasadas se le da a la PÁGINA, no a la hoja: la
+      // hoja ya no se recompone —cada vez que se ensancha, la tabla pide un poco más
+      // y el resto no baja de unos pocos píxeles— y una página un poco más ancha que
+      // su contenido solo deja aire a la derecha. Negarse a hacer el PDF por tres
+      // píxeles era peor que el problema que evitaba.
+      const resto = Math.ceil(faltaDeAncho(centro))
+      const anchoPagina = ancho + (resto > 0 ? resto + HOLGURA : 0)
+      if (anchoPagina > ANCHO_MAXIMO) {
         throw new Error(
-          ancho >= ANCHO_MAXIMO
-            ? `La hoja necesita más de ${ANCHO_MAXIMO} px de ancho y el navegador no ` +
-              `hace páginas tan grandes. Cortaría las últimas columnas sin avisar, ` +
-              `así que mejor «Páginas A4», o quita columnas de la tabla.`
-            : `No se pudo encajar el ancho de la hoja: le faltan ${cortaria} px y ` +
-              `cortaría las últimas columnas sin avisar. Usa «Páginas A4», o quita ` +
-              `columnas de la tabla.`,
+          `La hoja necesita ${anchoPagina} px de ancho y el navegador no hace ` +
+            `páginas de más de ${ANCHO_MAXIMO}. Cortaría las últimas columnas sin ` +
+            `avisar, así que mejor «Páginas A4», o quita columnas de la tabla.`,
         )
       }
 
       const medido = Math.max(centro.scrollHeight, document.body.scrollHeight)
-      // La holgura no es por si acaso: la maquetación de impresión no redondea igual
-      // que la de pantalla, y con la medida exacta sobraba una fracción de píxel que
-      // se llevaba una segunda página en blanco al PDF. Ocho píxeles no se ven; una
-      // página vacía en una presentación, sí.
-      const alto = Math.ceil(medido) + 8
+      const alto = Math.ceil(medido) + HOLGURA
       if (medido <= 0) throw new Error('No se pudo medir la hoja.')
       if (alto > ALTO_MAXIMO) {
         throw new Error(
@@ -316,7 +324,7 @@ export function Imprimir({ hoja }: { hoja: string }) {
 
       // Va después de la hoja de estilos, así que gana al `@page` de A4.
       estilo.id = 'tamano-una-hoja'
-      estilo.textContent = `@page { size: ${ancho}px ${alto}px; margin: 0; }`
+      estilo.textContent = `@page { size: ${anchoPagina}px ${alto}px; margin: 0; }`
       document.head.appendChild(estilo)
       setAbierto(false)
       window.print()

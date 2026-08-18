@@ -13,6 +13,7 @@
  * detrás de un `if`.
  */
 
+import type { CSSProperties } from 'react'
 import { useCampos } from '../api/hooks'
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
@@ -68,9 +69,19 @@ function useEtiquetas(modeloId: number) {
 
 export function WidgetVista(props: PropsWidget) {
   if (props.widget.tipo === 'texto') {
+    const w = props.widget
+    // Un widget de texto es lo que hace de título y de subtítulo de una sección, así
+    // que el tamaño y el color son parte del contenido, no un adorno: «1.- VENTAS»
+    // en 22 px y en el azul de la casa es lo que separa una sección de la siguiente.
+    // Todo opcional: sin nada puesto se ve como se veía.
+    const estilo: CSSProperties = {}
+    if (w.tamano_texto) estilo.fontSize = `${Number(w.tamano_texto)}px`
+    if (w.color_texto) estilo.color = String(w.color_texto)
+    if (w.negrita) estilo.fontWeight = 650
+    if (w.alineacion) estilo.textAlign = w.alineacion as CSSProperties['textAlign']
     return (
-      <div className="widget-texto">
-        {String(props.widget.texto ?? 'Texto sin escribir')}
+      <div className="widget-texto" style={estilo}>
+        {String(w.texto ?? 'Texto sin escribir')}
       </div>
     )
   }
