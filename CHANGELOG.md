@@ -169,6 +169,18 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Cambiado
 
+- **Fuera los nombres reales que quedaban en comentarios, pruebas y documentación.**
+  Marcas y plazas de verdad —y un nombre de tabla con forma de conexión— aparecían en
+  comentarios de la interfaz, en un HTML de prueba y en dos documentos. Se cambian por
+  los del grupo inventado que ya usa la demo (`Aurex`, `Ekos`, regiones `Norte`/`Sur`)
+  y por la convención de conexión que ya estaba en uso (`SUC_SUR__…`).
+
+  Al hacerlo apareció que `demo/probar_modelo.py` **estaba roto**: comprobaba marcas y
+  estados que el generador de datos dejó de crear cuando se inventó el grupo, y no lo
+  ejecuta ni la integración continua ni ninguna instrucción, así que nadie se enteró.
+  Fallaba en 5 de sus comprobaciones; ahora pasan todas, contra los valores que los
+  datos traen de verdad.
+
 - **Renombrar o mover de carpeta un tablero certificado ya no le quita el sello.** Solo
   lo quita cambiar su **definición**, que es lo que la certificación dice que se
   revisó. Ninguna de las otras dos toca una cifra, y si descertificaran habría que
@@ -671,7 +683,7 @@ versionado es [semántico](https://semver.org/lang/es/).
   en el motor, y la transformación reventaba al ejecutarse:
 
   ```
-  Catalog Error: Table with name KIA_SERDAN__ventas does not exist!
+  Catalog Error: Table with name SUC_ORIENTE__ventas does not exist!
   ```
 
   El mismo nombre tomado de «Datos cargados» funcionaba. Dos caminos con el mismo

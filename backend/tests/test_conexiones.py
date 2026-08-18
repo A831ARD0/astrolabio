@@ -276,7 +276,7 @@ def carpeta_archivos():
         "<html><body><table>"
         "<tr><th>sucursal</th><th>bono</th></tr>"
         "<tr><td>VW Dorada</td><td>15000</td></tr>"
-        "<tr><td>SEAT Oaxaca</td><td>8200</td></tr>"
+        "<tr><td>Ekos Rio Blanco</td><td>8200</td></tr>"
         "</table></body></html>", encoding="windows-1252")
     yield d
 

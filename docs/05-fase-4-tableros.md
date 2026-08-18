@@ -53,11 +53,12 @@ avisar**. En un tablero eso significa: filtras por marca, el total no cambia, y
 nadie lo nota porque el número sigue pareciendo un número.
 
 Medido sobre los datos de prueba con desglose por sucursal y filtro por la marca
-del vehículo:
+del vehículo (las cifras son de la generación de datos de demostración de entonces;
+el generador se ha vuelto a sembrar desde y ahora dan otras):
 
 ```
-sin filtro : 439,970 unidades
-marca KIA  :  58,544 unidades
+sin filtro  : 439,970 unidades
+marca Aurex :  58,544 unidades
 ```
 
 Antes del arreglo, la segunda consulta devolvía 439,970.
@@ -81,13 +82,13 @@ El arreglo tiene dos partes, y las dos importan:
 | **excluido** | no sobrevive a las selecciones |
 
 La distinción entre **alternativo** y **excluido** es la que separa un motor
-asociativo de verdad de una imitación con listas desplegables. Al elegir KIA, las
+asociativo de verdad de una imitación con listas desplegables. Al elegir Aurex, las
 demás marcas siguen siendo elegibles (alternativas) y no deben tacharse; las
-sucursales que no venden KIA sí están excluidas.
+sucursales que no venden Aurex sí están excluidas.
 
-Verificado en el navegador con KIA seleccionada:
+Verificado en el navegador con Aurex seleccionada:
 
-| | sin filtro | KIA |
+| | sin filtro | Aurex |
 |---|---|---|
 | Venta | $184.99 MM | **$25.66 MM** |
 | Utilidad | $29.38 MM | **$4.08 MM** |

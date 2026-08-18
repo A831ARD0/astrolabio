@@ -192,38 +192,38 @@ print(f"    posible={e['posible']}")
 verificar(len(e["posible"]) == 4 and not e["excluido"],
           "Sin seleccion, los 4 estados son posibles")
 
-print("\n  Seleccionando Modelo = 'Q5' (solo lo vende AUDI):")
-sel = {"dim_vehiculo.modelo": ["Q5"]}
+print("\n  Seleccionando Modelo = 'Cruce' (solo lo vende Aurex):")
+sel = {"dim_vehiculo.modelo": ["Cruce"]}
 e = asoc.estados("cat_marca", "marca_nombre", sel)
 print(f"    seleccionado = {e['seleccionado']}")
 print(f"    posible      = {e['posible']}")
 print(f"    excluido     = {e['excluido']}")
-verificar("AUDI" in e["posible"], "AUDI queda posible")
+verificar("Aurex" in e["posible"], "Aurex queda posible")
 verificar(len(e["excluido"]) > 0, f"{len(e['excluido'])} marcas quedan excluidas")
 
 print("\n  Seleccionando Estado = 'Veracruz' (solo Ekos Río Blanco):")
-sel = {"cat_region.region_nombre": ["Veracruz"]}
+sel = {"cat_region.region_nombre": ["Sur"]}
 e = asoc.estados("cat_sucursal", "sucursal_nombre", sel)
 print(f"    posible  = {e['posible']}")
 print(f"    excluido = {len(e['excluido'])} sucursales")
 verificar(e["posible"] == ["Ekos Río Blanco"],
-          "Solo Ekos Río Blanco es posible en Veracruz")
+          "Solo Ekos Río Blanco es posible en la region Sur")
 
 print("\n  Estado alternativo (seleccion en el propio campo):")
-sel = {"cat_region.region_nombre": ["Oaxaca"]}
+sel = {"cat_region.region_nombre": ["Norte"]}
 e = asoc.estados("cat_region", "region_nombre", sel)
 print(f"    seleccionado = {e['seleccionado']}")
 print(f"    alternativo  = {e['alternativo']}")
-verificar(e["seleccionado"] == ["Oaxaca"], "Oaxaca queda seleccionado")
-verificar(sorted(e["alternativo"]) == ["Puebla", "Queretaro", "Veracruz"],
-          "Los otros 3 estados quedan 'alternativo', no 'excluido'")
+verificar(e["seleccionado"] == ["Norte"], "Norte queda seleccionado")
+verificar(sorted(e["alternativo"]) == ["Centro", "Occidente", "Sur"],
+          "Las otras 3 regiones quedan 'alternativo', no 'excluido'")
 
 print("\n  Union sobre rutas ambiguas — Marca desde Serie (llega por 2 caminos):")
-sel = {"fact_venta.serie": ["AOA"]}       # serie de AUDI Oaxaca
+sel = {"fact_venta.serie": ["HM1"]}       # serie de una agencia Hexa
 e = asoc.estados("cat_marca", "marca_nombre", sel)
 print(f"    posible = {e['posible']}")
-verificar("AUDI" in e["posible"],
-          "La union sobre rutas encuentra AUDI (por agencia y por vehiculo)")
+verificar("Hexa" in e["posible"],
+          "La union sobre rutas encuentra Hexa (por agencia y por vehiculo)")
 
 
 # --------------------------------------------------------------------------- #
@@ -252,9 +252,9 @@ for etiqueta, q in pruebas:
     verificar(ms < 5000, f"'{etiqueta}' responde en menos de 5 s")
 
 t0 = time.perf_counter()
-asoc.estados("cat_sucursal", "sucursal_nombre", {"dim_vehiculo.modelo": ["Jetta"]})
+asoc.estados("cat_sucursal", "sucursal_nombre", {"dim_vehiculo.modelo": ["Lito"]})
 ms = (time.perf_counter() - t0) * 1000
-print(f"    {'Estados asociativos (sucursal | modelo=Jetta)':52s} {ms:7.0f} ms")
+print(f"    {'Estados asociativos (sucursal | modelo=Lito)':52s} {ms:7.0f} ms")
 verificar(ms < 3000, "Los estados asociativos responden en menos de 3 s")
 
 

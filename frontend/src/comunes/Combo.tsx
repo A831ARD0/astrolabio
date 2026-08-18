@@ -1,13 +1,13 @@
 /**
  * Un desplegable en el que se puede escribir.
  *
- * Un `<select>` con novecientas tablas llamadas `AUDI_OAXACA__Orcamento_Produtos`
+ * Un `<select>` con novecientas tablas llamadas `SUC_SUR__Orcamento_Produtos`
  * no se usa: hay que bajar con la rueda hasta encontrarla, y el teclado sólo
  * salta a la primera letra, que en un catálogo donde todo empieza por el mismo
  * prefijo no sirve de nada.
  *
  * Se busca con [[coincide]], así que perdona acentos, mayúsculas y el orden de
- * las palabras: «orcamento audi» encuentra `AUDI_OAXACA__Orcamento_Produtos`.
+ * las palabras: «orcamento sur» encuentra `SUC_SUR__Orcamento_Produtos`.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'

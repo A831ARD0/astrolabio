@@ -4,7 +4,7 @@
  *
  * Dos decisiones que valen la pena:
  *
- * 1. **El resumen no consulta al servidor.** «Marca: KIA» o «Año: 2 de 5» se saca
+ * 1. **El resumen no consulta al servidor.** «Marca: Aurex» o «Año: 2 de 5» se saca
  *    de las selecciones, que ya están en memoria. Los cuatro estados solo se piden
  *    al abrirlo. Un panel con seis campos colapsados hace cero consultas hasta que
  *    tocas uno; si el resumen necesitara los estados, serían seis.

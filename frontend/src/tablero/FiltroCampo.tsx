@@ -8,9 +8,9 @@
  *   excluido      no sobrevive a las selecciones              (tachado)
  *
  * La distinción entre **alternativo** y **excluido** es la que separa un motor
- * asociativo de verdad de una imitación con listas desplegables. Si eliges KIA,
+ * asociativo de verdad de una imitación con listas desplegables. Si eliges Aurex,
  * las demás marcas siguen siendo elegibles (alternativas): la lista no debe
- * tacharlas como si no existieran. Las sucursales que no venden KIA, en cambio,
+ * tacharlas como si no existieran. Las sucursales que no venden Aurex, en cambio,
  * sí están excluidas.
  *
  * La lista vive en `ListaValores` y no dentro del panel porque el mismo campo se

@@ -157,8 +157,8 @@ Cuatro estados, como Qlik:
 `alternativo` | Sería posible, pero hay una selección en su propio campo que no lo incluye | gris claro |
 `excluido` | No sobrevive a las selecciones de otros campos | gris |
 
-La distinción `alternativo` vs `excluido` es la que hace que seleccionar "Oaxaca"
-no borre visualmente los otros tres estados — siguen disponibles para ampliar la
+La distinción `alternativo` vs `excluido` es la que hace que seleccionar la región
+"Norte" no borre visualmente las otras tres — siguen disponibles para ampliar la
 selección. Es un detalle que separa una implementación real de una imitación.
 
 Cálculo: para el campo objetivo, se propagan las selecciones de los demás campos
