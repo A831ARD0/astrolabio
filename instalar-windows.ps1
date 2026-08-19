@@ -148,7 +148,12 @@ function InstalarServicio {
         [Parameter(Mandatory)] [string]   $Programa,
         [Parameter(Mandatory)] [string]   $Parametros,
         [Parameter(Mandatory)] [string]   $Directorio,
-        [Parameter(Mandatory)] [string]   $Registros
+        [Parameter(Mandatory)] [string]   $Registros,
+        # Variables de entorno del servicio, como 'CLAVE=valor'. Hacen falta para
+        # PLAYWRIGHT_BROWSERS_PATH: Chromium se guarda en la carpeta del usuario que
+        # lo descargo, y el servicio corre con OTRA cuenta, asi que sin esto el
+        # servicio no encuentra el navegador que el instalador acaba de instalar.
+        [string[]] $Entorno = @()
     )
     $yaExiste = Get-Service -Name $Nombre -ErrorAction SilentlyContinue
     if ($yaExiste) {
@@ -168,9 +173,12 @@ function InstalarServicio {
         @('set', $Nombre, 'AppDirectory', $Directorio),
         @('set', $Nombre, 'AppStdout', (Join-Path $Registros "$Nombre-salida.log")),
         @('set', $Nombre, 'AppStderr', (Join-Path $Registros "$Nombre-error.log")),
-        @('set', $Nombre, 'Start', 'SERVICE_AUTO_START'),
-        @('start', $Nombre)
+        @('set', $Nombre, 'Start', 'SERVICE_AUTO_START')
     )
+    if ($Entorno.Count -gt 0) {
+        $ordenes += , @('set', $Nombre, 'AppEnvironmentExtra') + $Entorno
+    }
+    $ordenes += , @('start', $Nombre)
     foreach ($orden in $ordenes) {
         $r = Correr $Nssm $orden
         if ($r.Codigo -ne 0) { throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)" }
@@ -338,7 +346,13 @@ Bien 'Dependencias instaladas'
 # El navegador de los informes. Va aparte de pip a proposito: son unos 150 MB que se
 # descargan una vez, y si esta maquina no tiene salida a internet hay que saberlo
 # aqui y no el dia 2 a las 7 de la mañana, cuando no salga el correo.
-Write-Host '   ... instalando Chromium para los informes en PDF (unos 150 MB)'
+# En una carpeta de la instalacion, y no en la del usuario. Por omision Playwright
+# guarda los navegadores en %USERPROFILE%\AppData\Local\ms-playwright, asi que el
+# navegador acaba en la carpeta de QUIEN CORRIO EL INSTALADOR y el servicio —que corre
+# con otra cuenta— no lo encuentra: «Chromium no esta instalado» aunque este.
+$navegadores = Join-Path $Raiz 'navegador'
+$env:PLAYWRIGHT_BROWSERS_PATH = $navegadores
+Write-Host "   ... instalando Chromium para los informes en PDF (unos 150 MB) en $navegadores"
 $r = Correr $python @('-m', 'playwright', 'install', 'chromium')
 if ($r.Codigo -ne 0) {
     Aviso ('No se pudo instalar Chromium: los informes en PDF y el envio por correo ' +
@@ -642,7 +656,8 @@ Falta NSSM, que es lo que convierte la API en un servicio de Windows.
     # el que lleva HTTPS y las cabeceras de seguridad.
     InstalarServicio -Nssm $nssm -Nombre 'Astrolabio' -Programa $python `
         -Parametros '-m uvicorn app.main:app --host 127.0.0.1 --port 8000' `
-        -Directorio $backend -Registros $registros
+        -Directorio $backend -Registros $registros `
+        -Entorno @("PLAYWRIGHT_BROWSERS_PATH=$(Join-Path $Raiz 'navegador')")
 
     # Que diga que arranco no basta: un servicio que se cae al segundo tambien
     # "arranca". Se comprueba que responde de verdad.

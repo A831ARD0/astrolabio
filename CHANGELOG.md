@@ -35,6 +35,14 @@ versionado es [semántico](https://semver.org/lang/es/).
   Chromium BSD; uso comercial sin condiciones. El instalador de Windows lo descarga, y
   **avisa** si no pudo: mejor saberlo al instalar que el día 2 a las 7 de la mañana.
 
+  Chromium se instala **dentro de la carpeta de la instalación** (`navegador\`) y no en
+  la del usuario, que es donde Playwright lo pone por omisión. Es la trampa clásica en
+  Windows: el instalador lo descarga con una cuenta, el servicio corre con otra, y el
+  servicio dice «Chromium no está instalado» con el navegador instalado. El instalador
+  le pasa `PLAYWRIGHT_BROWSERS_PATH` al servicio, y la API además lo busca ahí sola por
+  si alguien la arranca a mano. El aviso, cuando falta de verdad, dice **dónde** lo
+  buscó y las dos órdenes exactas para ponerlo.
+
 - **El widget de texto sirve de título de sección: tamaño, color, negrita y
   alineación.** Los tamaños van con nombre —Nota, Normal, Subtítulo, Título, Título
   grande, Portada— y no como número libre, para que los títulos de dos hojas salgan

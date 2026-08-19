@@ -29,11 +29,28 @@ codigo propio.
 from __future__ import annotations
 
 import logging
+import os
 
-from app.config import config
+from app.config import RAIZ, config
 from app.seguridad import crear_token
 
 log = logging.getLogger("astrolabio.informe")
+
+#: Donde vive Chromium cuando lo instalo el instalador de Windows.
+#:
+#: Por omision Playwright lo guarda en la carpeta del usuario, y en el servidor eso es
+#: una trampa: el instalador lo descarga con una cuenta y el servicio corre con otra,
+#: asi que el navegador esta instalado y el servicio no lo encuentra. El instalador lo
+#: pone aqui y le da la variable al servicio; esto es el cinturon, para cuando alguien
+#: arranque la API a mano.
+NAVEGADORES = RAIZ.parent / "navegador"
+
+
+def _donde_esta_el_navegador() -> None:
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return
+    if NAVEGADORES.is_dir():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(NAVEGADORES)
 
 
 class SinNavegador(RuntimeError):
@@ -85,6 +102,7 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
     estuviera mirando en pantalla. Un informe que se salta las politicas porque lo
     genero el servidor seria una puerta trasera con formato PDF.
     """
+    _donde_esta_el_navegador()
     try:
         from playwright.sync_api import Error as ErrorPlaywright
         from playwright.sync_api import sync_playwright
@@ -141,8 +159,15 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
         # El error de «no esta instalado el navegador» es el unico que se puede
         # arreglar leyendo el mensaje, asi que se dice como.
         if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
+            donde = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "la carpeta del usuario"
             raise SinNavegador(
-                "Chromium no esta instalado para Playwright. En el servidor: "
-                "python -m playwright install chromium."
+                f"Chromium no esta donde este proceso lo busca ({donde}). En el "
+                f"servidor, con PowerShell como administrador y desde la carpeta de "
+                f"la instalacion:\n"
+                f"  $env:PLAYWRIGHT_BROWSERS_PATH = \"$PWD\\navegador\"\n"
+                f"  .\\backend\\venv\\Scripts\\python.exe -m playwright install chromium\n"
+                f"y despues reinicia el servicio Astrolabio. Ojo con la cuenta: por "
+                f"omision el navegador se guarda en la carpeta del usuario que lo "
+                f"descarga, y el servicio corre con otra."
             ) from e
         raise InformeFallido(f"El navegador no pudo generar el informe: {e}") from e
