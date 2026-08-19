@@ -21,6 +21,14 @@ versionado es [semántico](https://semver.org/lang/es/).
   pantalla con su propio Chromium y devuelve el archivo hecho: igual en Safari que en
   Chrome, y también en PNG. Las dos formas de imprimir siguen ahí, debajo de una raya.
 
+  **El informe lleva los filtros de la pantalla**, no los guardados del tablero. El
+  renderizador abre una pantalla nueva y una pantalla nueva nace con lo guardado, así que
+  el primer PDF salía de agosto mientras la pantalla enseñaba julio — la peor forma de
+  fallar, porque el archivo se ve completo y correcto. Los filtros van en el cuerpo de la
+  petición y de ahí al almacenamiento de sesión de la pestaña: en la URL no caben
+  cuarenta sucursales elegidas, y una URL con los filtros dentro acaba en los registros
+  del servidor web.
+
   Es el mismo código el que mide en los dos caminos (`medirHoja.ts`, que el servidor
   dispara con `?informe=una-hoja`): dos formas de medir la misma hoja se desvían la
   primera semana que alguien toque una. El archivo se genera con el token de quien lo

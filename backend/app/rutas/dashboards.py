@@ -354,9 +354,23 @@ def actualizar(dashboard_id: int, cuerpo: ActualizarDashboard, sesion: SesionDep
     return _salida(sesion, d)
 
 
-@router.get("/{dashboard_id}/informe")
+class PeticionInforme(BaseModel):
+    """
+    Lo que hace falta para dibujar el informe de una hoja.
+
+    `selecciones` son los filtros que tiene puestos quien lo pide, y van en el cuerpo y
+    no en la URL: cuarenta sucursales elegidas no caben decentemente en una direccion,
+    y una direccion con los filtros dentro acaba en los registros del servidor web.
+    """
+
+    hoja: str | None = None
+    formato: Literal["pdf", "png"] = "pdf"
+    selecciones: dict[str, list[Any]] = Field(default_factory=dict)
+
+
+@router.post("/{dashboard_id}/informe")
 def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
-            hoja: str | None = None, formato: Literal["pdf", "png"] = "pdf"):
+            cuerpo: PeticionInforme | None = None):
     """
     La hoja como archivo, generada en el servidor.
 
@@ -368,6 +382,8 @@ def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
     El archivo se genera con el token de QUIEN LO PIDE, asi que las politicas de
     seguridad por fila se aplican igual que en pantalla.
     """
+    c = cuerpo or PeticionInforme()
+    hoja, formato = c.hoja, c.formato
     d = _obtener(sesion, dashboard_id)
     if not d.publicado and usuario.rol == Rol.lector:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dashboard no encontrado")
@@ -375,7 +391,7 @@ def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
     try:
         datos = informe_pdf.generar(
             dashboard_id, hoja=hoja, correo=usuario.email, rol=usuario.rol.value,
-            imagen=(formato == "png"),
+            imagen=(formato == "png"), selecciones=c.selecciones or None,
         )
     except (informe_pdf.SinNavegador, informe_pdf.FaltaDireccion) as e:
         # 501 y no 500: no es un fallo, es una pieza que no esta instalada, y el
@@ -386,7 +402,8 @@ def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
 
     registrar(sesion, accion="informe", usuario_id=usuario.id, email=usuario.email,
               objeto_tipo="dashboard", objeto_id=dashboard_id,
-              detalle={"hoja": hoja, "formato": formato, "bytes": len(datos)})
+              detalle={"hoja": hoja, "formato": formato, "bytes": len(datos),
+                       "filtros": len(c.selecciones)})
     sesion.commit()
 
     # El mismo saneado que la exportacion: una cabecera HTTP se codifica en latin-1

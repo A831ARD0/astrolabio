@@ -28,6 +28,7 @@ codigo propio.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -94,21 +95,29 @@ def _url(dashboard_id: int, hoja: str | None) -> str:
     return url
 
 
-def _sesion_iniciada(pagina, token: str) -> None:
+def _sesion_iniciada(pagina, token: str, selecciones: dict | None) -> None:
     """
-    El token, antes de que la pantalla arranque.
+    El token y los filtros, antes de que la pantalla arranque.
 
-    Se pone en `localStorage` con un script de inicio y no como parametro de la URL a
-    proposito: una URL con el token dentro acaba en el historial, en los registros del
-    servidor web y en la barra de direcciones de quien la reciba por correo.
+    En el almacenamiento del navegador con un script de inicio, y no como parametros de
+    la URL a proposito: una URL con el token dentro acaba en el historial, en los
+    registros del servidor web y en la barra de direcciones de quien la reciba; y los
+    filtros pueden ser cuarenta sucursales elegidas, que ahi no caben.
+
+    Los filtros van en `sessionStorage`, que muere con la pestaña: son de ESTE informe y
+    no del tablero. Ver `frontend/src/tablero/informeAutomatico.ts`.
     """
-    pagina.add_init_script(
-        f"localStorage.setItem('astrolabio.token', {token!r})"
-    )
+    pagina.add_init_script(f"localStorage.setItem('astrolabio.token', {token!r})")
+    if selecciones:
+        pagina.add_init_script(
+            "sessionStorage.setItem('astrolabio.informe.selecciones', "
+            f"{json.dumps(json.dumps(selecciones))})"
+        )
 
 
 def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
-            rol: str, imagen: bool = False) -> bytes:
+            rol: str, imagen: bool = False,
+            selecciones: dict | None = None) -> bytes:
     """
     El PDF —o el PNG, con `imagen`— de una hoja del tablero.
 
@@ -116,6 +125,10 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
     suyo, asi que las politicas de seguridad por fila se aplican igual que si lo
     estuviera mirando en pantalla. Un informe que se salta las politicas porque lo
     genero el servidor seria una puerta trasera con formato PDF.
+
+    `selecciones` son los filtros que hay que aplicar antes de medir. Sin ellas la
+    pantalla nace con los filtros GUARDADOS del tablero, que casi nunca son los que
+    tiene puestos quien pide el informe.
     """
     _donde_esta_el_navegador()
 
@@ -159,7 +172,7 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
                     device_scale_factor=2 if imagen else 1,
                 )
                 pagina = ctx.new_page()
-                _sesion_iniciada(pagina, token)
+                _sesion_iniciada(pagina, token, selecciones)
                 pagina.goto(_url(dashboard_id, hoja), wait_until="domcontentloaded",
                             timeout=espera)
                 pagina.wait_for_function(GUARDIA, timeout=espera)

@@ -135,9 +135,12 @@ export function PortadaInforme({
 export function Imprimir({
   hoja,
   dashboardId,
+  selecciones,
 }: {
   hoja: string
   dashboardId: number
+  /** Lo que hay puesto AHORA, que es lo que el informe tiene que llevar. */
+  selecciones: Record<string, unknown[]>
 }) {
   const [abierto, setAbierto] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -194,11 +197,17 @@ export function Imprimir({
     setError(null)
     setOcupado(true)
     try {
-      const r = await fetch(
-        `/api/dashboards/${dashboardId}/informe?formato=${formato}` +
-          `&hoja=${encodeURIComponent(hoja)}`,
-        { headers: { Authorization: `Bearer ${token.leer()}` } },
-      )
+      const r = await fetch(`/api/dashboards/${dashboardId}/informe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token.leer()}`,
+        },
+        // POST y no GET por las selecciones: cuarenta sucursales elegidas no caben
+        // decentemente en una URL, y una URL con los filtros dentro acaba en los
+        // registros del servidor web.
+        body: JSON.stringify({ hoja, formato, selecciones }),
+      })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
         const detalle = d.detail

@@ -50,7 +50,9 @@ async function esperarDatos(): Promise<void> {
   let quietos = 0
   while (Date.now() - empezo < ESPERA_MAXIMA) {
     await dormir(LATIDO)
-    const consultando = document.querySelectorAll('.cuerpo-widget .vacio').length > 0
+    // `.cargando` y no `.vacio`: un widget que ya contesto «Sin datos» es un `.vacio`
+    // para siempre, y contarlo dejaria el informe esperando el tope entero.
+    const consultando = document.querySelectorAll('.cuerpo-widget .cargando').length > 0
     const alto = document.querySelector('.centro')?.scrollHeight ?? 0
     quietos = !consultando && alto === anterior ? quietos + 1 : 0
     anterior = alto
@@ -80,6 +82,36 @@ export async function informeSiLoPideLaUrl(): Promise<boolean> {
     }
   }
   return true
+}
+
+/**
+ * Donde el renderizador deja los filtros que hay que aplicar antes de medir.
+ *
+ * En `sessionStorage` y no en la URL: son los filtros de la pantalla, que pueden ser
+ * cuarenta valores de sucursal, y una URL con eso dentro acaba en los registros del
+ * servidor web. Ademas muere con la pestaña, que es exactamente lo que se quiere.
+ */
+const CLAVE_FILTROS = 'astrolabio.informe.selecciones'
+
+/**
+ * Los filtros que el informe tiene que llevar puestos, si los hay.
+ *
+ * Hacen falta porque el renderizador abre una pantalla NUEVA, y una pantalla nueva
+ * nace con los filtros GUARDADOS del tablero. Quien pulsa «Descargar PDF» espera el
+ * informe de lo que esta viendo —julio, si tiene julio puesto— y no el de la ultima
+ * vez que alguien guardo el tablero con filtros.
+ */
+export function seleccionesDelInforme(): Record<string, unknown[]> | null {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_FILTROS)
+    if (!crudo) return null
+    const puestas = JSON.parse(crudo)
+    return puestas && typeof puestas === 'object' ? puestas : null
+  } catch {
+    // Un JSON roto no puede tumbar el informe: se sigue con los guardados, que es lo
+    // que pasaba antes de que esto existiera.
+    return null
+  }
 }
 
 /** La hoja que pide la URL, por id o por nombre. `null` si no pide ninguna. */

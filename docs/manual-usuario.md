@@ -1310,7 +1310,8 @@ los filtros puestos. Lo primero del menú es lo que quieres casi siempre:
 **Descargar PDF** — y **Descargar imagen (PNG)**. El archivo lo genera el **servidor**,
 con su propio navegador: no abre ningún diálogo, no depende del navegador que uses y
 sale igual en Safari que en Chrome. Es una sola página, del alto que haga falta, con
-todo dentro.
+todo dentro, y **con los filtros que tengas puestos en ese momento** — no hace falta
+guardar el tablero antes.
 
 Debajo, separadas por una raya, están las dos de **imprimir**, que abren el diálogo del
 navegador. La de A4 es la de papel. La de una sola hoja pide un tamaño de página a

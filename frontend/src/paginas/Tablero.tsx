@@ -41,7 +41,11 @@ import type {
 } from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
 import { Imprimir, PortadaInforme } from '../tablero/Imprimir'
-import { hojaDeLaUrl, informeSiLoPideLaUrl } from '../tablero/informeAutomatico'
+import {
+  hojaDeLaUrl,
+  informeSiLoPideLaUrl,
+  seleccionesDelInforme,
+} from '../tablero/informeAutomatico'
 import { PanelWidget } from '../tablero/PanelWidget'
 import { WidgetVista } from '../tablero/WidgetVista'
 import { PIDE_DATOS, filtrosDeSelecciones } from '../tablero/consulta'
@@ -123,6 +127,12 @@ export function Tablero() {
   const hojaPedida = hojaDeLaUrl()
   useEffect(() => {
     if (!borrador) return
+    // Los filtros de quien pidio el informe, ANTES de medir: una pantalla recien
+    // abierta nace con los guardados del tablero, y el informe tiene que ser de lo
+    // que se estaba viendo. `informeSiLoPideLaUrl` espera a que las consultas
+    // terminen, asi que las de estos filtros entran en esa espera.
+    const puestas = seleccionesDelInforme()
+    if (puestas) setSelecciones(puestas)
     void informeSiLoPideLaUrl()
   }, [borrador])
 
@@ -449,7 +459,11 @@ export function Tablero() {
             )}
             {/* No se esconde al editar: quien acaba de armar la hoja es justo quien
                 quiere ver como queda en papel antes de mandarla. */}
-            <Imprimir hoja={activa.nombre || 'la hoja'} dashboardId={id} />
+            <Imprimir
+              hoja={activa.nombre || 'la hoja'}
+              dashboardId={id}
+              selecciones={selecciones}
+            />
             {/* Solo a quien puede guardar. Un lector puede elegir un camino para
                 su sesión, pero decirle que tiene cambios pendientes que no puede
                 guardar solo confunde. */}

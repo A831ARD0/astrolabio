@@ -145,7 +145,11 @@ function WidgetDatos({
   const semDe = (m: string) =>
     (widget.semaforos as Record<string, Semaforo> | undefined)?.[m]
 
-  if (datos.isLoading) return <div className="vacio chico">Consultando…</div>
+  // La clase `cargando` la mira el renderizador del servidor para saber si la hoja ya
+  // esta lista. Un widget vacio de verdad —«Sin datos»— tambien es un `.vacio`, y si
+  // se contara igual el informe esperaria el tope entero por un widget que ya termino.
+  if (datos.isLoading)
+    return <div className="vacio chico cargando">Consultando…</div>
   if (datos.isError) {
     const rutas = rutasDelError(datos.error)
     // Una ambigüedad de rutas no es un fallo del sistema: es una decisión que
