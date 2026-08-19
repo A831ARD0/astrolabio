@@ -112,6 +112,24 @@ importan.
 | `CORREO_ADMIN` | `admin@example.com` | El administrador del primer arranque |
 | `SMTP_*` | vacías | Ver §9 |
 | `WEBHOOKS_A_RED_INTERNA` | `false` | Permitir webhooks a direcciones privadas |
+| `URL_PUBLICA` | `http://localhost:5173` | **Obligatoria en el servidor.** Ver abajo |
+| `PDF_SEGUNDOS` | `90` | Tope por informe |
+
+**`URL_PUBLICA` es por dónde el SERVIDOR abre la aplicación**, no por dónde la abren
+las personas. La usa el Chromium sin ventana que genera los PDF: entra a la aplicación
+como entraría alguien, así que necesita una dirección que sirva la interfaz **y** la
+API.
+
+Lo que conviene apuntar ahí es una entrada **local y en HTTP plano** del mismo Caddy —
+`http://localhost:8090`, por ejemplo—, y no la dirección pública con TLS:
+
+- No hay que resolver DNS ni validar certificado para hablar consigo mismo.
+- Si el certificado caduca o el DNS se cae, los informes siguen saliendo.
+- Y el tráfico no sale de la máquina.
+
+A ese bloque local conviene ponerle `bind 127.0.0.1`: sin eso Caddy escucha en todas
+las interfaces y responde a cualquiera que mande la cabecera `Host: localhost`, lo que
+deja una entrada en HTTP plano a la interfaz desde la red.
 
 **En producción el arranque falla** si `CLAVE_SECRETA` sigue en el valor de
 ejemplo, si mide menos de 32 caracteres, o si falta `CLAVE_CIFRADO`. Es a
