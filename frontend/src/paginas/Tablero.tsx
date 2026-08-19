@@ -41,6 +41,7 @@ import type {
 } from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
 import { Imprimir, PortadaInforme } from '../tablero/Imprimir'
+import { hojaDeLaUrl, informeSiLoPideLaUrl } from '../tablero/informeAutomatico'
 import { PanelWidget } from '../tablero/PanelWidget'
 import { WidgetVista } from '../tablero/WidgetVista'
 import { PIDE_DATOS, filtrosDeSelecciones } from '../tablero/consulta'
@@ -116,6 +117,15 @@ export function Tablero() {
     setSelecciones(cargado.data.definicion.selecciones ?? {})
   }, [cargado.data])
 
+  // El informe que se lleva el servidor: cuando la URL lo pide, la hoja se pone como
+  // informe, se mide y publica su tamaño. Va aquí y no en el botón porque hace falta
+  // esperar a que las consultas terminen, y eso solo se puede saber desde la pantalla.
+  const hojaPedida = hojaDeLaUrl()
+  useEffect(() => {
+    if (!borrador) return
+    void informeSiLoPideLaUrl()
+  }, [borrador])
+
   // La rejilla se mide: react-grid-layout necesita píxeles. El alto también, y no
   // solo el ancho, porque en modo pantalla la fila mide lo que sobre del alto
   // visible entre las filas que pida la hoja.
@@ -160,7 +170,13 @@ export function Tablero() {
   const widget = borrador.widgets.find((w) => w.id === elegido)
 
   const hojas = hojasDe(borrador)
-  const activa = hojas.find((h) => h.id === hojaId) ?? hojas[0]!
+  // `?hoja=` gana sobre la pestaña elegida: es como el renderizador del servidor dice
+  // cuál hoja quiere, y también sirve para mandar un enlace a una hoja concreta. Vale
+  // el id o el nombre, porque el que escribe el enlace conoce el nombre.
+  const pedida = hojaPedida
+    ? hojas.find((h) => h.id === hojaPedida || h.nombre === hojaPedida)
+    : undefined
+  const activa = pedida ?? hojas.find((h) => h.id === hojaId) ?? hojas[0]!
   const lienzo = activa.lienzo
   // El id vacío de la hoja implícita es el que llevan los widgets de antes.
   const enLaHoja = (w: Widget) => (w.hoja || hojas[0]!.id) === activa.id
@@ -433,7 +449,7 @@ export function Tablero() {
             )}
             {/* No se esconde al editar: quien acaba de armar la hoja es justo quien
                 quiere ver como queda en papel antes de mandarla. */}
-            <Imprimir hoja={activa.nombre || 'la hoja'} />
+            <Imprimir hoja={activa.nombre || 'la hoja'} dashboardId={id} />
             {/* Solo a quien puede guardar. Un lector puede elegir un camino para
                 su sesión, pero decirle que tiene cambios pendientes que no puede
                 guardar solo confunde. */}

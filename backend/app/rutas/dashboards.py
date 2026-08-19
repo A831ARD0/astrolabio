@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
+from app import informe_pdf
 from app.auditoria import registrar
+from app.exportar import nombre_archivo
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
 from app.modelos_db import Dashboard, Rol, Usuario, VersionModelo, iso
 
@@ -350,6 +352,54 @@ def actualizar(dashboard_id: int, cuerpo: ActualizarDashboard, sesion: SesionDep
                        "carpeta": d.carpeta,
                        "perdio_certificacion": perdio_sello})
     return _salida(sesion, d)
+
+
+@router.get("/{dashboard_id}/informe")
+def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
+            hoja: str | None = None, formato: Literal["pdf", "png"] = "pdf"):
+    """
+    La hoja como archivo, generada en el servidor.
+
+    Existe porque el camino del navegador no llega: `window.print()` obliga a pasar
+    por el dialogo de impresion —ninguna pagina web puede elegir el destino, y eso no
+    se rodea— y ademas Safari ignora el tamaño de pagina que pide el documento, asi
+    que la hoja de una sola pagina salia en tamaño Carta y cortada.
+
+    El archivo se genera con el token de QUIEN LO PIDE, asi que las politicas de
+    seguridad por fila se aplican igual que en pantalla.
+    """
+    d = _obtener(sesion, dashboard_id)
+    if not d.publicado and usuario.rol == Rol.lector:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dashboard no encontrado")
+
+    try:
+        datos = informe_pdf.generar(
+            dashboard_id, hoja=hoja, correo=usuario.email, rol=usuario.rol.value,
+            imagen=(formato == "png"),
+        )
+    except informe_pdf.SinNavegador as e:
+        # 501 y no 500: no es un fallo, es una pieza que no esta instalada, y el
+        # mensaje dice como instalarla.
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(e))
+    except informe_pdf.InformeFallido as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    registrar(sesion, accion="informe", usuario_id=usuario.id, email=usuario.email,
+              objeto_tipo="dashboard", objeto_id=dashboard_id,
+              detalle={"hoja": hoja, "formato": formato, "bytes": len(datos)})
+    sesion.commit()
+
+    # El mismo saneado que la exportacion: una cabecera HTTP se codifica en latin-1
+    # y el guion largo del nombre de un tablero —«Comercial — venta»— no cabe ahi.
+    nombre = nombre_archivo(f"{d.nombre}{f' {hoja}' if hoja else ''}", formato)
+    return Response(
+        content=datos,
+        media_type="application/pdf" if formato == "pdf" else "image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nombre}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 @router.post("/{dashboard_id}/publicar", response_model=DashboardSalida)

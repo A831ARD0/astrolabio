@@ -31,53 +31,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { token } from '../api/cliente'
 import { MenuFlotante } from '../comunes/MenuFlotante'
 import { dentroDelMenu, useMenuFlotante } from '../comunes/sitioDeMenu'
+import { prepararUnaHoja, quitarInforme } from './medirHoja'
 import type { Filtro } from '../api/tipos'
-
-/**
- * El ancho del informe de una sola hoja, en píxeles CSS.
- *
- * Fijo y no el de la ventana: si se heredara, el mismo tablero daría un PDF distinto
- * en un portátil y en un monitor, y quien lo manda no sabría cuál de los dos vio el
- * que lo recibe. 1600 es ancho de presentación —cabe una tabla de doce columnas sin
- * apretarla— y da una hoja de proporciones razonables.
- */
-const ANCHO = 1600
-
-/**
- * Y si no cabe, se ensancha. 1600 es el ANCHO DE SALIDA, no un tope: una tabla de
- * veinte columnas no entra ahí, y en pantalla eso se resuelve desplazándola dentro
- * del widget. En una sola hoja no hay dónde desplazar, así que lo que sobra se
- * quedaba cortado por el borde de la página — un PDF que enseña doce columnas de
- * veinte y no dice que faltan ocho.
- *
- * Se mide lo que se sale por la derecha y se ensancha la hoja hasta que quepa. En
- * bucle, porque al ensanchar la hoja el widget también se ensancha y la tabla
- * necesita menos de lo que pidió: dos o tres pasadas llegan al ancho justo, y
- * cualquiera de ellas es ya un ancho que no corta.
- */
-const PASADAS_DE_ANCHO = 3
-
-/**
- * Tope de alto. Chrome no genera páginas de más de 200 pulgadas (unos 19 200 px) y
- * lo que hace al pasarse es recortar sin avisar, así que por encima de esto se dice
- * y se ofrece la otra forma en vez de entregar un PDF cortado.
- */
-const ALTO_MAXIMO = 19_000
-
-/** El mismo tope, para el ancho: el límite de Chrome es de página, no de alto. */
-const ANCHO_MAXIMO = 19_000
-
-/**
- * Holgura, en píxeles, entre lo medido y lo que se escribe en `@page`.
- *
- * No es por si acaso: la maquetación de impresión no redondea igual que la de
- * pantalla, y con la medida exacta sobraba una fracción de píxel que se llevaba una
- * segunda página en blanco. Ocho píxeles no se ven; una página vacía en una
- * presentación, sí.
- */
-const HOLGURA = 8
 
 /** Cómo se lee un filtro en la portada. `cat_sucursal.nombre` no le dice nada a nadie. */
 function comoSeLee(f: Filtro): { campo: string; valores: string } {
@@ -167,58 +125,6 @@ export function PortadaInforme({
   )
 }
 
-/** Dos cuadros de pintura, para que el navegador aplique el diseño del informe. */
-/**
- * Cuánto habría que ensanchar la HOJA para que no se corte nada por la derecha.
- *
- * No es lo mismo que cuánto se sale: un widget de tres columnas de doce crece un
- * cuarto de lo que crece la hoja, así que ensanchar la hoja lo que sobresale la tabla
- * se queda corto tres veces. Lo que se devuelve ya está escalado por la fracción de
- * la rejilla que ocupa el widget, y así una sola pasada acierta.
- *
- * Y no vale `scrollWidth` del contenedor: en el informe el desbordamiento está
- * liberado a propósito —una tabla no puede quedarse dentro de una caja que se
- * desplaza— así que la tabla sobresale de su widget sin que nadie lo cuente.
- */
-function faltaDeAncho(centro: HTMLElement): number {
-  const relleno = parseFloat(getComputedStyle(centro).paddingRight) || 0
-  const limite = centro.getBoundingClientRect().right - relleno
-  const cols = Number(getComputedStyle(centro).getPropertyValue('--cols')) || 12
-  let falta = Math.max(0, centro.scrollWidth - centro.clientWidth)
-
-  for (const el of centro.querySelectorAll('.rejilla .widget')) {
-    const caja = el.getBoundingClientRect()
-    const gw = Number(getComputedStyle(el).getPropertyValue('--gw')) || cols
-    // Lo que se sale del propio widget hay que dárselo al widget, y para eso la
-    // hoja tiene que crecer `cols / gw` veces más.
-    let dentro = 0
-    for (const hijo of el.querySelectorAll('table, .grafico, .lista-valores')) {
-      dentro = Math.max(dentro, hijo.getBoundingClientRect().right - caja.right)
-    }
-    falta = Math.max(falta, (dentro * cols) / Math.max(gw, 1))
-    // Y lo que el widget mismo se sale de la hoja va tal cual: es la hoja.
-    falta = Math.max(falta, caja.right - limite)
-  }
-  return falta
-}
-
-const dosCuadros = () =>
-  new Promise<void>((listo) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => listo())),
-  )
-
-/**
- * Poner la clase y esperar a que la página se quede quieta.
- *
- * Los gráficos se redibujan solos —su `ResizeObserver`— pero no en el mismo cuadro:
- * sin esta espera, lo que se mide es la hoja de antes de que se recolocaran.
- */
-async function asentarse() {
-  await dosCuadros()
-  await new Promise((listo) => setTimeout(listo, 350))
-  await dosCuadros()
-}
-
 /**
  * El botón. Abre el diálogo del navegador, donde se elige «Guardar como PDF».
  *
@@ -226,7 +132,13 @@ async function asentarse() {
  * pase por aquí: quien pulsa Ctrl+P en un tablero espera el tablero, no la
  * aplicación con sus paneles y sus botones.
  */
-export function Imprimir({ hoja }: { hoja: string }) {
+export function Imprimir({
+  hoja,
+  dashboardId,
+}: {
+  hoja: string
+  dashboardId: number
+}) {
   const [abierto, setAbierto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
@@ -270,61 +182,59 @@ export function Imprimir({ hoja }: { hoja: string }) {
     window.print()
   }
 
+  /**
+   * El archivo, hecho en el servidor. Es la forma normal de sacar el informe.
+   *
+   * Sin diálogo de impresión y sin depender del navegador de cada quien: Safari
+   * ignora el tamaño de página que pide el documento, así que la hoja de una sola
+   * página salía en tamaño Carta y cortada. El servidor abre esta misma pantalla con
+   * su propio Chromium y devuelve el archivo ya hecho.
+   */
+  async function delServidor(formato: 'pdf' | 'png') {
+    setError(null)
+    setOcupado(true)
+    try {
+      const r = await fetch(
+        `/api/dashboards/${dashboardId}/informe?formato=${formato}` +
+          `&hoja=${encodeURIComponent(hoja)}`,
+        { headers: { Authorization: `Bearer ${token.leer()}` } },
+      )
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        const detalle = d.detail
+        throw new Error(
+          typeof detalle === 'string'
+            ? detalle
+            : (detalle?.mensaje ?? 'No se pudo generar el informe'),
+        )
+      }
+      const cabecera = r.headers.get('content-disposition') ?? ''
+      const nombre =
+        /filename="?([^"]+)"?/.exec(cabecera)?.[1] ?? `informe.${formato}`
+      const url = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nombre
+      a.click()
+      // Sin revoke, cada descarga deja el archivo entero retenido en memoria.
+      URL.revokeObjectURL(url)
+      setAbierto(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el informe')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   async function unaHoja() {
     setError(null)
     setOcupado(true)
-    const raiz = document.documentElement
     const estilo = document.createElement('style')
     try {
-      // Se enciende el informe ANTES de medir: el alto de una hoja de una sola página
-      // es el alto que ocupa ya dispuesta como informe, con los altos sueltos y las
-      // tablas enteras. Medir la pantalla daría el alto de la ventana.
-      raiz.style.setProperty('--ancho-informe', `${ANCHO}px`)
-      raiz.classList.add('informe', 'una-hoja')
-      await asentarse()
-
-      const centro = document.querySelector('.centro') as HTMLElement | null
-      if (!centro) throw new Error('No se pudo medir la hoja.')
-
-      // Primero el ancho: el alto depende de él —una tabla que cabe no parte
-      // renglones— así que medirlo antes sería medir otra hoja.
-      let ancho = ANCHO
-      for (let i = 0; i < PASADAS_DE_ANCHO; i++) {
-        const falta = Math.ceil(faltaDeAncho(centro))
-        if (falta <= 1 || ancho >= ANCHO_MAXIMO) break
-        ancho = Math.min(ancho + falta, ANCHO_MAXIMO)
-        raiz.style.setProperty('--ancho-informe', `${ancho}px`)
-        await asentarse()
-      }
-      // Lo que quede después de las pasadas se le da a la PÁGINA, no a la hoja: la
-      // hoja ya no se recompone —cada vez que se ensancha, la tabla pide un poco más
-      // y el resto no baja de unos pocos píxeles— y una página un poco más ancha que
-      // su contenido solo deja aire a la derecha. Negarse a hacer el PDF por tres
-      // píxeles era peor que el problema que evitaba.
-      const resto = Math.ceil(faltaDeAncho(centro))
-      const anchoPagina = ancho + (resto > 0 ? resto + HOLGURA : 0)
-      if (anchoPagina > ANCHO_MAXIMO) {
-        throw new Error(
-          `La hoja necesita ${anchoPagina} px de ancho y el navegador no hace ` +
-            `páginas de más de ${ANCHO_MAXIMO}. Cortaría las últimas columnas sin ` +
-            `avisar, así que mejor «Páginas A4», o quita columnas de la tabla.`,
-        )
-      }
-
-      const medido = Math.max(centro.scrollHeight, document.body.scrollHeight)
-      const alto = Math.ceil(medido) + HOLGURA
-      if (medido <= 0) throw new Error('No se pudo medir la hoja.')
-      if (alto > ALTO_MAXIMO) {
-        throw new Error(
-          `La hoja mide ${alto} px de alto y el navegador no hace páginas de más de ` +
-            `${ALTO_MAXIMO}. Lo cortaría sin avisar, así que mejor «Páginas A4», o ` +
-            `parte la hoja en dos.`,
-        )
-      }
-
+      const { ancho, alto } = await prepararUnaHoja()
       // Va después de la hoja de estilos, así que gana al `@page` de A4.
       estilo.id = 'tamano-una-hoja'
-      estilo.textContent = `@page { size: ${anchoPagina}px ${alto}px; margin: 0; }`
+      estilo.textContent = `@page { size: ${ancho}px ${alto}px; margin: 0; }`
       document.head.appendChild(estilo)
       setAbierto(false)
       window.print()
@@ -333,8 +243,7 @@ export function Imprimir({ hoja }: { hoja: string }) {
     } finally {
       // `afterprint` quita las clases, pero también hay que quitarlas si esto falló
       // antes de llegar a imprimir: si no, el tablero se queda con cara de informe.
-      raiz.classList.remove('informe', 'una-hoja')
-      raiz.style.removeProperty('--ancho-informe')
+      quitarInforme()
       estilo.remove()
       setOcupado(false)
     }
@@ -353,11 +262,20 @@ export function Imprimir({ hoja }: { hoja: string }) {
       </button>
       {abierto && (
         <MenuFlotante sitio={sitio} clase="no-imprimir">
-          <button onClick={unaHoja}>Una sola hoja</button>
-          <button onClick={paginas}>Páginas A4</button>
+          <button onClick={() => delServidor('pdf')}>
+            <strong>Descargar PDF</strong>
+          </button>
+          <button onClick={() => delServidor('png')}>Descargar imagen (PNG)</button>
           <div className="chico tenue" style={{ padding: '4px 8px 2px' }}>
-            En el diálogo, elige «Guardar como PDF». Una sola hoja no corta nada y es
-            la de presentar; A4 es la de papel.
+            Una sola página con todo dentro, hecha en el servidor: sin diálogo y
+            siempre igual, en Safari o en Chrome.
+          </div>
+          <div className="separador" />
+          <button onClick={unaHoja}>Imprimir en una hoja…</button>
+          <button onClick={paginas}>Imprimir en páginas A4…</button>
+          <div className="chico tenue" style={{ padding: '4px 8px 2px' }}>
+            Estas dos abren el diálogo del navegador. La de A4 es la de papel; en
+            Safari, el tamaño de una sola hoja no se respeta.
           </div>
         </MenuFlotante>
       )}

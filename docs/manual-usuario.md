@@ -1304,8 +1304,21 @@ cuándo— para que una tabla que alguien manda por correo siga diciendo de dón
 
 ### La hoja entera en PDF
 
-El botón **PDF** de la barra de arriba saca la hoja que estás viendo como informe,
-con los filtros puestos, y da dos formas:
+El botón **PDF** de la barra de arriba saca la hoja que estás viendo como informe, con
+los filtros puestos. Lo primero del menú es lo que quieres casi siempre:
+
+**Descargar PDF** — y **Descargar imagen (PNG)**. El archivo lo genera el **servidor**,
+con su propio navegador: no abre ningún diálogo, no depende del navegador que uses y
+sale igual en Safari que en Chrome. Es una sola página, del alto que haga falta, con
+todo dentro.
+
+Debajo, separadas por una raya, están las dos de **imprimir**, que abren el diálogo del
+navegador. La de A4 es la de papel. La de una sola hoja pide un tamaño de página a
+medida, y ahí hay una diferencia que conviene saber: **Chrome lo respeta y Safari no**
+—Safari saca tamaño Carta y corta lo que sobra—. Si usas Safari, usa «Descargar PDF».
+
+Las dos formas dibujan lo mismo y miden igual, porque es el mismo código: el servidor
+abre esta misma pantalla.
 
 **Una sola hoja.** Para presentar o mandar por correo. Una única página, del alto
 que haga falta y todo lo ancha que necesite la hoja, con **todo dentro**: nada
@@ -1322,14 +1335,11 @@ entrega un PDF cortado.
 página siguiente repitiendo sus encabezados, y la fila de totales sale una sola vez
 y al final.
 
-Las dos abren el diálogo del navegador: ahí eliges **«Guardar como PDF»** —o una
-impresora, si es para papel—. Deja los márgenes y la escala como vienen: la medida
-de la página ya la trae el documento.
-
-Ese diálogo no se puede saltar desde el navegador, y es a propósito que no lo
-intentamos por otro camino: un PDF hecho con una foto de la pantalla pesa diez veces
-más y no deja buscar ni copiar una cifra. Si el diálogo sale con una impresora en vez
-de «Guardar como PDF», cámbialo una vez y el navegador lo recuerda.
+En las de imprimir, el diálogo del navegador pide el destino: ahí eliges **«Guardar
+como PDF»** —o una impresora, si es para papel—. Ese diálogo no se puede saltar desde
+una página web: ninguna puede elegir el destino de impresión, y por eso existe la
+descarga desde el servidor. Deja los márgenes y la escala como vienen: la medida de la
+página ya la trae el documento.
 
 El informe empieza por una cabecera que solo existe en el PDF: el nombre del
 tablero, la hoja, **los filtros aplicados**, el modelo y su versión, y quién lo

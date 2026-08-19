@@ -100,6 +100,15 @@ class Config(BaseSettings):
     # --- api ---
     origenes_cors: list[str] = ["http://localhost:5173"]
 
+    # --- informes en PDF ---
+    # Donde vive la aplicacion PARA EL SERVIDOR. La usa el Chromium sin ventana que
+    # genera los informes: abre esta direccion como la abriria una persona. En
+    # desarrollo es el servidor de Vite; en el servidor, lo que sirve Caddy.
+    url_publica: str = "http://localhost:5173"
+    # Tope por informe. Un tablero con quince widgets pesados tarda; uno que no
+    # termina nunca no puede dejar colgada la peticion ni la tarea programada.
+    pdf_segundos: int = 90
+
     @property
     def es_produccion(self) -> bool:
         return self.entorno == "produccion"

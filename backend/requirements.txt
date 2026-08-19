@@ -47,6 +47,14 @@ PyYAML==6.0.3
 # el webhook (Teams, Slack), y ademas es el cliente que usan las pruebas.
 httpx==0.28.1
 
+# Informes en PDF
+# Un Chromium sin ventana que abre la propia pantalla y devuelve el archivo. Es lo
+# unico que dibuja la hoja tal como se ve: rejilla CSS y graficos pintados con
+# JavaScript en un canvas. Hay que instalar el navegador aparte, una vez:
+#   python -m playwright install chromium
+# Licencias: Playwright Apache-2.0, Chromium BSD. Uso comercial sin condiciones.
+playwright==1.57.0
+
 # Pruebas y revision
 pytest==9.1.1
 pip-audit==2.9.0

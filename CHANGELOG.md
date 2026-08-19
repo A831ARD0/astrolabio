@@ -13,6 +13,28 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **El PDF se genera en el servidor: «Descargar PDF», sin diálogo de impresión.** El
+  camino del navegador no llegaba. `window.print()` obliga a pasar por el diálogo
+  —ninguna página web puede elegir el destino de impresión, y eso no se rodea— y además
+  **Safari ignora el tamaño de página que pide el documento**, así que la hoja de una
+  sola página salía en tamaño Carta y cortada. Ahora el servidor abre esta misma
+  pantalla con su propio Chromium y devuelve el archivo hecho: igual en Safari que en
+  Chrome, y también en PNG. Las dos formas de imprimir siguen ahí, debajo de una raya.
+
+  Es el mismo código el que mide en los dos caminos (`medirHoja.ts`, que el servidor
+  dispara con `?informe=una-hoja`): dos formas de medir la misma hoja se desvían la
+  primera semana que alguien toque una. El archivo se genera con el token de quien lo
+  pide, así que **las políticas de seguridad por fila se aplican igual que en
+  pantalla** — un informe que se las salta porque lo generó el servidor sería una
+  puerta trasera con formato PDF.
+
+  Chromium, y no una librería de PDF, porque lo que hay que dibujar es la hoja tal como
+  está: rejilla CSS y gráficos que se pintan con JavaScript en un `canvas`. WeasyPrint
+  no ejecuta JavaScript —los gráficos saldrían en blanco— y wkhtmltopdf usa un WebKit
+  de hace una década que no entiende la rejilla. Licencias: Playwright Apache-2.0,
+  Chromium BSD; uso comercial sin condiciones. El instalador de Windows lo descarga, y
+  **avisa** si no pudo: mejor saberlo al instalar que el día 2 a las 7 de la mañana.
+
 - **El widget de texto sirve de título de sección: tamaño, color, negrita y
   alineación.** Los tamaños van con nombre —Nota, Normal, Subtítulo, Título, Título
   grande, Portada— y no como número libre, para que los títulos de dos hojas salgan

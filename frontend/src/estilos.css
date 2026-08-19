@@ -871,6 +871,14 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
    `display: none` que el atributo trae del navegador. */
 .widget > header[hidden] { display: none; }
 
+/* Separa lo que hace el servidor de lo que hace el navegador: son dos cosas con el
+   mismo aspecto y consecuencias distintas, y una raya lo dice mejor que un texto. */
+.menu-flotante .separador {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--borde);
+}
+
 .fila-color { display: flex; align-items: center; gap: 6px; }
 .fila-color input[type='color'] {
   flex: 0 0 32px;

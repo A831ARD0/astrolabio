@@ -335,6 +335,19 @@ $r = Correr $python @('-m', 'pip', 'install', '-r',
 if ($r.Codigo -ne 0) { throw "Fallo la instalacion de dependencias:`n$($r.Texto)" }
 Bien 'Dependencias instaladas'
 
+# El navegador de los informes. Va aparte de pip a proposito: son unos 150 MB que se
+# descargan una vez, y si esta maquina no tiene salida a internet hay que saberlo
+# aqui y no el dia 2 a las 7 de la mañana, cuando no salga el correo.
+Write-Host '   ... instalando Chromium para los informes en PDF (unos 150 MB)'
+$r = Correr $python @('-m', 'playwright', 'install', 'chromium')
+if ($r.Codigo -ne 0) {
+    Aviso ('No se pudo instalar Chromium: los informes en PDF y el envio por correo ' +
+           'no funcionaran hasta que se instale. Se arregla con: ' +
+           '.\backend\venv\Scripts\python.exe -m playwright install chromium')
+} else {
+    Bien 'Chromium instalado'
+}
+
 # --------------------------------------------------------------------------- #
 # El puente ODBC de 32 bits
 # --------------------------------------------------------------------------- #
