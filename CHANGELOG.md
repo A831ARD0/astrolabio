@@ -40,7 +40,10 @@ versionado es [semántico](https://semver.org/lang/es/).
   Windows: el instalador lo descarga con una cuenta, el servicio corre con otra, y el
   servicio dice «Chromium no está instalado» con el navegador instalado. El instalador
   le pasa `PLAYWRIGHT_BROWSERS_PATH` al servicio, y la API además lo busca ahí sola por
-  si alguien la arranca a mano. El aviso, cuando falta de verdad, dice **dónde** lo
+  si alguien la arranca a mano. Poner ese entorno **no puede tumbar la instalación**: si
+  falla, se avisa con la orden para ponerlo a mano y el servicio arranca igual — un
+  servicio parado deja el tablero sin funcionar para todos, y no poder hacer un PDF se
+  arregla después. El aviso, cuando falta de verdad, dice **dónde** lo
   buscó y las dos órdenes exactas para ponerlo.
 
 - **El widget de texto sirve de título de sección: tamaño, color, negrita y

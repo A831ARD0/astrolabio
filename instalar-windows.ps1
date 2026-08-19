@@ -175,14 +175,35 @@ function InstalarServicio {
         @('set', $Nombre, 'AppStderr', (Join-Path $Registros "$Nombre-error.log")),
         @('set', $Nombre, 'Start', 'SERVICE_AUTO_START')
     )
-    if ($Entorno.Count -gt 0) {
-        $ordenes += , @('set', $Nombre, 'AppEnvironmentExtra') + $Entorno
-    }
-    $ordenes += , @('start', $Nombre)
     foreach ($orden in $ordenes) {
         $r = Correr $Nssm $orden
         if ($r.Codigo -ne 0) { throw "Fallo 'nssm $($orden -join ' ')':`n$($r.Texto)" }
     }
+
+    # El entorno va aparte de la lista, y por dos motivos.
+    #
+    # Uno de sintaxis: la orden se arma en su propia variable. `@(...) + $Entorno`
+    # dentro de un `+= ,` se evalua de otra forma —la coma se queda con el primer
+    # trozo y el `+` concatena al nivel de fuera—, asi que `nssm set` se llamaba SIN
+    # valor y contestaba con su pantalla de ayuda entera.
+    #
+    # Y uno de fondo: esto NO tumba la instalacion. Un servicio que se queda parado
+    # porque no se pudo poner una variable de entorno es peor que un servicio que
+    # corre sin poder hacer PDF: lo primero tira el tablero de todo el mundo, lo
+    # segundo se arregla despues y lo dice la propia pantalla al pulsar el boton.
+    if ($Entorno.Count -gt 0) {
+        $orden = @('set', $Nombre, 'AppEnvironmentExtra') + $Entorno
+        $r = Correr $Nssm $orden
+        if ($r.Codigo -ne 0) {
+            Aviso ("No se pudo poner el entorno del servicio ($($Entorno -join ' ')). " +
+                   "El servicio va a arrancar igual, pero los informes en PDF diran " +
+                   "que no encuentran Chromium. Se pone a mano con:  nssm set " +
+                   "$Nombre AppEnvironmentExtra $($Entorno -join ' ')")
+        }
+    }
+
+    $r = Correr $Nssm @('start', $Nombre)
+    if ($r.Codigo -ne 0) { throw "Fallo 'nssm start $Nombre':`n$($r.Texto)" }
 }
 
 $backend  = Join-Path $Raiz 'backend'
