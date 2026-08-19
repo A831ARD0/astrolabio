@@ -118,3 +118,21 @@ def test_el_informe_queda_en_auditoria(cliente, cab_admin, tablero, monkeypatch)
     assert r.status_code == 200, r.text
     ev = r.json()["eventos"]
     assert ev and ev[0]["detalle"]["formato"] == "pdf"
+
+
+def test_sin_direccion_publica_se_dice_cual_es_la_variable(cliente, cab_admin, tablero,
+                                                           monkeypatch):
+    """
+    El fallo mas probable al montar esto en un servidor, y el que menos se parece a su
+    causa: el renderizador abre la aplicacion como la abre una persona, y si nadie le
+    dijo por donde, lo que sale es un error de red que no señala a ninguna variable.
+    """
+    monkeypatch.setattr(informe_pdf, "generar", lambda *a, **k: (_ for _ in ()).throw(
+        informe_pdf.FaltaDireccion(
+            "No hay nada escuchando en http://localhost:5173, que es lo que dice "
+            "ASTROLABIO_URL_PUBLICA.")))
+    r = cliente.get(f"/api/dashboards/{tablero['id']}/informe", headers=cab_admin)
+    # 501, como la falta de Chromium: no es un fallo del programa, es una pieza sin
+    # montar, y el mensaje dice cual.
+    assert r.status_code == 501, r.text
+    assert "ASTROLABIO_URL_PUBLICA" in r.text

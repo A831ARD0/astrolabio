@@ -377,7 +377,7 @@ def informe(dashboard_id: int, sesion: SesionDep, usuario: UsuarioDep,
             dashboard_id, hoja=hoja, correo=usuario.email, rol=usuario.rol.value,
             imagen=(formato == "png"),
         )
-    except informe_pdf.SinNavegador as e:
+    except (informe_pdf.SinNavegador, informe_pdf.FaltaDireccion) as e:
         # 501 y no 500: no es un fallo, es una pieza que no esta instalada, y el
         # mensaje dice como instalarla.
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, str(e))

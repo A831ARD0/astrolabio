@@ -61,6 +61,21 @@ class InformeFallido(RuntimeError):
     """La hoja no se pudo preparar. El mensaje viene de la propia pantalla."""
 
 
+class FaltaDireccion(RuntimeError):
+    """
+    No se sabe por donde abrir la aplicacion, o no hay nada escuchando ahi.
+
+    Es un aparte y no un `InformeFallido` porque no es la hoja lo que falla: es que
+    `ASTROLABIO_URL_PUBLICA` no apunta a esta instalacion. El renderizador abre la
+    aplicacion como la abriria una persona, asi que necesita la misma direccion que
+    se escribe en el navegador — y en el servidor **no** es la de desarrollo.
+    """
+
+
+#: La direccion de desarrollo: el servidor de Vite, que en el servidor no existe.
+DIRECCION_DE_DESARROLLO = "http://localhost:5173"
+
+
 #: Lo que se espera de la pantalla: o ya midio, o esta pidiendo contraseña.
 #:
 #: Las dos, y no solo la primera: si el token no vale, la aplicacion dibuja el ingreso
@@ -103,6 +118,20 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
     genero el servidor seria una puerta trasera con formato PDF.
     """
     _donde_esta_el_navegador()
+
+    # Antes de levantar Chromium: si la direccion es la de desarrollo y esto es un
+    # servidor, no hay nada que abrir. Decirlo aqui ahorra noventa segundos de espera
+    # y un mensaje de red que no señala a la variable que hay que cambiar.
+    if config().es_produccion and config().url_publica.rstrip("/") == DIRECCION_DE_DESARROLLO:
+        raise FaltaDireccion(
+            f"ASTROLABIO_URL_PUBLICA sigue en la direccion de desarrollo "
+            f"({DIRECCION_DE_DESARROLLO}), que en el servidor no existe. Ponla con la "
+            f"misma direccion con la que abres Astrolabio en el navegador:\n"
+            f"  [Environment]::SetEnvironmentVariable('ASTROLABIO_URL_PUBLICA', "
+            f"'https://tu-direccion', 'Machine')\n"
+            f"y reinicia el servicio Astrolabio (las variables de maquina se leen al "
+            f"arrancar).")
+
     try:
         from playwright.sync_api import Error as ErrorPlaywright
         from playwright.sync_api import sync_playwright
@@ -170,4 +199,14 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
                 f"omision el navegador se guarda en la carpeta del usuario que lo "
                 f"descarga, y el servicio corre con otra."
             ) from e
+        if "ERR_CONNECTION_REFUSED" in str(e) or "ERR_NAME_NOT_RESOLVED" in str(e):
+            raise FaltaDireccion(
+                f"No hay nada escuchando en {config().url_publica}, que es lo que dice "
+                f"ASTROLABIO_URL_PUBLICA. El servidor abre la aplicacion como la abre "
+                f"una persona, asi que esa variable tiene que llevar la misma "
+                f"direccion que escribes en el navegador —la de Caddy, no la del "
+                f"servidor de desarrollo—. Se pone con:\n"
+                f"  [Environment]::SetEnvironmentVariable('ASTROLABIO_URL_PUBLICA', "
+                f"'https://tu-direccion', 'Machine')\n"
+                f"y hay que reiniciar el servicio Astrolabio despues.") from e
         raise InformeFallido(f"El navegador no pudo generar el informe: {e}") from e

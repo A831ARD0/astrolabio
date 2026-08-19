@@ -1320,9 +1320,17 @@ medida, y ahí hay una diferencia que conviene saber: **Chrome lo respeta y Safa
 Las dos formas dibujan lo mismo y miden igual, porque es el mismo código: el servidor
 abre esta misma pantalla.
 
-**Si dice «Chromium no está donde este proceso lo busca»**, es que el navegador quedó en
-la carpeta de otra cuenta de Windows. El propio aviso trae las dos órdenes; después hay
-que reiniciar el servicio Astrolabio.
+Dos avisos que salen si el servidor no está del todo montado, y los dos traen la orden
+para arreglarlo:
+
+- **«Chromium no está donde este proceso lo busca»**: el navegador quedó en la carpeta
+  de otra cuenta de Windows.
+- **«No hay nada escuchando en…»** o **«sigue en la dirección de desarrollo»**: falta
+  `ASTROLABIO_URL_PUBLICA`. El servidor abre la aplicación como la abre una persona, así
+  que necesita **la misma dirección que escribes en el navegador**.
+
+En los dos casos hay que reiniciar el servicio Astrolabio después: las variables de
+máquina se leen al arrancar.
 
 **Una sola hoja.** Para presentar o mandar por correo. Una única página, del alto
 que haga falta y todo lo ancha que necesite la hoja, con **todo dentro**: nada

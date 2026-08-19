@@ -498,6 +498,24 @@ if (FijarSiFalta 'ASTROLABIO_CLAVE_CIFRADO' ([Convert]::ToBase64String((Bytes32)
 }
 FijarSiFalta 'ASTROLABIO_ENTORNO' 'produccion' 'Exige las claves de verdad al arrancar.' | Out-Null
 
+# Esta no se puede inventar: es la direccion con la que se abre Astrolabio en el
+# navegador, y solo la sabe quien monto Caddy. Se comprueba porque sin ella los
+# informes en PDF fallan con un error de red que no señala a la variable — y el correo
+# del dia 2 no sale.
+$urlPublica = [Environment]::GetEnvironmentVariable('ASTROLABIO_URL_PUBLICA', 'Machine')
+if (-not $urlPublica) {
+    Aviso ('Falta ASTROLABIO_URL_PUBLICA: es la direccion con la que abres Astrolabio ' +
+           'en el navegador, y es la que usa el servidor para generar los PDF. Sin ' +
+           'ella, «Descargar PDF» y el envio por correo no funcionan. Se pone con:  ' +
+           "[Environment]::SetEnvironmentVariable('ASTROLABIO_URL_PUBLICA', " +
+           "'https://tu-direccion', 'Machine')   y luego reiniciar el servicio.")
+} elseif ($urlPublica -like '*localhost:5173*') {
+    Aviso ("ASTROLABIO_URL_PUBLICA es $urlPublica, que es la direccion del servidor de " +
+           'desarrollo y en este servidor no existe. Ponla con la direccion de Caddy.')
+} else {
+    Bien "ASTROLABIO_URL_PUBLICA = $urlPublica"
+}
+
 # El archivo se escribe SOLO si se genero alguna clave en esta corrida. Antes se
 # escribia siempre que no existiera, con lo que volver a correr el guion
 # resucitaba un archivo de secretos que ya se habia guardado y borrado.
