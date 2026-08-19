@@ -42,6 +42,10 @@ def _id_trabajo(dataset_id: int) -> str:
     return f"dataset:{dataset_id}"
 
 
+def _id_envio(envio_id: int) -> str:
+    return f"envio:{envio_id}"
+
+
 def _id_flujo(flujo_id: int) -> str:
     return f"flujo:{flujo_id}"
 
@@ -134,6 +138,35 @@ def correr_flujo(flujo_id: int) -> None:
 # Ciclo de vida
 # --------------------------------------------------------------------------- #
 
+def correr_envio(envio_id: int) -> None:
+    """
+    Manda un informe programado. La llama el planificador, nadie mas.
+
+    Los fallos NO se propagan: un envio que falla no debe tumbar el trabajo ni impedir
+    el del mes siguiente. Se guardan en el propio envio, que es donde la pantalla los
+    mira — un informe que lleva tres meses sin salir y no lo dice en ningun sitio es un
+    informe que nadie recibe y todos creen que llega.
+    """
+    from app.envios import enviar
+    from app.modelos_db import EnvioInforme
+
+    with CrearSesion() as sesion:
+        envio = sesion.get(EnvioInforme, envio_id)
+        if envio is None:
+            log.warning("El envio %s ya no existe: se quita del planificador", envio_id)
+            quitar_envio(envio_id)
+            return
+        if not envio.activa:
+            return
+        try:
+            enviar(sesion, envio)
+        except Exception as e:                                    # noqa: BLE001
+            log.exception("Fallo el envio %s", envio_id)
+            envio.ultimo_error = str(e)[:2000]
+            envio.ultimo_envio = None
+            sesion.commit()
+
+
 def planificador() -> BackgroundScheduler:
     global _planificador
     if _planificador is None:
@@ -178,7 +211,7 @@ def sincronizar() -> None:
     quedo huerfano (dataset borrado a mano, cron cambiado por otra via), aqui se
     corrige. Se llama al arrancar.
     """
-    from app.modelos_db import Flujo
+    from app.modelos_db import EnvioInforme, Flujo
 
     p = planificador()
     with CrearSesion() as sesion:
@@ -191,9 +224,13 @@ def sincronizar() -> None:
             if f.cron and f.programacion_activa:
                 vivos.add(_id_flujo(f.id))
                 _programar_flujo(f)
+        for e in sesion.query(EnvioInforme).all():
+            if e.cron and e.activa:
+                vivos.add(_id_envio(e.id))
+                _programar_envio(e)
         for t in p.get_jobs():
-            if (t.id.startswith("dataset:") or t.id.startswith("flujo:")) \
-                    and t.id not in vivos:
+            if (t.id.startswith("dataset:") or t.id.startswith("flujo:")
+                    or t.id.startswith("envio:")) and t.id not in vivos:
                 p.remove_job(t.id)
 
 
@@ -211,6 +248,40 @@ def _programar_flujo(f) -> None:
         args=[f.id], id=_id_flujo(f.id), name=f"flujo {f.nombre}",
         replace_existing=True,
     )
+
+
+def _programar_envio(e) -> None:
+    planificador().add_job(
+        correr_envio, trigger=validar_cron(e.cron, e.zona_horaria),
+        args=[e.id], id=_id_envio(e.id), name=f"informe {e.id}",
+        replace_existing=True,
+    )
+
+
+def aplicar_envio(e) -> None:
+    """Deja el planificador de acuerdo con lo que dice el envio."""
+    if not config().programador_activo:
+        return
+    if e.cron and e.activa:
+        _programar_envio(e)
+    else:
+        quitar_envio(e.id)
+
+
+def quitar_envio(envio_id: int) -> None:
+    if not config().programador_activo:
+        return
+    try:
+        planificador().remove_job(_id_envio(envio_id))
+    except Exception:                                             # noqa: BLE001
+        pass
+
+
+def proxima_corrida_envio(envio_id: int):
+    if not config().programador_activo:
+        return None
+    t = planificador().get_job(_id_envio(envio_id))
+    return t.next_run_time if t else None
 
 
 def aplicar_flujo(f) -> None:

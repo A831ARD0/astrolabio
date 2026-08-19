@@ -1274,6 +1274,40 @@ una lista: dos widgets pueden estar uno al lado del otro, y eso en una lista no 
 puede decir. La lista sale en el orden en que se lee la hoja, que es el mismo en que
 sale el informe en PDF.
 
+### Que el informe llegue por correo cada mes
+
+En el menú del botón **PDF** está **«Enviar por correo cada mes…»**. Ahí se configura a
+quién, cuándo, de qué periodo y qué va dentro. Lo genera el servidor y lo manda solo: no
+hace falta que nadie entre.
+
+**De qué periodo** es lo único que hay que pensar dos veces:
+
+- **El mes anterior** — se calcula en cada envío. El 2 de septiembre manda agosto y el 2
+  de octubre manda septiembre, sin que nadie toque nada. Es lo que quieres para un
+  informe mensual. Necesita que el modelo tenga marcada la columna del mes; si no la
+  tiene, no se deja guardar y lo dice ahí mismo.
+- **Los filtros guardados del tablero** — manda siempre con lo que el tablero tenga
+  guardado. Si eso es un mes concreto, mandará ese mes para siempre.
+
+**Qué va dentro:** el PDF adjunto, la hoja como imagen en el cuerpo del correo —se ve
+sin abrir nada, pero es una imagen y no se puede copiar una cifra—, o las dos.
+
+**El asunto lleva el periodo** aunque escribas uno propio: «Plan de acción — agosto de
+2026». Un informe que circula por correo tiene que poder decir de qué mes es sin que
+haya que abrirlo.
+
+Dos cosas que conviene tener claras:
+
+- **Se manda con la sesión de quien lo programó.** Si tus políticas te limitan a unas
+  sucursales, el correo va limitado igual. Quien lo programa decide con qué ojos se ve.
+- **Nace apagado.** Encenderlo es decidir que empieza a salir. Antes de eso, usa
+  **«Probar ahora»**: sale a los mismos destinatarios, así que comprueba la lista entera
+  y no solo que el servidor de correo contesta.
+
+En la lista se ve cuándo le toca la próxima y cómo fue la última. Si falló, lo dice ahí
+—un envío que lleva tres meses fallando en silencio es un informe que nadie recibe y
+todos creen que llega.
+
 ### Cuando un widget sale vacío
 
 «Sin datos» a secas manda a buscar a ciegas, así que el widget dice **por qué**. Son

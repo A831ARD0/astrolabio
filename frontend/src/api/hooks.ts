@@ -15,6 +15,8 @@ import type {
   DashboardResumen,
   Definicion,
   DefinicionDashboard,
+  EnvioEntrada,
+  EnvioInforme,
   FuncionFormula,
   MetricaCatalogo,
   ModeloResumen,
@@ -428,4 +430,57 @@ export function useMuestra(id: number) {
     mutationFn: (v: { definicion?: Definicion; entidad: string; limite?: number }) =>
       api.post<ResultadoDatos>(`/modelos/${id}/muestra`, v),
   })
+}
+
+
+// --------------------------------------------------------------------------- //
+// Envíos de un informe por correo
+// --------------------------------------------------------------------------- //
+
+const clavesEnvios = (dashboardId: number) =>
+  ['dashboard', dashboardId, 'envios'] as const
+
+export function useEnvios(dashboardId: number, activo = true) {
+  return useQuery({
+    queryKey: clavesEnvios(dashboardId),
+    queryFn: () => api.get<EnvioInforme[]>(`/dashboards/${dashboardId}/envios`),
+    enabled: activo && dashboardId > 0,
+  })
+}
+
+/**
+ * Crear, cambiar, borrar y probar, en un solo gancho.
+ *
+ * Juntos porque las cuatro invalidan lo mismo y siempre se usan desde la misma
+ * pantalla: separarlos obligaría a repetir la invalidación cuatro veces, que es
+ * justo donde se olvida una y la lista se queda vieja.
+ */
+export function useAccionEnvio(dashboardId: number) {
+  const qc = useQueryClient()
+  const refrescar = () =>
+    qc.invalidateQueries({ queryKey: clavesEnvios(dashboardId) })
+  const base = `/dashboards/${dashboardId}/envios`
+  return {
+    crear: useMutation({
+      mutationFn: (e: EnvioEntrada) => api.post<EnvioInforme>(base, e),
+      onSuccess: refrescar,
+    }),
+    cambiar: useMutation({
+      mutationFn: ({ id, ...e }: EnvioEntrada & { id: number }) =>
+        api.put<EnvioInforme>(`${base}/${id}`, e),
+      onSuccess: refrescar,
+    }),
+    quitar: useMutation({
+      mutationFn: (id: number) => api.del<void>(`${base}/${id}`),
+      onSuccess: refrescar,
+    }),
+    probar: useMutation({
+      mutationFn: (id: number) =>
+        api.post<{ ms: number; asunto: string; destinatarios: string[] }>(
+          `${base}/${id}/probar`,
+          {},
+        ),
+      onSuccess: refrescar,
+    }),
+  }
 }

@@ -13,8 +13,8 @@ from app.db import CrearSesion
 from app.esquema import actualizar as actualizar_esquema
 from app.modelos_db import Rol, Usuario
 from app.rutas import (
-    auth, avisos, catalogo, conexiones, dashboards, flujos, gobierno, modelos,
-    proyectos, transformaciones,
+    auth, avisos, catalogo, conexiones, dashboards, envios, flujos, gobierno,
+    modelos, proyectos, transformaciones,
 )
 from app.seguridad import hashear
 
@@ -60,6 +60,7 @@ app.include_router(avisos.router)
 app.include_router(catalogo.router)
 app.include_router(conexiones.router)
 app.include_router(dashboards.router)
+app.include_router(envios.router)
 app.include_router(flujos.router)
 app.include_router(gobierno.router)
 app.include_router(modelos.router)

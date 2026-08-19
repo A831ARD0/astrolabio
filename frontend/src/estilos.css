@@ -879,6 +879,23 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   background: var(--borde);
 }
 
+/* La ficha de un envio por correo. Dos columnas donde los dos campos se leen juntos
+   —la hoja y lo que va en el correo— y una sola donde el texto de ayuda es lo que
+   hay que leer antes de elegir, como en el periodo. */
+.ficha-envio {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  background: var(--fondo);
+}
+.ficha-envio .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 700px) {
+  .ficha-envio .dos { grid-template-columns: 1fr; }
+}
+
 .fila-color { display: flex; align-items: center; gap: 6px; }
 .fila-color input[type='color'] {
   flex: 0 0 32px;

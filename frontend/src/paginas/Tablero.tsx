@@ -40,6 +40,7 @@ import type {
   Widget,
 } from '../api/tipos'
 import { Exportar } from '../tablero/Exportar'
+import { EnvioPorCorreo } from '../tablero/EnvioPorCorreo'
 import { Imprimir, PortadaInforme } from '../tablero/Imprimir'
 import {
   hojaDeLaUrl,
@@ -111,6 +112,7 @@ export function Tablero() {
   const [elegido, setElegido] = useState<string | null>(null)
   const [hojaId, setHojaId] = useState<string | null>(null)
   const [pestanaDer, setPestanaDer] = useState<'hoja' | 'tablero'>('hoja')
+  const [correoAbierto, setCorreoAbierto] = useState(false)
   const [caja, setCaja] = useState({ ancho: 1000, alto: 700 })
 
   const versiones = useVersiones(cargado.data?.modelo_id ?? 0)
@@ -463,6 +465,7 @@ export function Tablero() {
               hoja={activa.nombre || 'la hoja'}
               dashboardId={id}
               selecciones={selecciones}
+              alProgramar={puedeEditar ? () => setCorreoAbierto(true) : undefined}
             />
             {/* Solo a quien puede guardar. Un lector puede elegir un camino para
                 su sesión, pero decirle que tiene cambios pendientes que no puede
@@ -575,6 +578,15 @@ export function Tablero() {
 
         {/* Solo se ve en el papel. Va aqui dentro, y no fuera del area de la hoja,
             para que encabece el informe sin colarse en la pantalla. */}
+        {correoAbierto && (
+          <EnvioPorCorreo
+            dashboardId={id}
+            hojas={hojas.map((h) => ({ id: h.id, nombre: h.nombre || 'Hoja 1' }))}
+            quienSoy={yo.data?.email ?? 'quien lo programe'}
+            alCerrar={() => setCorreoAbierto(false)}
+          />
+        )}
+
         <PortadaInforme
           tablero={d.nombre}
           hoja={activa.nombre || 'Hoja 1'}

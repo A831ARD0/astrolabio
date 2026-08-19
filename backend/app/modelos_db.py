@@ -494,6 +494,60 @@ class Dashboard(Base):
     actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
 
 
+class EnvioInforme(Base):
+    """
+    Un informe que sale por correo solo, cada mes o cada semana.
+
+    Es lo que hace que el tablero llegue a quien no entra a mirarlo. Y por eso lo que
+    define no es «un PDF»: es **a quien, cuando, y de que periodo**.
+
+    Dos decisiones que valen la pena:
+
+    1. **El periodo se resuelve en cada envio, no se guarda.** Un informe mensual que
+       llevara los filtros escritos a mano mandaria el mismo mes para siempre, y nadie
+       lo notaria hasta el trimestre siguiente. Con `periodo = 'mes_anterior'`, el 2 de
+       septiembre manda agosto y el 2 de octubre manda septiembre, sin que nadie lo
+       toque. La otra opcion, `'guardado'`, usa los filtros guardados del tablero, que
+       es lo que se quiere cuando el informe no es de un mes.
+
+    2. **Se manda con la sesion de quien lo creo.** El renderizador entra a la
+       aplicacion con un token suyo, asi que las politicas de seguridad por fila del
+       correo son las de esa persona. Si quien lo creo solo ve su region, el correo solo
+       lleva su region — y eso hay que saberlo al elegir destinatarios.
+    """
+
+    __tablename__ = "envio_informe"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dashboard_id: Mapped[int] = mapped_column(ForeignKey("dashboard.id"))
+    #: Que hoja. `None` = la primera. Se guarda el NOMBRE y no el id: es lo que se
+    #: reconoce al mirar la lista de envios, y el id de una hoja no dice nada.
+    hoja: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Separados por coma o punto y coma, como se escriben.
+    destinatarios: Mapped[str] = mapped_column(Text)
+    #: Vacio = se arma con el nombre del tablero, la hoja y el periodo.
+    asunto: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: Que va en el correo: `pdf` adjunto, `imagen` en el cuerpo, o `ambos`.
+    cuerpo: Mapped[str] = mapped_column(String(10), default="pdf")
+    #: `guardado` | `mes_anterior`. Ver la nota de arriba.
+    periodo: Mapped[str] = mapped_column(String(20), default="mes_anterior")
+
+    cron: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    zona_horaria: Mapped[str] = mapped_column(String(64), default="America/Mexico_City")
+    activa: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    #: Como fue la ultima vez. A la vista en la pantalla: un envio que lleva tres meses
+    #: fallando y no lo dice en ningun sitio es un informe que nadie recibe y todos
+    #: creen que llega.
+    ultimo_envio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ultimo_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ultimo_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
+
+
 class Auditoria(Base):
     """Quien hizo que y cuando. Se escribe siempre, no es opcional."""
 

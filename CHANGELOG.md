@@ -13,6 +13,28 @@ versionado es [semántico](https://semver.org/lang/es/).
   de medidas donde se guardaron, que es como se agrupan en el modelo. Las de un hecho
   siguen diciendo de qué hecho salen: es la nota con la que se comprueba una cifra.
 
+- **El informe llega por correo solo: a quién, cuándo y de qué periodo.** En el menú
+  del botón PDF, «Enviar por correo cada mes…». Lo genera el servidor con el mismo
+  renderizador del botón y lo manda con el PDF adjunto, la hoja como imagen en el cuerpo,
+  o las dos. Por omisión, **el día 2 a las 7:00** —el mes cerrado, con un día de margen
+  para que la carga del 1 haya corrido— y **apagado**: encenderlo es decidir que empieza
+  a salir.
+
+  **El periodo se resuelve en cada envío, no se guarda.** Un informe mensual con los
+  filtros escritos a mano manda el mismo mes para siempre: la cifra es correcta, el
+  archivo se ve bien, y en octubre es de julio — nadie lo nota hasta el trimestre
+  siguiente. Con «el mes anterior», el 2 de septiembre manda agosto contra la columna que
+  el modelo marca como mes; y si el modelo no marca ninguna, **no se deja guardar** y se
+  dice ahí, con alguien delante, en vez de fallar el día 2 a las siete de la mañana.
+
+  El asunto lleva el periodo aunque se escriba uno propio. El informe se genera con la
+  **sesión de quien programó el envío**, así que las políticas de seguridad por fila del
+  correo son las de esa persona — eso está escrito en la pantalla, porque hay que saberlo
+  al elegir destinatarios. «Probar ahora» manda a los mismos destinatarios: uno que solo
+  se manda a quien pulsa no prueba la lista. Y lo que falla queda escrito en el envío y a
+  la vista en la lista, porque un envío que lleva tres meses fallando en silencio es un
+  informe que nadie recibe y todos creen que llega.
+
 - **El PDF se genera en el servidor: «Descargar PDF», sin diálogo de impresión.** El
   camino del navegador no llegaba. `window.print()` obliga a pasar por el diálogo
   —ninguna página web puede elegir el destino de impresión, y eso no se rodea— y además

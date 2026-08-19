@@ -136,11 +136,14 @@ export function Imprimir({
   hoja,
   dashboardId,
   selecciones,
+  alProgramar,
 }: {
   hoja: string
   dashboardId: number
   /** Lo que hay puesto AHORA, que es lo que el informe tiene que llevar. */
   selecciones: Record<string, unknown[]>
+  /** Abre el apartado del envío por correo. Sin esto, el menú no lo ofrece. */
+  alProgramar?: () => void
 }) {
   const [abierto, setAbierto] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -279,6 +282,21 @@ export function Imprimir({
             Una sola página con todo dentro, hecha en el servidor: sin diálogo y
             siempre igual, en Safari o en Chrome.
           </div>
+          {alProgramar && (
+            <>
+              <div className="separador" />
+              {/* Aquí y no en otro sitio: es donde uno está cuando piensa «esto
+                  debería llegarle a dirección cada mes». */}
+              <button
+                onClick={() => {
+                  setAbierto(false)
+                  alProgramar()
+                }}
+              >
+                Enviar por correo cada mes…
+              </button>
+            </>
+          )}
           <div className="separador" />
           <button onClick={unaHoja}>Imprimir en una hoja…</button>
           <button onClick={paginas}>Imprimir en páginas A4…</button>

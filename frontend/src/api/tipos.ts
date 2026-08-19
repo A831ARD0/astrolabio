@@ -387,3 +387,43 @@ export interface ResultadoDatos extends ResultadoPrueba {
   /** Solo la muestra: columnas marcadas como datos personales. */
   pii?: string[]
 }
+
+
+/** Un informe que sale por correo solo. Ver `backend/app/envios.py`. */
+export interface EnvioInforme {
+  id: number
+  dashboard_id: number
+  destinatarios: string
+  hoja: string | null
+  asunto: string | null
+  /** `pdf` adjunto, `imagen` en el cuerpo, o `ambos`. */
+  cuerpo: 'pdf' | 'imagen' | 'ambos'
+  /**
+   * `mes_anterior` se resuelve EN CADA ENVÍO: el 2 de septiembre manda agosto. Con
+   * `guardado` van los filtros que el tablero tenga guardados.
+   */
+  periodo: 'guardado' | 'mes_anterior'
+  cron: string | null
+  zona_horaria: string
+  activa: boolean
+  ultimo_envio: string | null
+  ultimo_error: string | null
+  ultimo_ms: number | null
+  /** Cuándo le toca. Sale del planificador: distingue «programado» de «guardado». */
+  proxima: string | null
+  /** Si el servidor puede mandar correo, y si no, qué falta. */
+  correo_listo: boolean
+  correo_dice: string
+}
+
+/** Lo que se manda al crear o cambiar un envío. */
+export type EnvioEntrada = Pick<
+  EnvioInforme,
+  | 'destinatarios'
+  | 'hoja'
+  | 'asunto'
+  | 'cuerpo'
+  | 'periodo'
+  | 'zona_horaria'
+  | 'activa'
+> & { cron: string }
