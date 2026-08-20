@@ -172,3 +172,28 @@ def test_sin_filtros_puestos_no_se_manda_nada(cliente, cab_admin, tablero, monke
                         lambda *a, **k: (visto.update(k), b"%PDF")[1])
     cliente.post(f"/api/dashboards/{tablero['id']}/informe", headers=cab_admin, json={})
     assert visto["selecciones"] is None
+
+
+def test_el_navegador_se_busca_fuera_del_arbol_de_la_instalacion(monkeypatch, tmp_path):
+    """
+    Chromium son 300 MB en 600 archivos, y la instalacion es un clon de git: puesto ahi
+    dentro, git propone subirlo al repositorio y un `git clean` se lo lleva. Va a
+    ProgramData, que es donde Windows guarda lo que es de la maquina.
+
+    La carpeta de dentro se sigue mirando —hay instalaciones que ya lo bajaron ahi— pero
+    DESPUES.
+    """
+    monkeypatch.setenv("ProgramData", str(tmp_path))
+    sitios = informe_pdf._candidatos()
+    assert sitios[0] == tmp_path / "Astrolabio" / "navegador"
+    assert len(sitios) == 2, "la de dentro sigue como reserva, pero de segunda"
+    assert "navegador" in str(sitios[1])
+
+
+def test_la_variable_puesta_a_mano_gana(monkeypatch, tmp_path):
+    """Quien la pone sabe donde esta el navegador; no se le discute."""
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path / "mio"))
+    monkeypatch.setenv("ProgramData", str(tmp_path))
+    (tmp_path / "Astrolabio" / "navegador").mkdir(parents=True)
+    informe_pdf._donde_esta_el_navegador()
+    assert informe_pdf.os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(tmp_path / "mio")

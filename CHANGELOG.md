@@ -65,8 +65,12 @@ versionado es [semántico](https://semver.org/lang/es/).
   Chromium BSD; uso comercial sin condiciones. El instalador de Windows lo descarga, y
   **avisa** si no pudo: mejor saberlo al instalar que el día 2 a las 7 de la mañana.
 
-  Chromium se instala **dentro de la carpeta de la instalación** (`navegador\`) y no en
-  la del usuario, que es donde Playwright lo pone por omisión. Es la trampa clásica en
+  Chromium se instala en **`%ProgramData%\Astrolabio\navegador`**: ni en la carpeta del
+  usuario —que es donde Playwright lo pone por omisión— ni dentro de la instalación. Lo
+  primero, porque el servicio corre con otra cuenta y no lo encontraría; lo segundo,
+  porque la instalación es un clon de git y 300 MB de Chromium ahí dentro son 600
+  archivos que `git status` propone subir al repositorio y que un `git clean` se
+  llevaría. Es la trampa clásica en
   Windows: el instalador lo descarga con una cuenta, el servicio corre con otra, y el
   servicio dice «Chromium no está instalado» con el navegador instalado. El instalador
   le pasa `PLAYWRIGHT_BROWSERS_PATH` al servicio, y la API además lo busca ahí sola por

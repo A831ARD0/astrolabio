@@ -127,6 +127,12 @@ Lo que conviene apuntar ahí es una entrada **local y en HTTP plano** del mismo 
 - Si el certificado caduca o el DNS se cae, los informes siguen saliendo.
 - Y el tráfico no sale de la máquina.
 
+**Chromium vive en `%ProgramData%\Astrolabio\navegador`**, no en la carpeta de la
+instalación ni en la del usuario. La instalación es un clon de git —300 MB ahí dentro
+son 600 archivos que git propone subir— y la del usuario no la ve el servicio, que corre
+con otra cuenta. El instalador le pasa `PLAYWRIGHT_BROWSERS_PATH` al servicio; la API
+además lo busca sola en ProgramData si la variable no viene puesta.
+
 A ese bloque local conviene ponerle `bind 127.0.0.1`: sin eso Caddy escucha en todas
 las interfaces y responde a cualquiera que mande la cabecera `Host: localhost`, lo que
 deja una entrada en HTTP plano a la interfaz desde la red.

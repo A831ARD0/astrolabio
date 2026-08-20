@@ -367,11 +367,19 @@ Bien 'Dependencias instaladas'
 # El navegador de los informes. Va aparte de pip a proposito: son unos 150 MB que se
 # descargan una vez, y si esta maquina no tiene salida a internet hay que saberlo
 # aqui y no el dia 2 a las 7 de la mañana, cuando no salga el correo.
-# En una carpeta de la instalacion, y no en la del usuario. Por omision Playwright
-# guarda los navegadores en %USERPROFILE%\AppData\Local\ms-playwright, asi que el
-# navegador acaba en la carpeta de QUIEN CORRIO EL INSTALADOR y el servicio —que corre
-# con otra cuenta— no lo encuentra: «Chromium no esta instalado» aunque este.
-$navegadores = Join-Path $Raiz 'navegador'
+# En ProgramData, y por dos motivos.
+#
+# Uno: NO en la carpeta del usuario. Por omision Playwright guarda los navegadores en
+# %USERPROFILE%\AppData\Local\ms-playwright, asi que acaban en la carpeta de QUIEN
+# CORRIO EL INSTALADOR y el servicio —que corre con otra cuenta— no los encuentra:
+# «Chromium no esta instalado» aunque este.
+#
+# Y dos: NO dentro de la instalacion. La instalacion es un clon de git, y 300 MB de
+# Chromium ahi dentro son 600 archivos que `git status` propone subir al repositorio —y
+# que un `git clean` se llevaria—. ProgramData es donde Windows guarda lo que es de la
+# maquina y no de una persona, que es exactamente lo que esto es.
+$navegadores = Join-Path $env:ProgramData 'Astrolabio\navegador'
+New-Item -ItemType Directory -Force -Path $navegadores | Out-Null
 $env:PLAYWRIGHT_BROWSERS_PATH = $navegadores
 Write-Host "   ... instalando Chromium para los informes en PDF (unos 150 MB) en $navegadores"
 $r = Correr $python @('-m', 'playwright', 'install', 'chromium')
@@ -380,7 +388,17 @@ if ($r.Codigo -ne 0) {
            'no funcionaran hasta que se instale. Se arregla con: ' +
            '.\backend\venv\Scripts\python.exe -m playwright install chromium')
 } else {
-    Bien 'Chromium instalado'
+    Bien "Chromium instalado en $navegadores"
+}
+
+# Las instalaciones que lo bajaron dentro del arbol —antes de mover esto a
+# ProgramData— se quedan con 300 MB que ya no usa nadie. Se dice; no se borra solo,
+# porque borrar 600 archivos sin preguntar no es cosa de un instalador.
+$viejo = Join-Path $Raiz 'navegador'
+if (Test-Path $viejo) {
+    Aviso ("Sobra la carpeta $viejo: es el Chromium de una instalacion anterior, ya no " +
+           'se usa y son unos 300 MB. Se puede borrar con:  Remove-Item -Recurse ' +
+           "-Force '$viejo'")
 }
 
 # --------------------------------------------------------------------------- #
@@ -696,7 +714,7 @@ Falta NSSM, que es lo que convierte la API en un servicio de Windows.
     InstalarServicio -Nssm $nssm -Nombre 'Astrolabio' -Programa $python `
         -Parametros '-m uvicorn app.main:app --host 127.0.0.1 --port 8000' `
         -Directorio $backend -Registros $registros `
-        -Entorno @("PLAYWRIGHT_BROWSERS_PATH=$(Join-Path $Raiz 'navegador')")
+        -Entorno @("PLAYWRIGHT_BROWSERS_PATH=$(Join-Path $env:ProgramData 'Astrolabio\navegador')")
 
     # Que diga que arranco no basta: un servicio que se cae al segundo tambien
     # "arranca". Se comprueba que responde de verdad.

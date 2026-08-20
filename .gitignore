@@ -18,6 +18,13 @@ backend/datos/
 *.sqlite
 *.sqlite3
 
+# --- el navegador de los informes ---
+# Chromium: unos 300 MB en 600 archivos. No es codigo ni dato del usuario, es una
+# herramienta que se descarga con `playwright install`. Desde el instalador va a
+# ProgramData, fuera del arbol; esta linea es para las instalaciones que ya lo
+# bajaron aqui dentro, para que `git status` no proponga subirlo.
+navegador/
+
 # --- Python ---
 venv/
 .venv/

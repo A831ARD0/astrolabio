@@ -31,27 +31,40 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 
 from app.config import RAIZ, config
 from app.seguridad import crear_token
 
 log = logging.getLogger("astrolabio.informe")
 
-#: Donde vive Chromium cuando lo instalo el instalador de Windows.
+#: Donde puede vivir Chromium, en orden de preferencia.
 #:
 #: Por omision Playwright lo guarda en la carpeta del usuario, y en el servidor eso es
-#: una trampa: el instalador lo descarga con una cuenta y el servicio corre con otra,
-#: asi que el navegador esta instalado y el servicio no lo encuentra. El instalador lo
-#: pone aqui y le da la variable al servicio; esto es el cinturon, para cuando alguien
-#: arranque la API a mano.
-NAVEGADORES = RAIZ.parent / "navegador"
+#: una trampa: el instalador lo descarga con una cuenta y el servicio corre con otra, asi
+#: que el navegador esta instalado y el servicio no lo encuentra. El instalador lo pone
+#: en ProgramData y le da la variable al servicio; esto es el cinturon, para cuando
+#: alguien arranque la API a mano.
+#:
+#: El segundo sitio es dentro de la instalacion, y esta aqui solo por las que ya lo
+#: bajaron ahi: la instalacion es un clon de git y 300 MB de Chromium dentro son 600
+#: archivos que git propone subir. Las nuevas van a ProgramData.
+def _candidatos() -> list[Path]:
+    sitios = []
+    datos_maquina = os.environ.get("ProgramData")
+    if datos_maquina:
+        sitios.append(Path(datos_maquina) / "Astrolabio" / "navegador")
+    sitios.append(RAIZ.parent / "navegador")
+    return sitios
 
 
 def _donde_esta_el_navegador() -> None:
     if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
         return
-    if NAVEGADORES.is_dir():
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(NAVEGADORES)
+    for sitio in _candidatos():
+        if sitio.is_dir():
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(sitio)
+            return
 
 
 class SinNavegador(RuntimeError):
