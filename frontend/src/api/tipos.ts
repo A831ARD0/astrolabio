@@ -109,6 +109,15 @@ export interface Metrica {
    * inactivas y la métrica dice cuál es la suya.
    */
   uniones?: string[]
+  /**
+   * El periodo no la toca: se calcula igual filtre el calendario lo que filtre.
+   *
+   * Para las cifras que son una FOTO y no un flujo. El inventario de hoy no
+   * pertenece a ningún mes: hay ciento veinte unidades en el patio, y son las
+   * mismas se mire el informe de julio o el de marzo. Es el
+   * `CALCULATE(..., ALL(Calendario))` de DAX.
+   */
+  ignora_periodo?: boolean
   [clave: string]: unknown
 }
 

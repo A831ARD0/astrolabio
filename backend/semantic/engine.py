@@ -144,6 +144,9 @@ class Metrica:
     formato: str = "numero"
     #: Relaciones que ESTA metrica usa en vez de la activa. Ver `Modelo.grafo_con`.
     uniones: tuple[str, ...] = ()
+    #: El periodo no la toca: es una foto, no un flujo. Ver `MetricaDef.ignora_periodo`
+    #: y `Compilador.compilar`.
+    ignora_periodo: bool = False
     #: La tabla de medidas donde el usuario la guardo, si la guardo en alguna. El
     #: compilador no la mira: es para agrupar en la interfaz. Una compuesta no sale
     #: de ningun hecho, asi que es lo unico que la ordena.
@@ -191,6 +194,7 @@ class Modelo:
             m["nombre"]: Metrica(m["nombre"], m["etiqueta"], m.get("entidad"),
                                  m["expresion"], m.get("formato", "numero"),
                                  tuple(m.get("uniones", []) or ()),
+                                 bool(m.get("ignora_periodo", False)),
                                  m.get("tabla_medidas"))
             for m in crudo.get("metricas", [])
         }
@@ -219,6 +223,30 @@ class Modelo:
         self._sql_compuesta: dict[str, Compuesta] = {}
         #: Grafos alternos, por juego de uniones pedidas. Ver `grafo_con`.
         self._grafos: dict[tuple[str, ...], dict] = {}
+        #: Las tablas de fechas, la primera vez que alguien pregunte. Ver `calendarios`.
+        self._calendarios: set[str] | None = None
+
+    def calendarios(self) -> set[str]:
+        """
+        Las tablas de fechas del modelo: las dimensiones con alguna columna que
+        identifique un periodo.
+
+        Son las que una metrica marcada con `ignora_periodo` deja de mirar. Se
+        reconocen por `grano_tiempo` y no por el nombre: es el mismo dato con el
+        que el motor ya sabe que columna es «el mes», asi que no hay una segunda
+        definicion de calendario que se pueda desincronizar de la primera.
+
+        Solo dimensiones. Un hecho con una fecha marcada —la factura tiene la
+        suya— no es un calendario, y tomarlo por uno haria que ignorar el periodo
+        se llevara por delante el desglose por hecho.
+        """
+        if self._calendarios is None:
+            self._calendarios = {
+                e.nombre for e in self.entidades.values()
+                if e.tipo == "dimension"
+                and any(c.grano_tiempo for c in e.campos.values())
+            }
+        return self._calendarios
 
     # ---------------- metricas ----------------
 
@@ -951,10 +979,16 @@ class Compilador:
                     continue
                 vistas.add(base.entidad)
                 ent = self.m.entidades[base.entidad]
+                # Una metrica a la que el periodo no la toca no se une al
+                # calendario, y sondearla como si lo hiciera fallaria por falta de
+                # ruta justo cuando se esta averiguando por que no hay filas.
+                dims_base = ([d for d in dims if d[0] not in self.m.calendarios()]
+                             if base.ignora_periodo else dims)
                 cuerpo, _ = self._cte_metrica(
-                    base.entidad, [base], dims, [], c.rutas_elegidas)
+                    base.entidad, [base], dims_base, [], c.rutas_elegidas)
                 con_pol, params_pol = self._cte_metrica(
-                    base.entidad, [base], dims, [], c.rutas_elegidas, predicados)
+                    base.entidad, [base], dims_base, [], c.rutas_elegidas,
+                    predicados)
                 sondas.append({
                     "entidad": base.entidad,
                     "metrica": base.etiqueta,
@@ -975,7 +1009,8 @@ class Compilador:
             return []
         grafo = self.m.grafo_con(met.uniones)
         fuera: list[str] = []
-        for destino in {e for e, _ in dims} - {met.entidad}:
+        salta = self.m.calendarios() if met.ignora_periodo else set()
+        for destino in {e for e, _ in dims} - {met.entidad} - salta:
             clave = f"{met.entidad}->{destino}"
             try:
                 ruta = (rutas_elegidas[clave].split(" → ") if clave in rutas_elegidas
@@ -1343,6 +1378,52 @@ class Compilador:
         dentro = list(dims) + ([mes] if mes not in dims else [])
         return mes, periodo, resto, dentro
 
+    def _cte_periodos(self, cols_cal: list[str], cols_dim: list[str],
+                      ctes: list[tuple[str, str, list[str], list[str]]],
+                      filtros_periodo: list[dict], filtros_cte: list[dict],
+                      params: list) -> str:
+        """
+        De donde salen los periodos en los que se reparte una cifra sin periodo.
+
+        Una foto —el inventario de hoy— no pertenece a ningun mes, asi que para
+        poder salir al lado de una comparacion mensual hay que decidir en que meses
+        aparece. Los ponen las metricas que SI viven en el tiempo: si la tabla habla
+        de mayo, junio y julio, la foto sale en esos tres. No se sacan del calendario
+        entero a proposito — el calendario suele llegar a diciembre, y entonces la
+        tabla ganaria cinco meses vacios que nadie pidio.
+
+        Solo cuando ninguna metrica vive en el tiempo se lee el calendario, porque
+        entonces no hay nadie mas que lo diga. Ahi si se le aplican los filtros de
+        fecha: son la unica cosa que acota esa lista.
+        """
+        cols = ", ".join(_cita(cd) for cd in cols_cal)
+        normales = [n for n, _, _, cols_n in ctes if cols_n == cols_dim]
+        if normales:
+            cuerpo = "\n  UNION\n  ".join(
+                f"SELECT DISTINCT {cols} FROM {n}" for n in normales)
+            return f"periodos AS (\n  {cuerpo}\n)"
+
+        entidades = {cd.split(".", 1)[0] for cd in cols_cal}
+        if len(entidades) != 1:
+            raise ErrorModelo(
+                f"Esta tabla desglosa por dos calendarios "
+                f"({', '.join(sorted(entidades))}) y ninguna de sus cifras "
+                f"depende del periodo, asi que no hay de donde sacar las "
+                f"combinaciones de fechas. Deja un calendario, o agrega una "
+                f"metrica que si se calcule por mes.")
+        ent = entidades.pop()
+        tabla = self.m.entidades[ent].tabla
+        mios = [f for f in list(filtros_periodo) + list(filtros_cte)
+                if str(f["campo"]).split(".", 1)[0] == ent]
+        donde, ps = self._predicados_sql(mios, "k.", por_columna=True)
+        params.extend(ps)
+        sel = ", ".join(f"k.{_cita(cd.split('.', 1)[1])} AS {_cita(cd)}"
+                        for cd in cols_cal)
+        cuerpo = f"SELECT DISTINCT {sel} FROM {_cita(tabla)} AS k"
+        if donde:
+            cuerpo += " WHERE " + " AND ".join(donde)
+        return f"periodos AS (\n  {cuerpo}\n)"
+
     def compilar(self, c: Consulta,
                  predicados: list | None = None) -> ConsultaCompilada:
         dims_vistas = [tuple(d.split(".")) for d in c.dimensiones]
@@ -1377,7 +1458,11 @@ class Compilador:
                     COL_PERIODO in i for i in comp.intermedias.values()):
                 con_ventana = True
                 for d in self.m.dependencias_base(met.nombre):
-                    if d not in bases_ventana:
+                    # Una foto no dice cual es el ultimo mes con datos: el
+                    # inventario de hoy tiene cifra en todos los meses del
+                    # calendario, y si contara, el mes que manda seria el ultimo
+                    # del calendario y las ventas de ese mes saldrian en blanco.
+                    if d not in bases_ventana and not self.m.metricas[d].ignora_periodo:
                         bases_ventana.append(d)
 
         mes_oculto, filtros_periodo, filtros_cte, dims = self._mes_del_contexto(
@@ -1387,23 +1472,42 @@ class Compilador:
         # hecho que se unen al calendario por fechas distintas —una por la primera
         # visita y otra por la asignacion— no pueden compartir CTE, porque el CTE
         # es justamente donde se decide por donde se une.
-        por_grupo: dict[tuple[str, tuple[str, ...]], list[Metrica]] = {}
+        # Y por si ignora el periodo: una foto y un flujo del mismo hecho no pueden
+        # compartir CTE, porque el CTE es donde se agrupa por meses y donde se
+        # aplica el filtro de fechas — que es justo de lo que la foto se libra.
+        cals = self.m.calendarios()
+        cols_dim = [f"{e}.{cc}" for e, cc in dims]
+        cols_cal = [f"{e}.{cc}" for e, cc in dims if e in cals]
+        # Si esta consulta no tiene tiempo por ningun lado, la bandera no cambia
+        # nada y no se parte ningun CTE: el SQL sale igual que siempre.
+        hay_periodo = bool(cols_cal) or any(
+            str(f["campo"]).split(".", 1)[0] in cals for f in filtros_cte)
+
+        por_grupo: dict[tuple[str, tuple[str, ...], bool], list[Metrica]] = {}
         vistas: set[str] = set()
         for nombre in pedidas:
             if nombre in vistas:
                 continue
             vistas.add(nombre)
             met = self.m.metricas[nombre]
-            por_grupo.setdefault((met.entidad, met.uniones), []).append(met)
+            libre = met.ignora_periodo and hay_periodo
+            por_grupo.setdefault((met.entidad, met.uniones, libre), []).append(met)
 
-        ctes: list[tuple[str, str, list[str]]] = []
+        # Cada CTE recuerda por que columnas de dimension quedo agrupado: las del
+        # calendario no estan en los que ignoran el periodo, y de eso depende tanto
+        # la espina como por donde se unen despues.
+        ctes: list[tuple[str, str, list[str], list[str]]] = []
         parametros: list = []
-        cols_dim = [f"{e}.{cc}" for e, cc in dims]
-        for i, ((ent, _u), mets) in enumerate(por_grupo.items()):
+        for i, ((ent, _u, libre), mets) in enumerate(por_grupo.items()):
+            dims_cte = [d for d in dims if not (libre and d[0] in cals)]
+            filtros_i = [f for f in filtros_cte
+                         if not (libre
+                                 and str(f["campo"]).split(".", 1)[0] in cals)]
             cuerpo, params = self._cte_metrica(
-                ent, mets, dims, filtros_cte, c.rutas_elegidas, predicados
+                ent, mets, dims_cte, filtros_i, c.rutas_elegidas, predicados
             )
-            ctes.append((f"m{i}", cuerpo, [m.nombre for m in mets]))
+            ctes.append((f"m{i}", cuerpo, [m.nombre for m in mets],
+                         [f"{e}.{cc}" for e, cc in dims_cte]))
             parametros.extend(params)          # el orden importa: CTE por CTE
 
         # Sin un solo CTE no hay ninguna tabla que leer, y el SQL saldria como
@@ -1420,7 +1524,7 @@ class Compilador:
                    if c.metricas else ". Elige al menos una metrica."))
 
         # Donde quedo cada metrica base, para poder nombrarla desde fuera.
-        donde = {m: n for n, _, ms in ctes for m in ms}
+        donde = {m: n for n, _, ms, _c in ctes for m in ms}
 
         # Lo que hay que calcular una capa antes: las ventanas de tiempo metidas
         # dentro de otras. Se juntan las de todas las metricas pedidas, porque la
@@ -1465,8 +1569,8 @@ class Compilador:
             # Sin desglose: los CTE tienen una sola fila cada uno. Una metrica con
             # capa intermedia no llega aqui: `_con_tiempo` ya exige una columna de
             # meses en el desglose, y sin desglose no hay ninguna.
-            froms = ", ".join(n for n, _, _ in ctes)
-            partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
+            froms = ", ".join(n for n, _, _, _ in ctes)
+            partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _, _ in ctes)
             return ConsultaCompilada(
                 f"WITH {partes}\nSELECT "
                 + ", ".join(columnas_pedidas(donde, "e.")) +
@@ -1476,17 +1580,45 @@ class Compilador:
         # Espina dorsal: todas las combinaciones de dimension que aparecen en
         # cualquiera de las metricas. Asi no se pierde un mes con objetivo pero
         # sin venta, ni al contrario.
-        cols = ", ".join(_cita(cd) for cd in cols_dim)
-        espina = "\n  UNION\n  ".join(f"SELECT {cols} FROM {n}" for n, _, _ in ctes)
+        # La foto se REPARTE en cada periodo del desglose: cien unidades en el patio
+        # son cien en la fila de julio y cien en la de junio, porque la cifra no es
+        # de ningun mes. Los periodos salen de las metricas que si viven en el
+        # tiempo, que son las que dicen de que meses habla esta consulta.
+        libres = [x for x in ctes if len(x[3]) != len(cols_dim)]
+        partes_espina: list[str] = []
+        params_periodos: list = []
+        for n, _, _ms, cols_n in ctes:
+            if not libres or cols_n == cols_dim:
+                partes_espina.append(
+                    f"SELECT " + ", ".join(f"{_cita(cd)}" for cd in cols_dim)
+                    + f" FROM {n}")
+                continue
+            propias = set(cols_n)
+            partes_espina.append(
+                "SELECT " + ", ".join(
+                    f"{'l' if cd in propias else 'c'}.{_cita(cd)} AS {_cita(cd)}"
+                    for cd in cols_dim)
+                + f" FROM {n} AS l CROSS JOIN periodos AS c")
+
+        espina = "\n  UNION\n  ".join(partes_espina)
 
         joins = []
-        for n, _, _ms in ctes:
+        for n, _, _ms, cols_n in ctes:
+            # Se une por las columnas que ESE CTE tiene. La foto no tiene mes, asi
+            # que se une solo por la sucursal y su cifra cae en los doce meses.
             cond = " AND ".join(
-                f"e.{_cita(cd)} IS NOT DISTINCT FROM {n}.{_cita(cd)}" for cd in cols_dim
-            )
+                f"e.{_cita(cd)} IS NOT DISTINCT FROM {n}.{_cita(cd)}"
+                for cd in cols_n
+            ) or "TRUE"
             joins.append(f"LEFT JOIN {n} ON {cond}")
 
-        partes = ",\n".join(f"{n} AS (\n  {b}\n)" for n, b, _ in ctes)
+        piezas = [f"{n} AS (\n  {b}\n)" for n, b, _, _ in ctes]
+        if libres and cols_cal:
+            piezas.append(self._cte_periodos(
+                cols_cal, cols_dim, ctes, filtros_periodo, filtros_cte,
+                params_periodos))
+            parametros = parametros + params_periodos
+        partes = ",\n".join(piezas)
 
         if intermedias:
             # Dos capas. Abajo se calcula el acumulado de cada mes; arriba se
@@ -1495,12 +1627,12 @@ class Compilador:
             # dependeria del mes de cada fila.
             sel_capa = (
                 [f"e.{_cita(cd)} AS {_cita(cd)}" for cd in cols_dim]
-                + [f"{n}.{_cita(m)} AS {_cita(m)}" for n, _, ms in ctes for m in ms]
+                + [f"{n}.{_cita(m)} AS {_cita(m)}" for n, _, ms, _c in ctes for m in ms]
                 + [f"{self._con_tiempo(duena, _calificar_metricas(sql_i, donde), deps, dims)}"
                    f" AS {_cita(k)}"
                    for k, (sql_i, deps, duena) in intermedias.items()]
             )
-            arriba = {**{m: "b" for _n, _b, ms in ctes for m in ms},
+            arriba = {**{m: "b" for _n, _b, ms, _c in ctes for m in ms},
                       **{k: "b" for k in intermedias}}
             cuerpo_final = (
                 f"WITH {partes},\nespina AS (\n  {espina}\n),\n"

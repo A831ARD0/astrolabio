@@ -836,6 +836,46 @@ MISMOMESANIOANTERIOR(ACUMANIO([Unidades]))
 Se calcula en dos pasos —primero el acumulado de cada mes, luego el salto de doce—
 y da exactamente el acumulado del mismo mes del año anterior.
 
+#### Cifras a las que el periodo no aplica: el inventario de hoy
+
+Hay cifras que no pertenecen a ningún mes. El inventario es la más común: hay ciento
+veinte unidades en el patio, y son las mismas se mire el informe de julio o el de
+marzo. Es una **foto**, no un flujo. La cartera de vencidos, los empleados activos y
+el saldo de una cuenta son lo mismo.
+
+Y eso choca con lo de arriba. En cuanto en la tabla entra una comparación mensual
+—un promedio de tres meses, por ejemplo, para sacar «meses de inventario»— la tabla
+necesita un mes de referencia. Al pedirle a la foto la cifra de ese mes **no tiene ni
+una fila**, porque la foto está fechada hoy y el mes que manda es el último cerrado.
+Resultado: toda la columna del inventario en blanco y el cociente en cero, sin un
+aviso. Y si la tabla de la foto no se relaciona con el calendario en absoluto, ni
+siquiera hay por dónde unirse y la consulta falla.
+
+Para eso, en el editor de la métrica hay una casilla:
+
+```
+☑ No la afecta el periodo — es una foto, no un flujo
+```
+
+Con ella puesta, a esa métrica **se le quitan las columnas y los filtros del
+calendario** y su cifra se repite en cada periodo del desglose: la misma en la fila
+de julio y en la de junio, porque no es de ningún mes. Es el
+`CALCULATE(..., ALL(Calendario))` de DAX.
+
+Tres cosas que conviene saber:
+
+- **Los periodos los ponen las demás cifras.** Si la tabla habla de mayo, junio y
+  julio, la foto sale en esos tres — no en los doce del calendario. El calendario
+  suele llegar a diciembre, y sacarlos de ahí regalaría cinco meses vacíos que nadie
+  pidió.
+- **Una foto no decide cuál es el último mes con datos.** Como tiene cifra en todos
+  los meses, si contara para elegir el mes que manda, mandaría siempre el último — y
+  las ventas de ese mes saldrían en blanco. La regla sigue siendo «el último mes con
+  la cifra que se compara».
+- **Sólo en una métrica de un hecho.** Una compuesta no lee ninguna tabla, así que no
+  hay filtro que quitarle: la casilla se pone en las métricas que combina. Guardar una
+  compuesta marcada no pasa la revisión, y el aviso lo dice.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

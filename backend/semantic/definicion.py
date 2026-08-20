@@ -178,6 +178,21 @@ class MetricaDef(_Base):
     tabla_medidas: str | None = None
     expresion: str = Field(min_length=1)
     formato: str = "numero"
+    #: El periodo no la toca: se calcula igual filtre el calendario lo que filtre.
+    #:
+    #: Es para las cifras que son una FOTO y no un flujo. El inventario de hoy no
+    #: pertenece a ningun mes: hay ciento veinte unidades en el patio, y esa cifra
+    #: es la misma se mire el informe de julio o el de marzo. Sin esto, pedirla
+    #: junto a una comparacion mensual la deja vacia —el mes que manda no tiene
+    #: filas de la foto— y con ella el cociente «meses de inventario» sale cero.
+    #:
+    #: Lo que hace: para esta metrica se quitan del calculo las columnas y los
+    #: filtros de las tablas de fechas, y su cifra se repite en cada periodo del
+    #: desglose. Es el `CALCULATE(..., ALL(Calendario))` de DAX.
+    #:
+    #: Solo en una metrica de un hecho: una compuesta no lee ninguna tabla, asi que
+    #: no hay nada de donde quitar el filtro. Se pone en las que combina.
+    ignora_periodo: bool = False
     #: Relaciones que esta metrica usa en vez de la activa, como
     #: `"entidad.campo -> entidad.campo"`.
     #:
@@ -309,6 +324,11 @@ class Definicion(_Base):
                         f"'{m.entidad}' y dice unirse por '{u}', que no toca esa "
                         f"entidad. Elegirla no cambiaria nada y la cifra saldria "
                         f"por la relacion activa sin avisar.")
+            if m.entidad is None and getattr(m, "ignora_periodo", False):
+                errores.append(
+                    f"La metrica compuesta '{m.nombre}' no puede ignorar el "
+                    f"periodo: no lee ninguna tabla, asi que no hay filtro que "
+                    f"quitarle. Marca asi las metricas que combina.")
             if m.entidad is None and m.uniones:
                 errores.append(
                     f"La metrica compuesta '{m.nombre}' no puede elegir "

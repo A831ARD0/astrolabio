@@ -106,6 +106,13 @@ export function PanelMetrica({
   const oscuro = window.matchMedia('(prefers-color-scheme: dark)').matches
   const hechos = definicion.entidades.filter((e) => e.tipo === 'hecho')
   const compuesta = borrador.entidad === null
+  // Las tablas de fechas del modelo: las dimensiones con alguna columna marcada
+  // con grano de tiempo. Es lo mismo que mira el motor, y de ellas es de las que
+  // se libra una métrica que ignora el periodo. Sin ninguna, la casilla no
+  // significaría nada y no se pinta.
+  const calendarios = definicion.entidades
+    .filter((e) => e.tipo === 'dimension' && e.campos.some((c) => c.grano_tiempo))
+    .map((e) => e.nombre)
   const entidad = definicion.entidades.find((e) => e.nombre === borrador.entidad)
 
   const dimensiones = definicion.entidades.flatMap((e) =>
@@ -378,6 +385,10 @@ export function PanelMetrica({
                       // pasa la revisión. Se limpian aquí en vez de dejar que
                       // falle al aceptar.
                       uniones: [],
+                      // Y una compuesta no puede ignorar el periodo: no lee
+                      // ninguna tabla. Se limpia aquí por lo mismo.
+                      ignora_periodo:
+                        e.target.value === COMPUESTA ? false : borrador.ignora_periodo,
                     })
                   }
                 >
@@ -472,6 +483,30 @@ export function PanelMetrica({
                   ))}
                 </div>
               </div>
+            )}
+
+            {/*
+              Sólo con calendario y sólo en una métrica de un hecho: una compuesta
+              no lee ninguna tabla, así que no hay filtro que quitarle —y guardarla
+              marcada ni pasa la revisión—.
+            */}
+            {!compuesta && calendarios.length > 0 && (
+              <label className="chico" style={{ display: 'block', marginTop: 2 }}>
+                <input
+                  type="checkbox"
+                  checked={borrador.ignora_periodo === true}
+                  onChange={(e) =>
+                    setBorrador({ ...borrador, ignora_periodo: e.target.checked })
+                  }
+                />{' '}
+                No la afecta el periodo
+                <span className="tenue">
+                  {' '}
+                  — es una foto, no un flujo: se calcula igual filtre{' '}
+                  {calendarios.join(' o ')} lo que filtre, y su cifra se repite en
+                  cada mes del desglose
+                </span>
+              </label>
             )}
 
             {/*
