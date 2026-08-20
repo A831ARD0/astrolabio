@@ -113,6 +113,12 @@ export function PanelMetrica({
   const calendarios = definicion.entidades
     .filter((e) => e.tipo === 'dimension' && e.campos.some((c) => c.grano_tiempo))
     .map((e) => e.nombre)
+  // Si el hecho entero es una foto, esta métrica lo es y no hay nada que decidir
+  // aquí. Se enseña puesta y bloqueada, y no oculta: una casilla vacía en una
+  // métrica que sí ignora el periodo diría lo contrario de lo que pasa.
+  const porElHecho =
+    definicion.entidades.find((e) => e.nombre === borrador.entidad)
+      ?.ignora_periodo === true
   const entidad = definicion.entidades.find((e) => e.nombre === borrador.entidad)
 
   const dimensiones = definicion.entidades.flatMap((e) =>
@@ -494,17 +500,28 @@ export function PanelMetrica({
               <label className="chico" style={{ display: 'block', marginTop: 2 }}>
                 <input
                   type="checkbox"
-                  checked={borrador.ignora_periodo === true}
+                  checked={porElHecho || borrador.ignora_periodo === true}
+                  disabled={porElHecho}
                   onChange={(e) =>
                     setBorrador({ ...borrador, ignora_periodo: e.target.checked })
                   }
                 />{' '}
                 No la afecta el periodo
                 <span className="tenue">
-                  {' '}
-                  — es una foto, no un flujo: se calcula igual filtre{' '}
-                  {calendarios.join(' o ')} lo que filtre, y su cifra se repite en
-                  cada mes del desglose
+                  {porElHecho ? (
+                    <>
+                      {' '}
+                      — lo hereda de <span className="mono">{borrador.entidad}</span>,
+                      que está marcada como foto. Se cambia ahí, en la tabla
+                    </>
+                  ) : (
+                    <>
+                      {' '}
+                      — es una foto, no un flujo: se calcula igual filtre{' '}
+                      {calendarios.join(' o ')} lo que filtre, y su cifra se repite
+                      en cada mes del desglose
+                    </>
+                  )}
                 </span>
               </label>
             )}

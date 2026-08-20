@@ -54,6 +54,12 @@ export interface Entidad {
   campos: Campo[]
   clave_primaria?: string | null
   grano?: string[]
+  /**
+   * Toda la tabla es una FOTO: el periodo no toca ninguna de sus cifras, y lo
+   * heredan todas sus métricas. Un inventario es lo que hay en el patio hoy, no
+   * un flujo de meses. Sólo en un hecho.
+   */
+  ignora_periodo?: boolean
   [clave: string]: unknown
 }
 

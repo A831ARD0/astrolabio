@@ -93,6 +93,30 @@ class EntidadDef(_Base):
     campos: list[CampoDef] = Field(min_length=1)
     clave_primaria: str | None = None
     grano: list[str] = []
+    #: Toda la tabla es una FOTO: el periodo no toca ninguna de sus cifras.
+    #:
+    #: Un hecho de inventario no es un flujo de meses: es lo que hay en el patio
+    #: HOY. No tiene una fila por mes y no la va a tener, asi que ninguna de sus
+    #: metricas —el total, los tramos de antiguedad, los dias de inventario—
+    #: pertenece a un mes.
+    #:
+    #: Existe ademas de `MetricaDef.ignora_periodo` porque marcarlo metrica por
+    #: metrica es una trampa: una tabla de inventario trae ocho, y la que se olvide
+    #: se queda en blanco sin decir nada. Puesto aqui lo heredan todas, incluidas
+    #: las que se agreguen despues.
+    #:
+    #: Solo en un hecho. Una dimension no aporta cifras, y el calendario menos que
+    #: ninguna: decirle que el periodo no le aplica no querria decir nada.
+    ignora_periodo: bool = False
+
+    @model_validator(mode="after")
+    def solo_un_hecho_ignora_el_periodo(self) -> "EntidadDef":
+        if self.ignora_periodo and self.tipo != "hecho":
+            raise ValueError(
+                f"'{self.nombre}' es una dimension y no puede ignorar el "
+                f"periodo: de ahi no sale ninguna cifra. La bandera va en el "
+                f"hecho de la foto, o en sus metricas")
+        return self
 
     @field_validator("campos")
     @classmethod

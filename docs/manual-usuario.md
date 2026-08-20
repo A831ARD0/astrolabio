@@ -851,11 +851,23 @@ Resultado: toda la columna del inventario en blanco y el cociente en cero, sin u
 aviso. Y si la tabla de la foto no se relaciona con el calendario en absoluto, ni
 siquiera hay por dónde unirse y la consulta falla.
 
-Para eso, en el editor de la métrica hay una casilla:
+Para eso hay una casilla, y **normalmente va en la tabla**, en el inspector de la
+entidad:
 
 ```
-☑ No la afecta el periodo — es una foto, no un flujo
+☑ Es una foto: el periodo no la afecta
 ```
+
+En la tabla y no en cada métrica porque una de inventario trae ocho —el total, los
+tramos de antigüedad, el monto, los días— y todas son la misma foto. Marcarlas una
+por una es la forma de olvidar una y dejar esa columna en blanco sin que nada lo
+diga. Puesta en el hecho **la heredan todas**, incluidas las que agregues después, y
+en el editor de cada métrica la casilla sale marcada y bloqueada, diciendo de dónde
+la hereda.
+
+Si el hecho es mixto —cifras de foto y de flujo en la misma tabla— la misma casilla
+está en el editor de la métrica y se marca ahí, una a una. Las dos suman: basta con
+que lo diga una de las dos.
 
 Con ella puesta, a esa métrica **se le quitan las columnas y los filtros del
 calendario** y su cifra se repite en cada periodo del desglose: la misma en la fila
@@ -872,9 +884,10 @@ Tres cosas que conviene saber:
   los meses, si contara para elegir el mes que manda, mandaría siempre el último — y
   las ventas de ese mes saldrían en blanco. La regla sigue siendo «el último mes con
   la cifra que se compara».
-- **Sólo en una métrica de un hecho.** Una compuesta no lee ninguna tabla, así que no
-  hay filtro que quitarle: la casilla se pone en las métricas que combina. Guardar una
-  compuesta marcada no pasa la revisión, y el aviso lo dice.
+- **Sólo en un hecho.** Una compuesta no lee ninguna tabla, así que no hay filtro que
+  quitarle: la casilla se pone en las métricas que combina, o en la tabla de las que
+  combina —«meses de inventario» sale bien sin marcarla ella—. Una dimensión tampoco
+  puede: de ahí no sale ninguna cifra. Las dos cosas se dicen al guardar.
 
 ### Ordenar las métricas: tablas de medidas
 

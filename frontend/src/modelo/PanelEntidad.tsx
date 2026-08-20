@@ -42,6 +42,12 @@ export function PanelEntidad({
   const cambiar = (cambios: Partial<Entidad>) =>
     despachar({ t: 'cambiar_entidad', nombre: entidad.nombre, cambios })
 
+  // Sin una tabla de fechas en el modelo, «el periodo no la afecta» no significa
+  // nada y la casilla ocuparía el sitio de algo que sí.
+  const hayCalendario = definicion.entidades.some(
+    (e) => e.tipo === 'dimension' && e.campos.some((c) => c.grano_tiempo),
+  )
+
   // Las columnas que tiene el origen AHORA MISMO, para poder compararlas con la
   // copia que guarda la entidad. Se pide siempre: es una consulta cacheada por
   // TanStack y saber que hay desfase importa antes de que alguien lo pregunte.
@@ -164,6 +170,30 @@ export function PanelEntidad({
           </select>
         </div>
       </div>
+
+      {/*
+        Va en la tabla y no en cada métrica porque una tabla de inventario trae
+        ocho —el total, los tramos de antigüedad, los días— y todas son la misma
+        foto: marcarlas una por una es la forma de olvidar una y dejar esa columna
+        en blanco sin que nada lo diga. Sólo en un hecho: de una dimensión no sale
+        ninguna cifra.
+      */}
+      {entidad.tipo === 'hecho' && hayCalendario && (
+        <label className="chico" style={{ display: 'block', marginTop: 8 }}>
+          <input
+            type="checkbox"
+            checked={entidad.ignora_periodo === true}
+            onChange={(e) => cambiar({ ignora_periodo: e.target.checked })}
+          />{' '}
+          Es una foto: el periodo no la afecta
+          <span className="tenue">
+            {' '}
+            — lo que hay hoy, no un flujo de meses. Todas sus métricas se calculan
+            igual filtre el calendario lo que filtre, y su cifra se repite en cada
+            mes del desglose
+          </span>
+        </label>
+      )}
 
       {entidad.tipo === 'hecho' && (
         <div className="campo">

@@ -243,3 +243,132 @@ def test_una_foto_sin_relacion_al_calendario_tambien_sale(cliente, cab_editor,
     assert guardar(cliente, cab_editor, modelo, d).status_code == 201
     r = consultar(cliente, cab_editor, modelo, ["foto_objetivo"], [SUC, MES])
     assert r.status_code == 422, r.text
+
+
+# --------------------------------------------------------------------------- #
+# La bandera en la TABLA, que es donde suele ir: un inventario trae ocho metricas
+# —el total, los tramos de antiguedad, los dias— y todas son la misma foto. Que
+# haya que marcarlas una por una es la forma de que se olvide una y esa columna se
+# quede en blanco sin decir nada.
+# --------------------------------------------------------------------------- #
+
+#: Tres metricas del mismo hecho, NINGUNA marcada. Lo dice la tabla.
+VARIAS = [
+    {"nombre": "foto_a", "etiqueta": "Foto A", "formato": "entero",
+     "entidad": "fact_presupuesto", "expresion": "SUM(objetivo_unidades)"},
+    {"nombre": "foto_b", "etiqueta": "Foto B", "formato": "moneda",
+     "entidad": "fact_presupuesto", "expresion": "SUM(objetivo_monto)"},
+    {"nombre": "foto_c", "etiqueta": "Foto C", "formato": "entero",
+     "entidad": "fact_presupuesto",
+     "expresion": "CALCULAR(SUMA(objetivo_unidades), objetivo_unidades > 0)"},
+    {"nombre": "prom3", "etiqueta": "Promedio de 3 meses", "formato": "numero",
+     "expresion": "PROMEDIOMESES([unidades_vendidas], 3)"},
+]
+
+
+def con_tabla_foto(cliente, cab, mid: int) -> dict:
+    d = definicion(cliente, cab, mid)
+    d["metricas"] += [dict(m) for m in VARIAS]
+    for e in d["entidades"]:
+        if e["nombre"] == "fact_presupuesto":
+            e["ignora_periodo"] = True
+    return d
+
+
+def test_marcar_la_tabla_las_alcanza_a_todas(cliente, cab_editor, modelo):
+    """
+    Las tres salen, y ninguna lleva la bandera puesta: la lleva su hecho. Es el
+    caso que motivo esto — se marco una metrica de ocho y las otras siete se
+    quedaron en blanco.
+    """
+    assert guardar(cliente, cab_editor, modelo,
+                   con_tabla_foto(cliente, cab_editor, modelo)).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["foto_a", "foto_b", "foto_c"],
+                  [SUC])
+    total = {f[SUC]: (f["foto_a"], f["foto_b"], f["foto_c"])
+             for f in r.json()["filas"]}
+
+    # Con la comparacion mensual al lado, que es lo que fuerza un mes de referencia.
+    r = consultar(cliente, cab_editor, modelo,
+                  ["foto_a", "foto_b", "foto_c", "prom3"], [SUC])
+    assert r.status_code == 200, r.text
+    filas = r.json()["filas"]
+    assert filas
+    for f in filas:
+        assert (f["foto_a"], f["foto_b"], f["foto_c"]) == total[f[SUC]], f
+        assert f["foto_a"] is not None and f["foto_c"] is not None, f
+
+
+def test_la_metrica_puede_marcarse_aunque_la_tabla_no(cliente, cab_editor, modelo):
+    """
+    Las dos banderas suman, no se estorban: un hecho mixto marca la metrica suelta.
+    Es la de antes, que sigue valiendo.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    d["metricas"] += [dict(m) for m in VARIAS]
+    for m in d["metricas"]:
+        if m["nombre"] == "foto_a":
+            m["ignora_periodo"] = True
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo, ["foto_a", "foto_b", "prom3"],
+                  [SUC, MES])
+    assert r.status_code == 200, r.text
+    filas = r.json()["filas"]
+    por_suc_a: dict[str, set] = {}
+    por_suc_b: dict[str, set] = {}
+    for f in filas:
+        por_suc_a.setdefault(f[SUC], set()).add(f["foto_a"])
+        por_suc_b.setdefault(f[SUC], set()).add(f["foto_b"])
+    assert all(len(v) == 1 for v in por_suc_a.values()), "foto_a es la foto"
+    assert any(len(v) > 1 for v in por_suc_b.values()), "foto_b no lo es"
+
+
+def test_una_dimension_no_puede_ignorar_el_periodo(cliente, cab_editor, modelo):
+    """
+    De una dimension no sale ninguna cifra, asi que decirle que el periodo no le
+    aplica no quiere decir nada. Se dice al guardar, con el sitio donde si va.
+    """
+    d = definicion(cliente, cab_editor, modelo)
+    for e in d["entidades"]:
+        if e["nombre"] == "dim_calendario":
+            e["ignora_periodo"] = True
+    r = guardar(cliente, cab_editor, modelo, d)
+    assert r.status_code == 422, r.text
+    assert "no puede ignorar el periodo" in r.text
+
+
+def test_una_compuesta_hereda_por_sus_partes(cliente, cab_editor, modelo):
+    """
+    «Meses de inventario» es la foto dividida entre un promedio de tres meses. La
+    compuesta no lleva bandera —no puede— y aun asi sale con la cifra entera de la
+    foto, porque la suya la lleva por su tabla. Es lo que hace que marcar el hecho
+    baste de verdad.
+    """
+    d = con_tabla_foto(cliente, cab_editor, modelo)
+    d["metricas"].append(
+        {"nombre": "meses_foto", "etiqueta": "Meses de foto", "formato": "numero",
+         "expresion": "DIVIDIR([foto_a], [prom3], 0)"})
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    # La verdad, aparte: la foto entera y el promedio, cada uno pedido por su lado.
+    r = consultar(cliente, cab_editor, modelo, ["foto_a"], [SUC])
+    foto = {f[SUC]: f["foto_a"] for f in r.json()["filas"]}
+    r = consultar(cliente, cab_editor, modelo, ["prom3"], [SUC])
+    prom = {f[SUC]: f["prom3"] for f in r.json()["filas"]}
+
+    r = consultar(cliente, cab_editor, modelo, ["meses_foto"], [SUC])
+    assert r.status_code == 200, r.text
+    filas = r.json()["filas"]
+    assert filas
+    # Una sucursal con foto y sin ventas tambien sale —la foto existe para ella— y
+    # entonces no hay promedio contra el que dividir. Se comprueban las que si.
+    comparadas = 0
+    for f in filas:
+        suc = f[SUC]
+        if not prom.get(suc):
+            continue
+        assert f["meses_foto"] == pytest.approx(foto[suc] / prom[suc]), f
+        comparadas += 1
+    assert comparadas > 5, comparadas

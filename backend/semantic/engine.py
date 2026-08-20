@@ -108,6 +108,9 @@ class Entidad:
     campos: dict[str, Campo]
     clave_primaria: str | None = None
     grano: list[str] = dc_field(default_factory=list)
+    #: Toda la tabla es una foto y el periodo no toca ninguna de sus cifras. Lo
+    #: heredan todas sus metricas. Ver `EntidadDef.ignora_periodo`.
+    ignora_periodo: bool = False
 
 
 @dataclass
@@ -179,6 +182,7 @@ class Modelo:
                 nombre=e["nombre"], tipo=e["tipo"], tabla=e["origen"]["tabla"],
                 campos=campos, clave_primaria=e.get("clave_primaria"),
                 grano=e.get("grano", []),
+                ignora_periodo=bool(e.get("ignora_periodo", False)),
             )
 
         # .get y no [...]: un modelo recien creado en la interfaz tiene entidades
@@ -225,6 +229,21 @@ class Modelo:
         self._grafos: dict[tuple[str, ...], dict] = {}
         #: Las tablas de fechas, la primera vez que alguien pregunte. Ver `calendarios`.
         self._calendarios: set[str] | None = None
+
+    def ignora_periodo(self, metrica: Metrica | str) -> bool:
+        """
+        Si a esta metrica el periodo no la toca: porque ella lo dice, o porque lo
+        dice su hecho.
+
+        Las dos y no una: la tabla entera es lo normal —un inventario es una foto
+        completa— pero un hecho mixto existe, y ahi la bandera va en la metrica. Se
+        resuelve en un solo sitio para que el compilador, las sondas de vacio y el
+        diagnostico no puedan contestar cosas distintas a la misma pregunta.
+        """
+        met = self.metricas[metrica] if isinstance(metrica, str) else metrica
+        if met.entidad is None:
+            return False                     # una compuesta no lee ninguna tabla
+        return met.ignora_periodo or self.entidades[met.entidad].ignora_periodo
 
     def calendarios(self) -> set[str]:
         """
@@ -983,7 +1002,7 @@ class Compilador:
                 # calendario, y sondearla como si lo hiciera fallaria por falta de
                 # ruta justo cuando se esta averiguando por que no hay filas.
                 dims_base = ([d for d in dims if d[0] not in self.m.calendarios()]
-                             if base.ignora_periodo else dims)
+                             if self.m.ignora_periodo(base) else dims)
                 cuerpo, _ = self._cte_metrica(
                     base.entidad, [base], dims_base, [], c.rutas_elegidas)
                 con_pol, params_pol = self._cte_metrica(
@@ -1009,7 +1028,7 @@ class Compilador:
             return []
         grafo = self.m.grafo_con(met.uniones)
         fuera: list[str] = []
-        salta = self.m.calendarios() if met.ignora_periodo else set()
+        salta = self.m.calendarios() if self.m.ignora_periodo(met) else set()
         for destino in {e for e, _ in dims} - {met.entidad} - salta:
             clave = f"{met.entidad}->{destino}"
             try:
@@ -1462,7 +1481,7 @@ class Compilador:
                     # inventario de hoy tiene cifra en todos los meses del
                     # calendario, y si contara, el mes que manda seria el ultimo
                     # del calendario y las ventas de ese mes saldrian en blanco.
-                    if d not in bases_ventana and not self.m.metricas[d].ignora_periodo:
+                    if d not in bases_ventana and not self.m.ignora_periodo(d):
                         bases_ventana.append(d)
 
         mes_oculto, filtros_periodo, filtros_cte, dims = self._mes_del_contexto(
@@ -1490,7 +1509,7 @@ class Compilador:
                 continue
             vistas.add(nombre)
             met = self.m.metricas[nombre]
-            libre = met.ignora_periodo and hay_periodo
+            libre = self.m.ignora_periodo(met) and hay_periodo
             por_grupo.setdefault((met.entidad, met.uniones, libre), []).append(met)
 
         # Cada CTE recuerda por que columnas de dimension quedo agrupado: las del
