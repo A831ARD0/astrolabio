@@ -396,7 +396,10 @@ if ($r.Codigo -ne 0) {
 # porque borrar 600 archivos sin preguntar no es cosa de un instalador.
 $viejo = Join-Path $Raiz 'navegador'
 if (Test-Path $viejo) {
-    Aviso ("Sobra la carpeta $viejo: es el Chromium de una instalacion anterior, ya no " +
+    # `${viejo}` y no `$viejo`: seguido de dos puntos, PowerShell lee el nombre de la
+    # variable como una unidad de disco —`$viejo:` seria como `C:`— y el guion entero no
+    # se puede ni leer. Las llaves delimitan donde acaba el nombre.
+    Aviso ("Sobra la carpeta ${viejo}: es el Chromium de una instalacion anterior, ya no " +
            'se usa y son unos 300 MB. Se puede borrar con:  Remove-Item -Recurse ' +
            "-Force '$viejo'")
 }

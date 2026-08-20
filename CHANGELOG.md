@@ -365,6 +365,16 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **El instalador de Windows se comprueba en las pruebas.** No es código que corra en
+  una máquina de desarrollo —es PowerShell, y el desarrollo es en macOS— así que un
+  error de sintaxis no lo veía nadie hasta que alguien lo ejecutaba en el servidor. Y en
+  PowerShell un error de sintaxis no falla en su línea: el guion entero no se puede
+  leer, así que no corre nada. Pasó tres veces seguidas, y las tres se descubrieron con
+  el servicio a medio configurar. Ahora se analiza con el propio analizador de
+  PowerShell —`pwsh` si está instalado, y si no la prueba se salta y lo dice— y además
+  se busca a mano el error que más veces ha pasado: una variable pegada a dos puntos
+  (`"$carpeta: sobra"`), que PowerShell lee como una unidad de disco.
+
 - **El widget de filtro ya respeta la etiqueta que le pusiste al campo.** El inspector
   la ofrece —«Solo cambia el nombre en este widget»— y solo la usaban las tablas: el
   panel de filtros seguía enseñando `NOMBRE_MES` por más veces que se escribiera
