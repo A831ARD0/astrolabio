@@ -69,3 +69,7 @@ CLAVES-GENERADAS.txt
 
 # NSSM bajado por instalar-windows.ps1 -DescargarNSSM
 herramientas/
+
+# Registros de los servicios de Windows. Los escribe NSSM al lado de la instalacion,
+# que es lo normal en un servicio, y crecen solos: no son del producto.
+registros/

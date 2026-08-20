@@ -365,6 +365,15 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **Lo que el servidor escribe ya no aparece como «cambios sin subir».** La instalación
+  del servidor es un clon de git, así que todo lo que la aplicación y el instalador
+  escriben ahí dentro sale en la lista de cambios: los registros de los servicios eran
+  los que faltaban. Y en vez de irlos añadiendo de a uno cada vez que alguien los ve, hay
+  una prueba con la lista de **lo que el servidor escribe** que le pregunta a git si los
+  ignora — el primero de la lista es `CLAVES-GENERADAS.txt`, que lleva la clave con la
+  que se firman los tokens y la que cifra las credenciales de las conexiones, y ese es el
+  que de verdad no puede subirse nunca.
+
 - **El instalador de Windows se comprueba en las pruebas.** No es código que corra en
   una máquina de desarrollo —es PowerShell, y el desarrollo es en macOS— así que un
   error de sintaxis no lo veía nadie hasta que alguien lo ejecutaba en el servidor. Y en
