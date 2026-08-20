@@ -743,6 +743,7 @@ export function Tablero() {
               widget={widget}
               modeloId={d.modelo_id}
               hojas={hojas}
+              lienzo={lienzo}
               alCambiar={(cambios) => cambiarWidget(widget.id, cambios)}
               alQuitar={() => {
                 setBorrador({

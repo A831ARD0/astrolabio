@@ -33,12 +33,19 @@ export function Th({
   titulo?: string
 }) {
   const activa = orden.clave === clave
+  // La alineación del `th` no llega al rótulo por su cuenta: el rótulo vive dentro de
+  // un botón que se reparte el ancho con la flecha de ordenar, y un `flex` no atiende a
+  // `text-align`. Se traduce a `justify-content`, que es lo que ese botón sí entiende.
+  const hacia = style?.textAlign
+  const reparto =
+    hacia === 'center' ? 'center' : hacia === 'right' ? 'flex-end' : undefined
   return (
     <th className={className} style={style} aria-sort={
       activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none'
     }>
       <button
         type="button"
+        style={reparto ? { justifyContent: reparto } : undefined}
         className={`ordenar${activa ? ' activa' : ''}`}
         title={titulo ?? 'Ordenar por esta columna'}
         onClick={() => orden.alternar(clave)}

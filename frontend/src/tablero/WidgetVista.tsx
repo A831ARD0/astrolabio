@@ -21,6 +21,12 @@ import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
 import { claveCol, cruzar } from './pivote'
+import {
+  type EstiloColumna,
+  estiloCabecera,
+  estiloCelda,
+  estiloTotal,
+} from './estiloColumna'
 import { type Semaforo, evaluar, flecha, porque } from './semaforo'
 import {
   type Formato,
@@ -221,6 +227,11 @@ function WidgetDatos({
         {aviso}
         <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
                metricas={widget.metricas} semDe={semDe}
+               // Aparte del semáforo: uno dice algo del dato y cambia por fila, esto
+               // es del informe y es igual en todas. Ver `estiloColumna.ts`.
+               estilos={
+                 (widget.estilos as Record<string, EstiloColumna> | undefined) ?? {}
+               }
                totalesDe={(m) =>
                  (propias('totales_de')[m] as Total | undefined) ??
                  totalPorOmision(formatoDe(m))} />
@@ -443,6 +454,9 @@ function TablaDinamica({
 
   const hayTotales = metricas.some((m) => totalesDe(m) !== 'ninguno')
   const varias = metricas.length > 1
+  // Aqui el formato va POR METRICA y no por columna: las columnas de la matriz las
+  // pone el dato —un mes cada una— y no se pueden formatear de a una.
+  const estilos = (widget.estilos as Record<string, EstiloColumna> | undefined) ?? {}
 
   return (
     <div className="tabla-envoltura pivote" style={{ height: '100%', border: 0 }}>
@@ -482,7 +496,8 @@ function TablaDinamica({
             <tr>
               {cruce.columnas.map((c) =>
                 metricas.map((m) => (
-                  <th key={`${claveCol(c)}|${m}`} className="num sub">
+                  <th key={`${claveCol(c)}|${m}`} className="num sub"
+                      style={estiloCabecera(estilos[m])}>
                     {etiquetaDe(m)}
                   </th>
                 )),
@@ -511,7 +526,11 @@ function TablaDinamica({
                   const celda = f.celdas.get(claveCol(c))
                   const v = celda?.[m]
                   return (
-                    <td key={`${claveCol(c)}|${m}`} className="num">
+                    <td key={`${claveCol(c)}|${m}`} className="num"
+                        style={estiloCelda(estilos[m], {
+                          ultima: !hayTotales && i === cruce.filas.length - 1,
+                          conFilaDebajo: i < cruce.filas.length - 1,
+                        })}>
                       {v === undefined ? (
                         ''
                       ) : (
@@ -550,7 +569,8 @@ function TablaDinamica({
                 metricas.map((m) => {
                   const t = totalColumna(c, m)
                   return (
-                    <td key={`${claveCol(c)}|${m}`} className="num">
+                    <td key={`${claveCol(c)}|${m}`} className="num"
+                        style={estiloTotal(estilos[m])}>
                       {t === null ? '—' : formatear(t, formatoDe(m))}
                     </td>
                   )
@@ -585,6 +605,7 @@ function Tabla({
   metricas,
   semDe,
   totalesDe,
+  estilos,
 }: {
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
@@ -592,6 +613,8 @@ function Tabla({
   metricas: string[]
   semDe: (m: string) => Semaforo | undefined
   totalesDe: (m: string) => Total
+  /** El formato de cada columna: negrita, alineación, colores y marco. */
+  estilos: Record<string, EstiloColumna>
 }) {
   const orden = useOrden(datos.filas, (f, c) => f[c])
 
@@ -600,6 +623,7 @@ function Tabla({
   const totales = metricas.map((m) => totalizar(datos.filas.map((f) => f[m]),
                                                 totalesDe(m)))
   const hayTotales = totales.some((t) => t !== null)
+
 
   return (
     <div className="tabla-envoltura" style={{ height: '100%', border: 0 }}>
@@ -613,6 +637,7 @@ function Tabla({
                 clave={c}
                 className={metricas.includes(c) ? 'num' : ''}
                 titulo={c}
+                style={estiloCabecera(estilos[c])}
               >
                 {etiquetaDe(c)}
               </Th>
@@ -626,7 +651,16 @@ function Tabla({
                 // Una columna de métrica pasa siempre por `Cifra`, aunque venga
                 // vacía: si el nulo no llegara, una sucursal con objetivo y sin
                 // ventas se quedaría sin semáforo, que es como decir que va bien.
-                <td key={c} className={metricas.includes(c) ? 'num' : ''}>
+                <td
+                  key={c}
+                  className={metricas.includes(c) ? 'num' : ''}
+                  // El sitio de la celda decide los lados del marco: «abajo» es el
+                  // final de la columna, que es la fila de totales cuando la hay.
+                  style={estiloCelda(estilos[c], {
+                    ultima: !hayTotales && i === orden.filas.length - 1,
+                    conFilaDebajo: i < orden.filas.length - 1,
+                  })}
+                >
                   {metricas.includes(c) ? (
                     <Cifra valor={f[c]} formato={formatoDe(c)} sem={semDe(c)} fila={f} />
                   ) : (
@@ -644,11 +678,15 @@ function Tabla({
                 if (!metricas.includes(c)) {
                   // La primera columna de desglose lleva el rótulo; las demás,
                   // nada: repetir «Totales» no informa.
-                  return <td key={c}>{i === 0 ? 'Totales' : ''}</td>
+                  return (
+                    <td key={c} style={estiloTotal(estilos[c])}>
+                      {i === 0 ? 'Totales' : ''}
+                    </td>
+                  )
                 }
                 const t = totales[metricas.indexOf(c)]
                 return (
-                  <td key={c} className="num">
+                  <td key={c} className="num" style={estiloTotal(estilos[c])}>
                     {t === null ? '—' : formatear(t, formatoDe(c))}
                   </td>
                 )

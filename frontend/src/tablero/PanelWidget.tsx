@@ -16,6 +16,13 @@ import { useCampos } from '../api/hooks'
 import type { Hoja, TipoWidget, Widget } from '../api/tipos'
 import { coincide } from '../comunes/buscar'
 import { Grupo } from '../comunes/Panel'
+import {
+  type Alineacion,
+  type EstiloColumna,
+  LADOS,
+  LADOS_POR_OMISION,
+  tieneEstilo,
+} from './estiloColumna'
 import { type Formato, type Total, totalPorOmision } from './formato'
 import { SEMAFORO_NUEVO, type Semaforo } from './semaforo'
 
@@ -69,12 +76,15 @@ export function PanelWidget({
   widget,
   modeloId,
   hojas,
+  lienzo,
   alCambiar,
   alQuitar,
 }: {
   widget: Widget
   modeloId: number
   hojas: Hoja[]
+  /** El tamaño de la hoja: es el tope de lo que puede medir un widget. */
+  lienzo: { columnas: number; filas: number }
   alCambiar: (cambios: Partial<Widget>) => void
   alQuitar: () => void
 }) {
@@ -128,6 +138,8 @@ export function PanelWidget({
           onChange={(e) => alCambiar({ titulo: e.target.value })}
         />
       </div>
+
+      <TamanoYSitio widget={widget} lienzo={lienzo} alCambiar={alCambiar} />
 
       {hojas.length > 1 && (
         <div className="campo">
@@ -409,6 +421,7 @@ function Elegidas({
   const formatos = mapaDe<Formato>(widget, 'formatos')
   const totales = mapaDe<Total>(widget, 'totales_de')
   const semaforos = mapaDe<Semaforo>(widget, 'semaforos')
+  const estilos = mapaDe<EstiloColumna>(widget, 'estilos')
 
   const mover = (i: number, paso: -1 | 1) => {
     const j = i + paso
@@ -555,6 +568,18 @@ function Elegidas({
                       )}
                     </div>
                   )}
+
+                  <EstiloDeColumna
+                    estilo={estilos[c]}
+                    alCambiar={(nuevo: EstiloColumna | undefined) => {
+                      const copia = { ...estilos }
+                      // Sin nada puesto se BORRA la entrada: así el widget no arrastra
+                      // un `{}` por cada columna que alguien abrió y dejó como estaba.
+                      if (nuevo && tieneEstilo(nuevo)) copia[c] = nuevo
+                      else delete copia[c]
+                      alCambiar({ estilos: copia } as Partial<Widget>)
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -707,6 +732,229 @@ const TAMANOS = [
   { nombre: 'Título grande', px: 30 },
   { nombre: 'Portada', px: 42 },
 ]
+
+/**
+ * El formato de una columna: negrita, alineación, colores y marco.
+ *
+ * Aparte del semáforo, y la pantalla lo dice: son dos cosas que se parecen y no lo son.
+ * El semáforo habla del dato y cambia de una fila a otra; esto es del informe y es igual
+ * en todas las filas.
+ */
+function EstiloDeColumna({
+  estilo,
+  alCambiar,
+}: {
+  estilo: EstiloColumna | undefined
+  alCambiar: (e: EstiloColumna | undefined) => void
+}) {
+  const e = estilo ?? {}
+  const cambia = (parte: Partial<EstiloColumna>) => alCambiar({ ...e, ...parte })
+
+  return (
+    <div className="campo">
+      <label>Formato de la columna</label>
+      <div className="fila-estilo">
+        <label className="casilla" title="Toda la columna en negrita">
+          <input
+            type="checkbox"
+            checked={!!e.negrita}
+            onChange={(ev) => cambia({ negrita: ev.target.checked || undefined })}
+          />
+          Negrita
+        </label>
+        <select
+          value={e.alineacion ?? ''}
+          title="A qué lado se pega el contenido"
+          onChange={(ev) =>
+            cambia({
+              alineacion: (ev.target.value || undefined) as Alineacion | undefined,
+            })
+          }
+        >
+          <option value="">Alineación normal</option>
+          <option value="izquierda">Izquierda</option>
+          <option value="centro">Centrado</option>
+          <option value="derecha">Derecha</option>
+        </select>
+      </div>
+
+      <div className="fila-estilo">
+        <Color rotulo="Letra" valor={e.color} alCambiar={(color) => cambia({ color })} />
+        <Color rotulo="Fondo" valor={e.fondo} alCambiar={(fondo) => cambia({ fondo })} />
+        <Color rotulo="Marco" valor={e.marco} alCambiar={(marco) => cambia({ marco })} />
+      </div>
+
+      {/* Los lados solo se ofrecen con un color puesto: sin color no hay nada que
+          dibujar, y cinco casillas que no hacen nada se prueban una por una. */}
+      {e.marco && (
+        <div className="lados-marco">
+          {LADOS.map(({ lado, nombre, ayuda }) => {
+            const puestos = e.lados ?? LADOS_POR_OMISION
+            const activo = puestos.includes(lado)
+            return (
+              <button
+                key={lado}
+                className={`btn chico ${activo ? 'primario' : ''}`}
+                title={ayuda}
+                onClick={() =>
+                  cambia({
+                    lados: activo
+                      ? puestos.filter((x) => x !== lado)
+                      : [...puestos, lado],
+                  })
+                }
+              >
+                {nombre}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <span className="chico tenue">
+        Es aparte del semáforo: el semáforo habla del dato y cambia por fila, esto es
+        igual en todas. Los dos caben — el semáforo se dibuja dentro de la celda.
+        {e.marco
+          ? ' «Arriba» y «abajo» son los extremos de la columna, no de cada celda; para las rayas entre renglones está «entre filas».'
+          : ''}
+      </span>
+      {tieneEstilo(e) && (
+        <button className="btn chico" onClick={() => alCambiar(undefined)}>
+          Quitar el formato
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Un color con su nombre, y una ✕ para volver al del tema. */
+function Color({
+  rotulo,
+  valor,
+  alCambiar,
+}: {
+  rotulo: string
+  valor: string | undefined
+  alCambiar: (v: string | undefined) => void
+}) {
+  return (
+    <span className="color-con-nombre">
+      <span className="chico tenue">{rotulo}</span>
+      <input
+        type="color"
+        // Sin color puesto el selector tiene que enseñar ALGO: se enseña el del texto,
+        // pero lo que vale es `valor`, que sigue vacío hasta que alguien lo toca.
+        value={valor ?? '#111827'}
+        onChange={(ev) => alCambiar(ev.target.value)}
+      />
+      {valor ? (
+        <button
+          className="quitar-color"
+          title={`Sin ${rotulo.toLowerCase()} propio: el del tema`}
+          onClick={() => alCambiar(undefined)}
+        >
+          ✕
+        </button>
+      ) : (
+        <span className="quitar-color vacio" aria-hidden="true" />
+      )}
+    </span>
+  )
+}
+
+/**
+ * El tamaño y el sitio del widget, en números.
+ *
+ * Se puede arrastrar y estirar en la hoja, y eso está bien para acomodar; lo que no
+ * sirve es para ACERTAR: «esta tabla ocupa media hoja» se hace a ojo, y dos tablas que
+ * deberían medir igual acaban con una columna de diferencia. Aquí se escribe.
+ *
+ * Las cuentas van en columnas y filas de la hoja, no en píxeles, porque es lo que la
+ * hoja entiende: una hoja de 12 columnas en una pantalla ancha y en un portátil da
+ * píxeles distintos, y el widget mide lo mismo en las dos.
+ *
+ * Cada número se acota contra la hoja al escribirlo —un widget no puede empezar en la
+ * columna 11 y medir 6 de 12— y lo que se recorta es la POSICIÓN, no el tamaño: quien
+ * escribe un ancho quiere ese ancho.
+ */
+function TamanoYSitio({
+  widget,
+  lienzo,
+  alCambiar,
+}: {
+  widget: Widget
+  lienzo: { columnas: number; filas: number }
+  alCambiar: (cambios: Partial<Widget>) => void
+}) {
+  const p = widget.posicion
+  const entre = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, Number.isFinite(v) ? Math.round(v) : min))
+
+  const mover = (cambio: Partial<typeof p>) => {
+    const ancho = entre(cambio.ancho ?? p.ancho, 1, lienzo.columnas)
+    const alto = entre(cambio.alto ?? p.alto, 1, lienzo.filas)
+    alCambiar({
+      posicion: {
+        ...p,
+        ancho,
+        alto,
+        x: entre(cambio.x ?? p.x, 0, lienzo.columnas - ancho),
+        y: Math.max(0, Math.round(cambio.y ?? p.y)),
+      },
+    })
+  }
+
+  return (
+    <div className="campo">
+      <label>Tamaño y sitio</label>
+      <div className="rejilla-medidas">
+        <span className="chico tenue">Ancho</span>
+        <input
+          type="number"
+          min={1}
+          max={lienzo.columnas}
+          value={p.ancho}
+          onChange={(e) => mover({ ancho: e.target.valueAsNumber })}
+        />
+        <span className="chico tenue">de {lienzo.columnas}</span>
+
+        <span className="chico tenue">Alto</span>
+        <input
+          type="number"
+          min={1}
+          max={lienzo.filas}
+          value={p.alto}
+          onChange={(e) => mover({ alto: e.target.valueAsNumber })}
+        />
+        <span className="chico tenue">de {lienzo.filas}</span>
+
+        <span className="chico tenue">Columna</span>
+        <input
+          type="number"
+          min={0}
+          max={Math.max(0, lienzo.columnas - p.ancho)}
+          value={p.x}
+          onChange={(e) => mover({ x: e.target.valueAsNumber })}
+        />
+        <span className="chico tenue">desde 0</span>
+
+        <span className="chico tenue">Fila</span>
+        <input
+          type="number"
+          min={0}
+          value={p.y}
+          onChange={(e) => mover({ y: e.target.valueAsNumber })}
+        />
+        <span className="chico tenue">desde 0</span>
+      </div>
+      <span className="chico tenue">
+        En columnas y filas de la hoja, no en píxeles: así el widget mide lo mismo en un
+        monitor que en un portátil. Media hoja son {Math.round(lienzo.columnas / 2)}{' '}
+        columnas.
+      </span>
+    </div>
+  )
+}
 
 /** Desde cuántos elementos vale la pena el buscador. Con menos, estorba. */
 const BUSCADOR_DESDE = 8

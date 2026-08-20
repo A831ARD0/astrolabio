@@ -896,6 +896,52 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
   .ficha-envio .dos { grid-template-columns: 1fr; }
 }
 
+/* El formato de una columna: dos renglones cortos en vez de seis campos apilados. El
+   inspector es angosto, y esto se toca de a poco —una negrita, un fondo— no todo junto. */
+/* Las medidas en cuatro renglones de tres: rótulo, número, y de cuánto. Alineadas en
+   columna porque se leen comparando —el ancho contra el alto— no de una en una. */
+.rejilla-medidas {
+  display: grid;
+  grid-template-columns: auto 64px 1fr;
+  gap: 4px 8px;
+  align-items: center;
+}
+.rejilla-medidas input { width: 100%; }
+
+/* Los lados del marco, como la barra de bordes de una hoja de cálculo: botones que se
+   quedan hundidos. Cinco no caben en un renglón del inspector, así que se reparten. */
+.lados-marco { display: flex; flex-wrap: wrap; gap: 4px; }
+.lados-marco .btn { padding: 2px 7px; }
+
+.fila-estilo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fila-estilo select { flex: 1; min-width: 120px; }
+.color-con-nombre { display: inline-flex; align-items: center; gap: 4px; }
+.color-con-nombre input[type='color'] {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+/* El hueco se reserva aunque no haya nada que quitar: sin esto, poner un color mueve
+   los tres selectores de sitio justo cuando se está comparando uno con otro. */
+.quitar-color {
+  flex: 0 0 14px;
+  width: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto-tenue);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.quitar-color.vacio { cursor: default; }
+.quitar-color:hover:not(.vacio) { color: var(--texto); }
+
 .fila-color { display: flex; align-items: center; gap: 6px; }
 .fila-color input[type='color'] {
   flex: 0 0 32px;

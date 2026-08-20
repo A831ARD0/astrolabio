@@ -80,6 +80,26 @@ versionado es [semántico](https://semver.org/lang/es/).
   arregla después. El aviso, cuando falta de verdad, dice **dónde** lo
   buscó y las dos órdenes exactas para ponerlo.
 
+- **Formato por columna en las tablas: negrita, alineación, colores y marco.** Aparte
+  del semáforo, que es lo que pidió quien lo usa: el semáforo habla del dato y cambia por
+  fila; esto es del informe y es igual en todas. Los dos caben, porque el semáforo se
+  dibuja dentro de la celda. La alineación llega también al encabezado —una columna
+  centrada con el título a la izquierda se lee torcida— y la fila de totales toma el
+  marco y la alineación pero no los colores, para que siga leyéndose como los totales. En
+  una tabla dinámica el formato va por métrica: ahí las columnas las pone el dato.
+
+  El **marco elige sus lados**, como la barra de bordes de una hoja de cálculo: izquierda,
+  derecha, arriba, abajo y «entre filas». «Arriba» y «abajo» son los extremos de la
+  columna —encima del encabezado y debajo de la última fila, que es la de totales cuando
+  la hay— y no de cada celda; las rayas de cada renglón son «entre filas», que es el borde
+  interior horizontal de Excel.
+
+- **El tamaño de un widget se escribe, no se adivina.** El inspector muestra ancho, alto,
+  columna y fila en unidades de la hoja. Arrastrar sirve para acomodar, no para acertar:
+  dos tablas que deberían medir igual acababan con una columna de diferencia. Lo que se
+  pide de más se recorta contra la hoja, y lo que se ajusta es la posición y no el ancho
+  — quien escribe un ancho quiere ese ancho.
+
 - **El widget de texto sirve de título de sección: tamaño, color, negrita y
   alineación.** Los tamaños van con nombre —Nota, Normal, Subtítulo, Título, Título
   grande, Portada— y no como número libre, para que los títulos de dos hojas salgan

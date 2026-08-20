@@ -1251,6 +1251,47 @@ Solo se ofrecen columnas de la misma entidad: un orden que viniera de otra tabla
 necesitaría una unión, y entonces el orden de un filtro dependería de por dónde se
 une, que es exactamente lo que no puede pasar.
 
+### El formato de una columna
+
+En el inspector, al abrir una columna de cifras, está **Formato de la columna**:
+negrita, alineación, color de la letra, color del fondo y **marco**.
+
+El marco elige sus lados, como la barra de bordes de una hoja de cálculo: **Izq**, **Der**,
+**Arriba**, **Abajo** y **Entre filas**. «Arriba» y «abajo» son los extremos de la columna
+—encima del encabezado y debajo de la última fila, que es la de totales cuando la hay—, no
+de cada celda; para las rayas de cada renglón está «entre filas», que es el borde interior
+horizontal de Excel.
+
+Es **aparte del semáforo**, y la diferencia importa: el semáforo habla del dato y cambia
+de una fila a otra; esto es del informe y es igual en todas las filas. Los dos caben a la
+vez, porque el semáforo se dibuja dentro de la celda.
+
+Dos cosas que hace por su cuenta, para que la tabla siga leyéndose:
+
+- **La alineación va también al encabezado** —una columna centrada con el título a la
+  izquierda se lee torcida— pero los colores no: si cada columna pintara su encabezado,
+  la primera fila dejaría de leerse como una fila de títulos.
+- **La fila de totales toma el marco y la alineación, no los colores.** El marco es la
+  columna y tiene que llegar abajo; el fondo de los totales es lo que los hace
+  reconocibles.
+
+Sin colores puestos, la columna sigue el tema y se lee igual en claro y en oscuro. Con
+uno puesto, manda el tuyo en los dos.
+
+En una **tabla dinámica** el formato va por métrica y no por columna: ahí las columnas
+las pone el dato —un mes cada una— y no se pueden formatear de a una.
+
+### El tamaño de un widget, en números
+
+Al seleccionarlo, el inspector muestra **Tamaño y sitio**: ancho, alto, columna y fila.
+Arrastrar y estirar sirve para acomodar; lo que no sirve es para *acertar*. Dos tablas
+que deberían medir igual acaban con una columna de diferencia, y ahí se escribe.
+
+Las medidas van en **columnas y filas de la hoja**, no en píxeles: así el widget mide lo
+mismo en un monitor y en un portátil. Si pides más de lo que cabe, se recorta al tamaño
+de la hoja; y lo que se ajusta es la posición, no el ancho — quien escribe un ancho
+quiere ese ancho.
+
 ### Títulos y subtítulos
 
 El widget **Texto** hace de título de sección. Lleva tamaño —desde «Nota» hasta
