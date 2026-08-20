@@ -94,6 +94,13 @@ versionado es [semántico](https://semver.org/lang/es/).
   la hay— y no de cada celda; las rayas de cada renglón son «entre filas», que es el borde
   interior horizontal de Excel.
 
+- **Una columna se quita desde donde se está mirando.** Cada columna de la lista lleva
+  su ✕. Antes había que buscarla en el catálogo de abajo y volver a pulsarla, y con
+  noventa y seis métricas eso es buscar lo que se tiene delante. Al quitarla se van
+  **también sus ajustes** —etiqueta, formato, semáforo, totales, estilo—: si se quedaran,
+  el widget arrastraría para siempre el semáforo de una columna que ya no está, y al
+  volver a agregarla reaparecería pintada por algo que nadie recuerda haber pedido.
+
 - **El tamaño de un widget se escribe, no se adivina.** El inspector muestra ancho, alto,
   columna y fila en unidades de la hoja. Arrastrar sirve para acomodar, no para acertar:
   dos tablas que deberían medir igual acababan con una columna de diferencia. Lo que se

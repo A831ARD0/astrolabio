@@ -1147,6 +1147,13 @@ table.datos td.num { text-align: right; font-family: var(--mono); }
    quedaba con la fila entera y el nombre desaparecía. */
 .fila-widget .mueve { flex: 0 0 17px; width: 17px; padding: 0; }
 
+/* La ✕ se distingue de las flechas: quitar no es lo mismo que mover, y con los tres
+   botones del mismo color se pulsa la equivocada. Al pasar por encima, en rojo. */
+.col-elegida .mueve.quita:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mal) 14%, transparent);
+  color: var(--mal);
+}
+
 .col-elegida .cuerpo {
   display: flex;
   flex-direction: column;

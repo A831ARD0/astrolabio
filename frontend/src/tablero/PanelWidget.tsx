@@ -431,6 +431,29 @@ function Elegidas({
     alCambiar({ [campo]: orden } as Partial<Widget>)
   }
 
+  /**
+   * Quita la columna, y con ella lo que se le había puesto.
+   *
+   * Se limpian sus ajustes —etiqueta, formato, semáforo, totales, estilo— y no solo la
+   * clave de la lista: si no, el widget arrastra para siempre el semáforo de una columna
+   * que ya no está, y al volver a agregarla reaparece pintada por algo que nadie
+   * recuerda haber pedido.
+   */
+  const quitar = (clave: string) => {
+    const cambios: Record<string, unknown> = {
+      [campo]: claves.filter((c) => c !== clave),
+    }
+    for (const mapa of ['etiquetas', 'formatos', 'totales_de', 'semaforos', 'estilos']) {
+      const actual = mapaDe<unknown>(widget, mapa)
+      if (clave in actual) {
+        const copia = { ...actual }
+        delete copia[clave]
+        cambios[mapa] = copia
+      }
+    }
+    alCambiar(cambios as Partial<Widget>)
+  }
+
   /** Guarda una propiedad, y la borra del widget si vuelve a ser la del modelo. */
   const poner = (mapa: string, clave: string, valor: string | undefined) => {
     const copia = { ...mapaDe<string>(widget, mapa) }
@@ -483,6 +506,16 @@ function Elegidas({
                   onClick={() => mover(i, 1)}
                 >
                   ↓
+                </button>
+                {/* Aquí y no solo en el catálogo: para quitar una columna había que
+                    buscarla en la lista de abajo y volver a pulsarla, y con noventa y
+                    seis métricas eso es buscar lo que ya se tiene delante. */}
+                <button
+                  className="mueve quita"
+                  title="Quitar esta columna del widget"
+                  onClick={() => quitar(c)}
+                >
+                  ✕
                 </button>
               </div>
 
