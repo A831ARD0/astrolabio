@@ -972,6 +972,41 @@ cada cruce— y ahí la foto aparece repetida en cada mes. Es el dato correcto f
 fila, pero **no sumes esa columna en Excel**: el total saldría multiplicado por el
 número de meses.
 
+#### Si no hay dato, cero
+
+Una celda vacía suele ser lo correcto: «no se sabe» no es «cero». El problema es que
+el vacío **se contagia a la operación de al lado**:
+
+```
+SI(stock > promedio, stock - promedio, 0)
+```
+
+Con el promedio vacío eso no da falso: da **nulo**, y la rama se va al «si no». Así que
+una familia que no vendió nada en tres meses —la que tiene *todo* su inventario de
+excedente— sale con excedente cero. La cifra más alta posible saliendo como la más
+baja, sin un aviso.
+
+En el editor de la métrica hay una casilla:
+
+```
+☑ Si no hay dato, cero
+```
+
+Vale al mostrarla y **dentro de cualquier fórmula que la use**: se envuelve en cada
+sitio donde la métrica se lee, que es donde ocurre el contagio.
+
+Es opcional a propósito, porque las dos lecturas son ciertas según la métrica. En un
+promedio de ventas, no haber vendido nada **es** cero. En un objetivo, vacío y cero son
+distintos —«no se ha cargado» contra «el objetivo es cero»— y marcar la casilla
+esconde una carga que falta.
+
+Lo que **no** cambia es cuál es «el último mes con datos»: eso se sigue decidiendo con
+la cifra cruda. Si un cero inventado contara como dato, el mes que manda sería siempre
+el último del calendario y las ventas de ese mes saldrían en blanco.
+
+Si sólo lo quieres en un sitio y no en la métrica entera, `SIVACIO([metrica], 0)` hace
+lo mismo dentro de una fórmula suelta.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

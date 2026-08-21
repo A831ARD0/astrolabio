@@ -124,6 +124,13 @@ export interface Metrica {
    * `CALCULATE(..., ALL(Calendario))` de DAX.
    */
   ignora_periodo?: boolean
+  /**
+   * Vale CERO cuando no hay dato, en vez de quedarse vacía.
+   *
+   * El vacío se contagia: `SI(stock > promedio, …)` con el promedio vacío no da
+   * falso, da nulo, y la rama se va al «si no» sin que nadie lo pida.
+   */
+  sin_dato_cero?: boolean
   [clave: string]: unknown
 }
 

@@ -217,6 +217,23 @@ class MetricaDef(_Base):
     #: Solo en una metrica de un hecho: una compuesta no lee ninguna tabla, asi que
     #: no hay nada de donde quitar el filtro. Se pone en las que combina.
     ignora_periodo: bool = False
+    #: Vale CERO cuando no hay dato, en vez de quedarse vacia.
+    #:
+    #: Es opcional porque las dos cosas son ciertas segun la metrica. En un objetivo,
+    #: vacio y cero son distintos: uno es «no se ha cargado» y el otro es «el objetivo
+    #: es cero», y taparlo esconde una carga que falta. En un promedio de ventas, en
+    #: cambio, no haber vendido nada ES cero.
+    #:
+    #: Lo que arregla: el vacio se CONTAGIA a la operacion de al lado.
+    #: `SI(stock > promedio, stock - promedio, 0)` con el promedio vacio no da falso,
+    #: da NULO, y la rama se va al «si no» sin que nadie lo pida — asi que una familia
+    #: que no vendio nada en tres meses, que tiene TODO su inventario de excedente,
+    #: salia con cero excedente. Se envuelve en cada sitio donde la metrica se LEE, no
+    #: en su formula, porque el contagio ocurre en la lectura.
+    #:
+    #: No cambia cual es «el ultimo mes con datos»: eso se sigue decidiendo con la
+    #: cifra cruda, o el mes que manda seria siempre el ultimo del calendario.
+    sin_dato_cero: bool = False
     #: Relaciones que esta metrica usa en vez de la activa, como
     #: `"entidad.campo -> entidad.campo"`.
     #:
@@ -389,6 +406,9 @@ class Definicion(_Base):
                         metricas={o.nombre: (o.expresion if o.entidad is None
                                              else None)
                                   for o in self.metricas},
+                        ceros=frozenset(
+                            o.nombre for o in self.metricas
+                            if getattr(o, "sin_dato_cero", False)),
                     ), (m.nombre,))
                 else:
                     ent = entidades[m.entidad]

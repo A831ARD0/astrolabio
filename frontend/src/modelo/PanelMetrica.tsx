@@ -492,6 +492,33 @@ export function PanelMetrica({
             )}
 
             {/*
+              El vacío se CONTAGIA a la operación de al lado, y ahí está el motivo de
+              que esto exista: `SI(stock > promedio, stock - promedio, 0)` con el
+              promedio vacío no da falso, da nulo, y se va al «si no». Una familia que
+              no vendió nada —la que tiene todo su inventario de excedente— salía con
+              cero excedente.
+
+              Y es opcional porque las dos lecturas son ciertas según la métrica: en un
+              objetivo, vacío y cero son distintos —«no se ha cargado» contra «el
+              objetivo es cero»— y taparlo esconde una carga que falta.
+            */}
+            <label className="chico" style={{ display: 'block', marginTop: 2 }}>
+              <input
+                type="checkbox"
+                checked={borrador.sin_dato_cero === true}
+                onChange={(e) =>
+                  setBorrador({ ...borrador, sin_dato_cero: e.target.checked })
+                }
+              />{' '}
+              Si no hay dato, cero
+              <span className="tenue">
+                {' '}
+                — en vez de vacío, aquí y dentro de cualquier fórmula que la use. Ojo
+                si vacío significa «no se ha cargado»: entonces esto lo esconde
+              </span>
+            </label>
+
+            {/*
               Sólo con calendario y sólo en una métrica de un hecho: una compuesta
               no lee ninguna tabla, así que no hay filtro que quitarle —y guardarla
               marcada ni pasa la revisión—.

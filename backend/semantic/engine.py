@@ -150,6 +150,9 @@ class Metrica:
     #: El periodo no la toca: es una foto, no un flujo. Ver `MetricaDef.ignora_periodo`
     #: y `Compilador.compilar`.
     ignora_periodo: bool = False
+    #: Vale CERO cuando no hay dato, en vez de quedarse vacia. Ver
+    #: `MetricaDef.sin_dato_cero`.
+    sin_dato_cero: bool = False
     #: La tabla de medidas donde el usuario la guardo, si la guardo en alguna. El
     #: compilador no la mira: es para agrupar en la interfaz. Una compuesta no sale
     #: de ningun hecho, asi que es lo unico que la ordena.
@@ -199,6 +202,7 @@ class Modelo:
                                  m["expresion"], m.get("formato", "numero"),
                                  tuple(m.get("uniones", []) or ()),
                                  bool(m.get("ignora_periodo", False)),
+                                 bool(m.get("sin_dato_cero", False)),
                                  m.get("tabla_medidas"))
             for m in crudo.get("metricas", [])
         }
@@ -310,6 +314,8 @@ class Modelo:
         return ContextoCompuesta(
             metricas={m.nombre: (m.expresion if m.compuesta else None)
                       for m in self.metricas.values()},
+            ceros=frozenset(m.nombre for m in self.metricas.values()
+                            if m.sin_dato_cero),
         )
 
     def sql_compuesta(self, metrica: Metrica) -> Compuesta:
@@ -1562,14 +1568,20 @@ class Compilador:
 
         def expresion(nombre: str, sitio: dict[str, str], prefijo: str) -> str:
             met = self.m.metricas[nombre]
+            # `sin_dato_cero` tambien al mostrarla: una celda vacia y un cero se leen
+            # distinto, y quien marco la bandera dijo que aqui no hay «no se sabe»,
+            # hay cero. Lo de dentro de una compuesta ya lo envolvio el compilador de
+            # formulas, en cada sitio donde se lee.
+            def cero(sql: str) -> str:
+                return f"COALESCE({sql}, 0)" if met.sin_dato_cero else sql
             if not met.compuesta:
-                return f"{sitio[nombre]}.{_cita(nombre)}"
+                return cero(f"{sitio[nombre]}.{_cita(nombre)}")
             comp = self.m.sql_compuesta(met)
             sql_c = _calificar_metricas(comp.sql, sitio)
             if COL_PERIODO in sql_c:
                 sql_c = self._con_tiempo(nombre, sql_c, comp.dependencias, dims,
                                          prefijo)
-            return sql_c
+            return cero(sql_c)
 
         def columnas_pedidas(sitio: dict[str, str], prefijo: str) -> list[str]:
             """
@@ -1687,7 +1699,9 @@ class Compilador:
         # de fecha el ultimo mes con datos.
         col_mes = _cita(f"{mes_oculto[0]}.{mes_oculto[1]}")
         # Las cifras de las que sale la comparacion, escondidas en el detalle. No
-        # las pidio nadie: estan para saber si el mes trae dato de ELLAS. Un mes con
+        # las pidio nadie: estan para saber si el mes trae dato de ELLAS. Van CRUDAS,
+        # sin el cero de `sin_dato_cero`: si un cero inventado contara como dato, el
+        # mes que manda seria siempre el ultimo del calendario. Un mes con
         # objetivo cargado y sin una sola venta no es «el ultimo mes con datos»
         # cuando lo que se compara son ventas — la fila saldria en blanco.
         bases = [b for b in bases_ventana if b in sitio_final]

@@ -1001,6 +1001,16 @@ class ContextoCompuesta:
     """
 
     metricas: dict[str, str | None] = field(default_factory=dict)
+    #: Las que valen CERO cuando no hay dato, en vez de quedarse vacias.
+    #:
+    #: Sin esto, una division o una comparacion contra una metrica vacia se
+    #: contagia: `SI(stock > promedio, ...)` con el promedio vacio no es falso, es
+    #: NULO, y la rama se va al `si no` sin que nadie lo pida. Una familia que no
+    #: vendio nada en tres meses tiene TODO su inventario de excedente, y salia cero.
+    ceros: frozenset[str] = frozenset()
+
+    def es_cero(self, nombre: str) -> bool:
+        return nombre.lower() in {c.lower() for c in self.ceros}
 
     def buscar(self, nombre: str) -> tuple[str, str | None] | None:
         """(nombre real, expresion si es compuesta). None si no existe."""
@@ -1099,6 +1109,11 @@ def _referencias_compuesta(
                 dependencias.update(dentro.dependencias)
                 intermedias.update(dentro.intermedias)
                 arbol = sqlglot.parse_one(dentro.sql, read=DIALECTO)
+            # Se envuelve AQUI, en el sitio donde se lee, y no en la formula de la
+            # metrica: lo que hay que evitar es que el vacio se contagie a la
+            # operacion de al lado, y eso pasa en cada lectura.
+            if ctx.es_cero(real):
+                arbol = exp.func("COALESCE", arbol, exp.Literal.number(0))
         apunta[marca.lower()] = arbol
         piezas.append(tramo.texto[ultimo:m.start()])
         piezas.append(marca)
