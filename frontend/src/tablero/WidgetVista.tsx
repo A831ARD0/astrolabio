@@ -489,9 +489,12 @@ function TablaDinamica({
   // debajo de cada mes. Sólo cuentan las que están pedidas —una que se quitó del
   // widget no puede seguir gobernando una columna— y nunca todas: sin ninguna métrica
   // en la matriz no hay matriz.
-  const aparte = ((widget.fuera_del_pivote as string[] | undefined) ?? [])
-    .filter((m) => metricas.includes(m))
-  const enMatriz = metricas.filter((m) => !aparte.includes(m))
+  // El orden lo pone la LISTA DE CIFRAS del widget, no el orden en que se marcaron
+  // las casillas: las flechas de esa lista son con lo que se ordenan las columnas, y
+  // si una columna no se moviera al subirla, las flechas estarian mintiendo.
+  const fuera = (widget.fuera_del_pivote as string[] | undefined) ?? []
+  const aparte = metricas.filter((m) => fuera.includes(m))
+  const enMatriz = metricas.filter((m) => !fuera.includes(m))
 
   if (enMatriz.length === 0) {
     return (
