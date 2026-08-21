@@ -505,7 +505,8 @@ function TablaDinamica({
     )
   }
 
-  const cruce = cruzar(datos.filas, dimsFila, pivote, enMatriz, ordenColumnas)
+  const cruce = cruzar(datos.filas, dimsFila, pivote, enMatriz, ordenColumnas,
+                      filasSueltas)
   const conTotal = widget.total_fila !== false
 
   // Cada fila de la consulta sin el mes, por su clave de desglose, para poder casarla

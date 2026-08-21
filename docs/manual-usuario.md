@@ -907,8 +907,14 @@ MODELO        Ene  Feb  Mar  …  Jul  TOTAL  Inventario Actual
 Su cifra la calcula el motor **sin el mes**, en una consulta aparte. No se deduce
 sumando las celdas de los meses, y eso es a propósito: sólo el motor sabe si esa
 métrica se suma, se promedia o es una foto, y deducirlo aquí sería multiplicar por
-siete sin avisar. Una fila sin ventas en ningún mes sale con los meses en blanco y su
-inventario puesto, que es la verdad.
+siete sin avisar.
+
+Y como esa consulta no lleva la columna de columnas, **alcanza filas que la matriz no
+tiene**: una familia con inventario y sin una sola venta no sale de la consulta de las
+ventas. Esas filas se añaden igual, con los meses en blanco y su inventario puesto —
+que es la verdad. Si no se añadieran, su inventario desaparecería de la tabla y el
+total de esa columna no cuadraría con la misma métrica pedida por su cuenta; y una fila
+que falta no se ve, mientras una fila con los meses vacíos sí.
 
 Al menos una métrica tiene que quedarse dentro: sin ninguna no hay columnas que abrir,
 y se dice al guardar.
