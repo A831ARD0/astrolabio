@@ -246,6 +246,7 @@ function WidgetDatos({
           widget={widget}
           datos={datos.data}
           filasSueltas={datos.data.filas_sueltas}
+          ordenColumnas={datos.data.orden_pivote}
           etiquetaDe={etiquetaDe}
           formatoDe={formatoDe}
           semDe={semDe}
@@ -407,6 +408,7 @@ function TablaDinamica({
   widget,
   datos,
   filasSueltas,
+  ordenColumnas,
   etiquetaDe,
   formatoDe,
   semDe,
@@ -420,6 +422,8 @@ function TablaDinamica({
    * `useFueraDelPivote`.
    */
   filasSueltas?: Record<string, unknown>[]
+  /** El orden de las columnas segun `ordenar_por` del modelo. Ver `cruzar`. */
+  ordenColumnas?: unknown[]
   etiquetaDe: (c: string) => string
   formatoDe: (m: string) => Formato
   semDe: (m: string) => Semaforo | undefined
@@ -460,7 +464,7 @@ function TablaDinamica({
     )
   }
 
-  const cruce = cruzar(datos.filas, dimsFila, pivote, enMatriz)
+  const cruce = cruzar(datos.filas, dimsFila, pivote, enMatriz, ordenColumnas)
   const conTotal = widget.total_fila !== false
 
   // Cada fila de la consulta sin el mes, por su clave de desglose, para poder casarla

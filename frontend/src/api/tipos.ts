@@ -380,6 +380,13 @@ export interface CampoCatalogo {
   etiqueta: string
   entidad: string
   tipo?: string
+  /**
+   * Por qué otra columna del modelo se ordenan sus valores, ya calificada
+   * (`"entidad.campo"`). `null` = por su propio valor.
+   *
+   * «Enero, Febrero, Marzo» ordenado por sí mismo sale *abril, agosto, diciembre*.
+   */
+  ordenar_por?: string | null
 }
 
 export interface MetricaCatalogo {

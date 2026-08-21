@@ -913,6 +913,18 @@ inventario puesto, que es la verdad.
 Al menos una métrica tiene que quedarse dentro: sin ninguna no hay columnas que abrir,
 y se dice al guardar.
 
+**Las columnas se ordenan por `ordenar_por`.** Si abres en columnas el nombre del mes
+—texto— y el modelo dice que esa columna se ordena por el número del mes, las columnas
+salen *Enero, Febrero, Marzo* y no *abril, agosto, diciembre*. Es el mismo dato que ya
+ordenaba los filtros, aplicado a la matriz. Sin `ordenar_por` puesto, una columna de
+texto sale alfabética y la pantalla lo avisa.
+
+Con esto, una matriz de meses con dos o tres columnas de cálculo al lado ya sale sin
+ningún truco. En Power BI lo mismo pide una tabla desconectada de encabezados, con una
+columna de orden y una medida con `SWITCH` — porque allí no se pueden poner columnas
+calculadas junto a las de una matriz. Aquí el Total es la columna de total y las demás
+son métricas fuera de las columnas.
+
 Un aviso sobre el Excel: al exportar el widget baja la tabla **plana** —una fila por
 cada cruce— y ahí la foto aparece repetida en cada mes. Es el dato correcto fila a
 fila, pero **no sumes esa columna en Excel**: el total saldría multiplicado por el

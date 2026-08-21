@@ -96,3 +96,23 @@ def test_ordenar_por_si_mismo_no_se_guarda(cliente, cab_editor, modelo):
     r = con_nombre_del_mes(cliente, cab_editor, modelo, "mes_nombre")
     assert r.status_code == 422, r.text
     assert "por si mismo" in r.text
+
+
+def test_el_catalogo_dice_por_que_columna_se_ordena(cliente, cab_editor, modelo):
+    """
+    La interfaz tiene que poder ordenar igual que el modelo.
+
+    Las columnas de una tabla dinamica las ordena el navegador —el cruce se hace
+    ahi—, asi que sin este dato «Enero» sale despues de «Abril» aunque el modelo
+    diga por donde va. Se manda ya calificado, `entidad.campo`, porque es como la
+    interfaz nombra una columna en todos los demas sitios.
+    """
+    assert con_nombre_del_mes(cliente, cab_editor, modelo, "mes").status_code == 201
+
+    r = cliente.get(f"/api/modelos/{modelo}/campos", headers=cab_editor)
+    assert r.status_code == 200, r.text
+    por_clave = {d["clave"]: d for d in r.json()["dimensiones"]}
+    assert por_clave["dim_calendario.mes_nombre"]["ordenar_por"] == "dim_calendario.mes"
+    # Y la que no se ordena por ninguna lo dice con un nulo, no omitiendo la clave:
+    # la interfaz distingue «por su propio valor» de «no me lo dijeron».
+    assert por_clave["dim_calendario.mes"]["ordenar_por"] is None

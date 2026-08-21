@@ -16,6 +16,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { ErrorApi, api } from '../api/cliente'
+import { useCampos } from '../api/hooks'
 import type { Estados, Filtro, ResultadoConsulta, Widget } from '../api/tipos'
 
 /** Widgets que piden datos al servidor. `texto` y `filtro` no. */
@@ -70,12 +71,25 @@ function useAnchuraDelPivote(
   filtros: Filtro[],
   rutasElegidas: Record<string, string>,
   pivote: string | undefined,
+  /**
+   * Por qué otra columna se ordena la de columnas, si el modelo lo dice.
+   *
+   * «Enero, Febrero, Marzo» es texto, y ordenado por sí mismo sale *abril, agosto,
+   * diciembre*: no es un orden, es un error que parece un orden. Se pide junto a la
+   * columna de columnas —esta consulta ya se hacía para saber la anchura, así que no
+   * cuesta una consulta más— y el orden que sale de aquí es el que llevan las
+   * columnas de la matriz.
+   */
+  ordenarPor: string | null,
 ) {
   const cuerpo = {
-    dimensiones: pivote ? [pivote] : [],
+    dimensiones: pivote ? (ordenarPor ? [pivote, ordenarPor] : [pivote]) : [],
     // Con la métrica puesta el cruce se hace por el mismo camino: contar los meses
     // por otra ruta podría dar un juego de meses distinto del que luego sale.
-    metricas: (widget.metricas ?? []).slice(0, 1),
+    metricas: (widget.metricas ?? [])
+      .filter((m) => !((widget.fuera_del_pivote as string[] | undefined) ?? [])
+        .includes(m))
+      .slice(0, 1),
     filtros,
     rutas_elegidas: rutasElegidas,
     limite: TOPE_COLUMNAS,
@@ -152,6 +166,7 @@ export function useDatosWidget(
    */
   rutasTablero: Record<string, string> = {},
 ) {
+  const campos = useCampos(modeloId, version)
   const filtros = [...filtrosDeSelecciones(selecciones), ...(widget.filtros ?? [])]
   const rutas = { ...rutasTablero, ...(widget.rutas_elegidas ?? {}) }
   const limite = widget.limite ?? 1000
@@ -162,14 +177,44 @@ export function useDatosWidget(
     widget.tipo === 'tabla_dinamica'
       ? ((widget.pivote as string | undefined) || undefined)
       : undefined
-  const ancho = useAnchuraDelPivote(modeloId, version, widget, filtros, rutas, pivote)
-  const columnas = ancho.data ? Math.max(1, ancho.data.filas.length) : 1
+  const ordenarPor = pivote ? (campos.data?.dimensiones
+    .find((d) => d.clave === pivote)?.ordenar_por ?? null) : null
+  const ancho = useAnchuraDelPivote(modeloId, version, widget, filtros, rutas,
+                                    pivote, ordenarPor)
+  // Los valores distintos de la columna de columnas, en el orden en que van. Con
+  // `ordenar_por` la consulta trae dos columnas, así que hay que quedarse con la
+  // primera y quitar repetidos: el par no tiene por qué ser uno a uno.
+  const ordenColumnas = pivote && ancho.data
+    ? [...new Map(
+        // El motor ordena por la columna que se abre, que para texto es alfabético:
+        // hay que reordenar por la que el modelo señaló. Se compara como número
+        // cuando lo es —el mes es 1..12— y como texto si no.
+        (ordenarPor
+          ? [...ancho.data.filas].sort((a, b) => {
+              const x = a[ordenarPor], y = b[ordenarPor]
+              if (typeof x === 'number' && typeof y === 'number') return x - y
+              return String(x ?? '').localeCompare(String(y ?? ''))
+            })
+          : ancho.data.filas
+        ).map((f) => [String(f[pivote]), f[pivote]] as const),
+      ).values()]
+    : undefined
+  const columnas = ordenColumnas ? Math.max(1, ordenColumnas.length) : 1
   const sueltas = useFueraDelPivote(modeloId, version, widget, filtros, rutas,
                                     pivote, limite)
 
+  // Las que van fuera de las columnas NO se piden aquí: las trae su propia consulta,
+  // sin la columna de columnas. Pedirlas también aquí no sería sólo trabajo de más —
+  // si una lleva ventana de tiempo, la consulta entera necesita un mes de referencia
+  // y la matriz se colapsa al último mes en vez de abrir uno por columna.
+  const fuera = pivote
+    ? ((widget.fuera_del_pivote as string[] | undefined) ?? [])
+    : []
+  const enMatriz = (widget.metricas ?? []).filter((m) => !fuera.includes(m))
+
   const cuerpo = {
     dimensiones: widget.dimensiones ?? [],
-    metricas: widget.metricas ?? [],
+    metricas: enMatriz,
     filtros,
     rutas_elegidas: rutas,
     // El usuario escribió filas de tabla; el motor cuenta filas planas. La
@@ -198,6 +243,9 @@ export function useDatosWidget(
     select: (d) => ({
       ...d,
       ancho_pivote: pivote ? columnas : undefined,
+      // El orden de las columnas de la matriz, cuando el modelo dice por qué otra
+      // columna se ordena la que se abre. Sin esto, «Enero» sale después de «Abril».
+      orden_pivote: ordenColumnas,
       // Las filas de la consulta sin el mes, para las columnas que van una sola vez.
       // `undefined` mientras no haya llegado: la tabla dibuja los meses y deja esas
       // celdas en blanco un instante, en vez de esperar la matriz entera.

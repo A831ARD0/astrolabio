@@ -1209,9 +1209,16 @@ def campos(modelo_id: int, sesion: SesionDep, _: UsuarioDep):
     return {
         "version": v.version,
         "dimensiones": [
+            # `ordenar_por` viaja porque la interfaz tiene que poder ordenar
+            # igual que el modelo: «Enero, Febrero» es texto, y sin saber por que
+            # columna va, las columnas de una tabla dinamica saldrian alfabeticas
+            # —abril, agosto, diciembre— que no es un orden, es un error que
+            # parece un orden.
             {"clave": f"{e.nombre}.{c.nombre}",
              "etiqueta": c.etiqueta or c.nombre,
-             "entidad": e.nombre, "tipo": c.tipo}
+             "entidad": e.nombre, "tipo": c.tipo,
+             "ordenar_por": (f"{e.nombre}.{c.ordenar_por}" if c.ordenar_por
+                             else None)}
             for e in m.entidades.values()
             for c in e.campos.values()
             if c.rol == "dimension" and c.visible
