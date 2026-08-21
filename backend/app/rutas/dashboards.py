@@ -254,6 +254,22 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
             if pivote is not None and pivote not in w.dimensiones:
                 errores.append(f"La tabla dinamica '{w.titulo or w.id}' abre en "
                                f"columnas '{pivote}', que no es uno de sus desgloses.")
+            # Las metricas que van FUERA de las columnas —una foto no se repite
+            # debajo de cada mes— no pueden ser todas: sin ninguna dentro no hay
+            # matriz que abrir, y guardarlo asi deja un widget que solo sabe
+            # explicarse en pantalla.
+            fuera = getattr(w, "fuera_del_pivote", None) or []
+            if isinstance(fuera, list):
+                sobran = [m for m in fuera if m not in w.metricas]
+                if sobran:
+                    errores.append(
+                        f"La tabla dinamica '{w.titulo or w.id}' deja fuera de las "
+                        f"columnas a {', '.join(sobran)}, que no son metricas suyas.")
+                if w.metricas and not [m for m in w.metricas if m not in fuera]:
+                    errores.append(
+                        f"La tabla dinamica '{w.titulo or w.id}' deja fuera de las "
+                        f"columnas a todas sus metricas, asi que no queda ninguna que "
+                        f"abrir. Deja al menos una dentro.")
 
         # Un semaforo que compara contra una columna que no esta en el widget no
         # pinta nada, y no pintar es indistinguible de "va bien".

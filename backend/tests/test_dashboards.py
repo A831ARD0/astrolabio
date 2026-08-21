@@ -369,11 +369,11 @@ def test_el_camino_elegido_hace_que_el_filtro_ambiguo_funcione(cliente, cab_admi
                            "fact_venta->cat_marca":
                                "fact_venta → cat_sucursal → cat_marca"}})
     assert con.status_code == 200, con.text
-    kia = con.json()["filas"][0]["monto_venta"]
+    de_una_marca = con.json()["filas"][0]["monto_venta"]
 
     total = cliente.post(f"/api/modelos/{modelo_dash}/consultar", headers=cab_admin,
                          json={"dimensiones": [], "metricas": ["monto_venta"]})
-    assert 0 < kia < total.json()["filas"][0]["monto_venta"]
+    assert 0 < de_una_marca < total.json()["filas"][0]["monto_venta"]
 
 
 # --------------------------------------------------------------------------- #
@@ -541,6 +541,44 @@ def test_el_pivote_tiene_que_ser_uno_de_sus_desgloses(cliente, cab_admin,
                      json=_pivote(modelo_dash, pivote="cat_marca.marca_nombre"))
     assert r.status_code == 422, r.text
     assert "no es uno de sus desgloses" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_una_metrica_puede_quedarse_fuera_de_las_columnas(cliente, cab_admin,
+                                                          modelo_dash):
+    """
+    Una cifra que no es del mes —el inventario de hoy— no puede repetirse debajo de
+    cada mes: sumar esa fila daria siete veces el inventario. Se guarda cual va
+    aparte, y sobrevive el viaje.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  metricas=["unidades_vendidas", "objetivo_unidades"],
+                                  fuera_del_pivote=["objetivo_unidades"]))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "p1")
+    assert w["fuera_del_pivote"] == ["objetivo_unidades"]
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_no_se_pueden_dejar_todas_fuera_de_las_columnas(cliente, cab_admin,
+                                                        modelo_dash):
+    """
+    Sin ninguna metrica dentro no hay matriz que abrir. Se dice al guardar: un widget
+    que solo sabe explicarse en pantalla se publica y se descubre despues.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  fuera_del_pivote=["unidades_vendidas"]))
+    assert r.status_code == 422, r.text
+    assert "no queda ninguna que abrir" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_dejar_fuera_una_metrica_que_no_es_del_widget_se_rechaza(cliente, cab_admin,
+                                                                 modelo_dash):
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash, fuera_del_pivote=["monto_venta"]))
+    assert r.status_code == 422, r.text
+    assert "que no son metricas suyas" in " ".join(r.json()["detail"]["errores"])
 
 
 def test_la_tabla_dinamica_consulta_igual_que_las_demas(cliente, cab_admin,

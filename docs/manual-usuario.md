@@ -889,6 +889,35 @@ Tres cosas que conviene saber:
   combina —«meses de inventario» sale bien sin marcarla ella—. Una dimensión tampoco
   puede: de ahí no sale ninguna cifra. Las dos cosas se dicen al guardar.
 
+#### Una foto dentro de una tabla dinámica
+
+Una tabla dinámica repite cada métrica **debajo de cada columna**: si abres los meses,
+cada métrica sale una vez por mes. Para una foto eso no vale — el inventario de hoy no
+es «el inventario de enero» siete veces, y sumar la fila daría siete veces el
+inventario.
+
+Así que en el panel del widget hay **Fuera de las columnas**, con una casilla por
+métrica. La que marques sale en **su propia columna, una sola vez**, a la derecha del
+Total:
+
+```
+MODELO        Ene  Feb  Mar  …  Jul  TOTAL  Inventario Actual
+```
+
+Su cifra la calcula el motor **sin el mes**, en una consulta aparte. No se deduce
+sumando las celdas de los meses, y eso es a propósito: sólo el motor sabe si esa
+métrica se suma, se promedia o es una foto, y deducirlo aquí sería multiplicar por
+siete sin avisar. Una fila sin ventas en ningún mes sale con los meses en blanco y su
+inventario puesto, que es la verdad.
+
+Al menos una métrica tiene que quedarse dentro: sin ninguna no hay columnas que abrir,
+y se dice al guardar.
+
+Un aviso sobre el Excel: al exportar el widget baja la tabla **plana** —una fila por
+cada cruce— y ahí la foto aparece repetida en cada mes. Es el dato correcto fila a
+fila, pero **no sumes esa columna en Excel**: el total saldría multiplicado por el
+número de meses.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

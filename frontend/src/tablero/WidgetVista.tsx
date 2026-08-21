@@ -20,7 +20,7 @@ import { Th } from '../comunes/Th'
 import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
-import { claveCol, cruzar } from './pivote'
+import { claveCol, claveFila, cruzar } from './pivote'
 import {
   type EstiloColumna,
   estiloCabecera,
@@ -245,6 +245,7 @@ function WidgetDatos({
         <TablaDinamica
           widget={widget}
           datos={datos.data}
+          filasSueltas={datos.data.filas_sueltas}
           etiquetaDe={etiquetaDe}
           formatoDe={formatoDe}
           semDe={semDe}
@@ -405,6 +406,7 @@ function Kpi({
 function TablaDinamica({
   widget,
   datos,
+  filasSueltas,
   etiquetaDe,
   formatoDe,
   semDe,
@@ -412,6 +414,12 @@ function TablaDinamica({
 }: {
   widget: Widget
   datos: ResultadoConsulta
+  /**
+   * Las filas de la consulta SIN la dimensión de columnas, para las métricas que no
+   * se abren en meses. Vienen del motor y no de cruzar lo que ya bajó: ver
+   * `useFueraDelPivote`.
+   */
+  filasSueltas?: Record<string, unknown>[]
   etiquetaDe: (c: string) => string
   formatoDe: (m: string) => Formato
   semDe: (m: string) => Semaforo | undefined
@@ -435,8 +443,31 @@ function TablaDinamica({
     )
   }
 
-  const cruce = cruzar(datos.filas, dimsFila, pivote, metricas)
+  // Las que van una sola vez, a la derecha: una cifra que no es del mes no se repite
+  // debajo de cada mes. Sólo cuentan las que están pedidas —una que se quitó del
+  // widget no puede seguir gobernando una columna— y nunca todas: sin ninguna métrica
+  // en la matriz no hay matriz.
+  const aparte = ((widget.fuera_del_pivote as string[] | undefined) ?? [])
+    .filter((m) => metricas.includes(m))
+  const enMatriz = metricas.filter((m) => !aparte.includes(m))
+
+  if (enMatriz.length === 0) {
+    return (
+      <div className="vacio chico">
+        Todas las métricas están puestas fuera de las columnas, así que no queda
+        ninguna que abrir por «{etiquetaDe(pivote)}». Deja al menos una dentro.
+      </div>
+    )
+  }
+
+  const cruce = cruzar(datos.filas, dimsFila, pivote, enMatriz)
   const conTotal = widget.total_fila !== false
+
+  // Cada fila de la consulta sin el mes, por su clave de desglose, para poder casarla
+  // con la fila de la matriz.
+  const porFilaSuelta = new Map<string, Record<string, unknown>>()
+  for (const f of filasSueltas ?? [])
+    porFilaSuelta.set(claveFila(dimsFila.map((d) => f[d])), f)
 
   /** El total de una métrica a lo largo de una fila. */
   const totalFila = (fila: (typeof cruce.filas)[number], m: string) =>
@@ -452,8 +483,8 @@ function TablaDinamica({
       totalesDe(m),
     )
 
-  const hayTotales = metricas.some((m) => totalesDe(m) !== 'ninguno')
-  const varias = metricas.length > 1
+  const hayTotales = enMatriz.some((m) => totalesDe(m) !== 'ninguno')
+  const varias = enMatriz.length > 1
   // Aqui el formato va POR METRICA y no por columna: las columnas de la matriz las
   // pone el dato —un mes cada una— y no se pueden formatear de a una.
   const estilos = (widget.estilos as Record<string, EstiloColumna> | undefined) ?? {}
@@ -479,23 +510,32 @@ function TablaDinamica({
               </th>
             ))}
             {cruce.columnas.map((c) => (
-              <th key={claveCol(c)} colSpan={metricas.length} className="num grupo">
+              <th key={claveCol(c)} colSpan={enMatriz.length} className="num grupo">
                 {c === null || c === undefined ? '—' : String(c)}
               </th>
             ))}
             {conTotal && hayTotales && (
-              <th colSpan={metricas.length} rowSpan={varias ? 1 : 1}
+              <th colSpan={enMatriz.length} rowSpan={varias ? 1 : 1}
                   className="num grupo total">
                 Total
               </th>
             )}
+            {/* Las que van una sola vez. Con su propio nombre en la cabecera de
+                arriba: no pertenecen a ningún mes, y ponerlas debajo de uno sería
+                decir que sí. */}
+            {aparte.map((m) => (
+              <th key={`aparte|${m}`} rowSpan={varias ? 2 : 1} className="num grupo"
+                  style={estiloCabecera(estilos[m])} title={m}>
+                {etiquetaDe(m)}
+              </th>
+            ))}
           </tr>
           {/* Con una sola métrica no hace falta repetir su nombre en cada columna:
               ya está en el título del widget. */}
           {varias && (
             <tr>
               {cruce.columnas.map((c) =>
-                metricas.map((m) => (
+                enMatriz.map((m) => (
                   <th key={`${claveCol(c)}|${m}`} className="num sub"
                       style={estiloCabecera(estilos[m])}>
                     {etiquetaDe(m)}
@@ -504,7 +544,7 @@ function TablaDinamica({
               )}
               {conTotal &&
                 hayTotales &&
-                metricas.map((m) => (
+                enMatriz.map((m) => (
                   <th key={`total|${m}`} className="num sub total">
                     {etiquetaDe(m)}
                   </th>
@@ -522,7 +562,7 @@ function TablaDinamica({
                 </td>
               ))}
               {cruce.columnas.map((c) =>
-                metricas.map((m) => {
+                enMatriz.map((m) => {
                   const celda = f.celdas.get(claveCol(c))
                   const v = celda?.[m]
                   return (
@@ -545,7 +585,7 @@ function TablaDinamica({
               )}
               {conTotal &&
                 hayTotales &&
-                metricas.map((m) => {
+                enMatriz.map((m) => {
                   const t = totalFila(f, m)
                   return (
                     <td key={`total|${m}`} className="num total">
@@ -553,6 +593,27 @@ function TablaDinamica({
                     </td>
                   )
                 })}
+              {aparte.map((m) => {
+                const suelta = porFilaSuelta.get(claveFila(f.claves))
+                const v = suelta?.[m]
+                return (
+                  <td key={`aparte|${m}`} className="num"
+                      style={estiloCelda(estilos[m], {
+                        ultima: !hayTotales && i === cruce.filas.length - 1,
+                        conFilaDebajo: i < cruce.filas.length - 1,
+                      })}>
+                    {esNumero(v) ? (
+                      // El semáforo compara contra la fila de SU consulta, la que no
+                      // lleva mes: contra las celdas de los meses no significaría lo
+                      // mismo.
+                      <Cifra valor={v as number} formato={formatoDe(m)} sem={semDe(m)}
+                             fila={suelta} />
+                    ) : (
+                      ''
+                    )}
+                  </td>
+                )
+              })}
             </tr>
           ))}
         </tbody>
@@ -566,7 +627,7 @@ function TablaDinamica({
                 </td>
               ))}
               {cruce.columnas.map((c) =>
-                metricas.map((m) => {
+                enMatriz.map((m) => {
                   const t = totalColumna(c, m)
                   return (
                     <td key={`${claveCol(c)}|${m}`} className="num"
@@ -577,7 +638,7 @@ function TablaDinamica({
                 }),
               )}
               {conTotal &&
-                metricas.map((m) => {
+                enMatriz.map((m) => {
                   const t = totalizar(
                     cruce.filas.flatMap((f) =>
                       cruce.columnas.map((c) => f.celdas.get(claveCol(c))?.[m]),
@@ -590,6 +651,21 @@ function TablaDinamica({
                     </td>
                   )
                 })}
+              {/* El pie de las columnas de aparte. Sin esto la fila de totales
+                  quedaría corta y las columnas se desalinearían por la derecha. */}
+              {aparte.map((m) => {
+                const t = totalizar(
+                  cruce.filas.map(
+                    (f) => porFilaSuelta.get(claveFila(f.claves))?.[m]),
+                  totalesDe(m),
+                )
+                return (
+                  <td key={`aparte|${m}`} className="num"
+                      style={estiloTotal(estilos[m])}>
+                    {t === null ? '—' : formatear(t, formatoDe(m))}
+                  </td>
+                )
+              })}
             </tr>
           </tfoot>
         )}

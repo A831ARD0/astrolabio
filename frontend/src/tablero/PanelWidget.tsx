@@ -322,6 +322,53 @@ export function PanelWidget({
               Columna de total a la derecha
             </label>
           </div>
+
+          {/*
+            Una cifra que no es del mes no puede repetirse debajo de cada mes: el
+            inventario de hoy no es «el inventario de enero» siete veces, y sumar esa
+            fila daría siete veces el inventario. Marcada aquí, sale en su propia
+            columna a la derecha, una sola vez, y su cifra la calcula el motor sin el
+            mes — no se deduce de las celdas de los meses.
+          */}
+          {(widget.metricas?.length ?? 0) > 0 && (
+            <div className="campo">
+              <label>
+                Fuera de las columnas
+                <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 8 }}>
+                  sin marcar nada, cada métrica se abre en todos los meses
+                </span>
+              </label>
+              <div className="atajos">
+                {(widget.metricas ?? []).map((m) => {
+                  const puestas = (widget.fuera_del_pivote as string[] | undefined) ?? []
+                  const ultima = puestas.length === (widget.metricas ?? []).length - 1
+                    && !puestas.includes(m)
+                  return (
+                    <label key={m} className="chico" style={{ display: 'block' }}>
+                      <input
+                        type="checkbox"
+                        checked={puestas.includes(m)}
+                        // Dejar la matriz sin ninguna métrica no es una tabla
+                        // dinámica: no habría nada que abrir en columnas.
+                        disabled={ultima}
+                        title={ultima
+                          ? 'Al menos una métrica tiene que quedarse en las columnas'
+                          : undefined}
+                        onChange={(e) =>
+                          alCambiar({
+                            fuera_del_pivote: e.target.checked
+                              ? [...puestas, m]
+                              : puestas.filter((x) => x !== m),
+                          })
+                        }
+                      />{' '}
+                      {metricas.find((x) => x.clave === m)?.etiqueta ?? m}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -451,6 +498,12 @@ function Elegidas({
         cambios[mapa] = copia
       }
     }
+    // Y de la lista de las que van fuera de las columnas. Es una lista y no un mapa,
+    // pero el motivo es el mismo: si se queda, gobierna una columna que ya no existe
+    // y al volver a agregar la métrica sale fuera de la matriz sin que nadie lo pida.
+    const fuera = (widget.fuera_del_pivote as string[] | undefined) ?? []
+    if (fuera.includes(clave))
+      cambios.fuera_del_pivote = fuera.filter((m) => m !== clave)
     alCambiar(cambios as Partial<Widget>)
   }
 

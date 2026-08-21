@@ -92,6 +92,53 @@ function useAnchuraDelPivote(
   })
 }
 
+/**
+ * Las métricas que NO se abren en columnas, pedidas SIN la dimensión de columnas.
+ *
+ * Una tabla dinámica repite cada métrica debajo de cada columna, y para una cifra que
+ * no es del mes eso no vale: el inventario de hoy no es «el inventario de enero» siete
+ * veces, y sumar la fila daría siete veces el inventario. Va aparte, en su propia
+ * columna, una sola vez.
+ *
+ * Y va en **otra consulta**, no cruzando lo que ya bajó: la cifra sin el mes la tiene
+ * que calcular el motor, que es el único que sabe si esa métrica se suma, se promedia o
+ * es una foto. Deducirla en el navegador desde las celdas de los meses es adivinar, y
+ * adivinar aquí es multiplicar por siete sin avisar.
+ */
+function useFueraDelPivote(
+  modeloId: number,
+  version: number,
+  widget: Widget,
+  filtros: Filtro[],
+  rutasElegidas: Record<string, string>,
+  pivote: string | undefined,
+  limite: number,
+) {
+  const fuera = pivote
+    ? ((widget.fuera_del_pivote as string[] | undefined) ?? []).filter((m) =>
+        (widget.metricas ?? []).includes(m),
+      )
+    : []
+  const dimsFila = (widget.dimensiones ?? []).filter((d) => d !== pivote)
+  const cuerpo = {
+    dimensiones: dimsFila,
+    metricas: fuera,
+    filtros,
+    rutas_elegidas: rutasElegidas,
+    limite,
+  }
+  return useQuery({
+    queryKey: ['fuera-pivote', modeloId, version, cuerpo] as const,
+    queryFn: () =>
+      api.post<ResultadoConsulta>(
+        `/modelos/${modeloId}/consultar?version=${version}`,
+        cuerpo,
+      ),
+    enabled: fuera.length > 0 && dimsFila.length > 0,
+    retry: false,
+  })
+}
+
 export function useDatosWidget(
   modeloId: number,
   version: number,
@@ -117,6 +164,8 @@ export function useDatosWidget(
       : undefined
   const ancho = useAnchuraDelPivote(modeloId, version, widget, filtros, rutas, pivote)
   const columnas = ancho.data ? Math.max(1, ancho.data.filas.length) : 1
+  const sueltas = useFueraDelPivote(modeloId, version, widget, filtros, rutas,
+                                    pivote, limite)
 
   const cuerpo = {
     dimensiones: widget.dimensiones ?? [],
@@ -149,6 +198,10 @@ export function useDatosWidget(
     select: (d) => ({
       ...d,
       ancho_pivote: pivote ? columnas : undefined,
+      // Las filas de la consulta sin el mes, para las columnas que van una sola vez.
+      // `undefined` mientras no haya llegado: la tabla dibuja los meses y deja esas
+      // celdas en blanco un instante, en vez de esperar la matriz entera.
+      filas_sueltas: sueltas.data?.filas,
       // Si la dimensión de columnas no cabía en el tope, el cruce está incompleto
       // por la derecha aunque las filas hayan entrado enteras.
       truncado: d.truncado || (pivote ? !!ancho.data?.truncado : false),
