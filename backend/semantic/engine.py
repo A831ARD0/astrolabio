@@ -1752,18 +1752,27 @@ class MotorAsociativo:
         self.m = modelo
         self.con = con
 
-    def _valores(self, entidad: str, campo: str) -> list[Any]:
+    def _valores(self, entidad: str, campo: str,
+                 ordenar_por: str | None = None) -> list[Any]:
         """
         Los valores del campo, en el orden en que se van a leer.
 
-        Por su propio valor, salvo que el modelo diga por cual otro: «enero, febrero,
+        Por su propio valor, salvo que alguien diga por cual otro: «enero, febrero,
         marzo» no es el orden alfabetico, y un filtro de meses ordenado por su nombre
         empieza en abril. Se agrupa y se ordena por el MINIMO de esa otra columna
         —cada nombre de mes aparece en muchas filas— y el valor queda de desempate,
         para que el orden sea siempre el mismo aunque la otra columna repita.
+
+        `ordenar_por` lo manda quien pregunta —un panel de filtros de un tablero— y
+        gana sobre lo que diga el modelo: el orden es presentacion, y quien arma la
+        hoja tiene que poder decidirlo sin publicar una version del modelo para todos.
+        Tiene que ser una columna de ESTA entidad; cualquier otra cosa se ignora, que
+        es mas seguro que interpolarla en el SQL.
         """
         ent = self.m.entidades[entidad]
         por = ent.campos[campo].ordenar_por if campo in ent.campos else None
+        if ordenar_por:
+            por = ordenar_por if ordenar_por in ent.campos else por
         col = _cita(campo)
         if por:
             sql = (f"SELECT {col} FROM {_cita(ent.tabla)} WHERE {col} IS NOT NULL "
@@ -1816,9 +1825,10 @@ class MotorAsociativo:
         return alcanzables
 
     def estados(self, entidad: str, campo: str,
-                selecciones: dict[str, list[Any]]) -> dict[str, list[Any]]:
+                selecciones: dict[str, list[Any]],
+                ordenar_por: str | None = None) -> dict[str, list[Any]]:
         clave = f"{entidad}.{campo}"
-        todos = self._valores(entidad, campo)
+        todos = self._valores(entidad, campo, ordenar_por)
         propias = set(selecciones.get(clave) or [])
         alcanzables = self._alcanzables(entidad, campo, selecciones)
         universo = set(todos) if alcanzables is None else alcanzables

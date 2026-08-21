@@ -224,6 +224,12 @@ class PeticionAsociativa(BaseModel):
     entidad: str
     campo: str
     selecciones: dict[str, list] = {}
+    #: Por que otra columna de la MISMA entidad se ordenan los valores.
+    #:
+    #: Lo manda el panel de filtros de un tablero, y gana sobre lo que diga el
+    #: modelo: el orden de una lista es presentacion, y quien arma la hoja tiene
+    #: que poder cambiarlo sin publicar una version del modelo para todos.
+    ordenar_por: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -1393,7 +1399,7 @@ def asociativo(modelo_id: int, cuerpo: PeticionAsociativa, sesion: SesionDep,
     m = _cargar_semantico(v.yaml)
     try:
         return estados_asociativos(m, cuerpo.entidad, cuerpo.campo,
-                                   cuerpo.selecciones, ctx)
+                                   cuerpo.selecciones, ctx, cuerpo.ordenar_por)
     except ErrorModelo as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
     except PoliticaInvalida as e:

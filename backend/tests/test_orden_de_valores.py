@@ -116,3 +116,66 @@ def test_el_catalogo_dice_por_que_columna_se_ordena(cliente, cab_editor, modelo)
     # Y la que no se ordena por ninguna lo dice con un nulo, no omitiendo la clave:
     # la interfaz distingue «por su propio valor» de «no me lo dijeron».
     assert por_clave["dim_calendario.mes"]["ordenar_por"] is None
+
+
+# --------------------------------------------------------------------------- #
+# El orden desde el TABLERO. El del modelo es el de todos; este es el de una hoja.
+# Quien arma un informe tiene que poder ordenar una lista sin publicar una version
+# del modelo —que cambia el orden a los demas tableros— ni tener permiso para eso.
+# --------------------------------------------------------------------------- #
+
+def estados(cliente, cab, modelo_id: int, campo: str, ordenar_por=None) -> list:
+    cuerpo = {"entidad": "dim_calendario", "campo": campo, "selecciones": {}}
+    if ordenar_por is not None:
+        cuerpo["ordenar_por"] = ordenar_por
+    r = cliente.post(f"/api/modelos/{modelo_id}/asociativo", headers=cab, json=cuerpo)
+    assert r.status_code == 200, r.text
+    return r.json()["posible"]
+
+
+def test_el_tablero_puede_ordenar_sin_tocar_el_modelo(cliente, cab_editor, modelo):
+    """
+    Sin `ordenar_por` en el modelo, el nombre del mes sale alfabetico. Pidiendolo en
+    la consulta sale como va el año, y el modelo no se toca.
+    """
+    assert con_nombre_del_mes(cliente, cab_editor, modelo, None).status_code == 201
+
+    solos = estados(cliente, cab_editor, modelo, "mes_nombre")
+    assert solos == sorted(solos), "sin pedir nada, alfabetico"
+
+    puestos = estados(cliente, cab_editor, modelo, "mes_nombre",
+                      ordenar_por="mes")
+    assert puestos != solos
+    assert puestos[0] == "January", puestos[:3]
+    assert puestos[-1] == "December", puestos[-3:]
+
+
+def test_el_tablero_gana_sobre_el_modelo(cliente, cab_editor, modelo):
+    """
+    Dos ordenes distintos para la misma columna: manda el de quien pregunta. Es lo
+    que permite que una hoja ordene por antiguedad mientras las demas siguen como
+    estaban.
+    """
+    assert con_nombre_del_mes(cliente, cab_editor, modelo, "mes").status_code == 201
+
+    del_modelo = estados(cliente, cab_editor, modelo, "mes_nombre")
+    assert del_modelo[0] == "January"
+
+    # Pidiendo el orden por el propio nombre se vuelve alfabetico, para este widget.
+    del_tablero = estados(cliente, cab_editor, modelo, "mes_nombre",
+                          ordenar_por="mes_nombre")
+    assert del_tablero == sorted(del_tablero)
+
+
+def test_un_orden_que_no_es_de_esa_tabla_se_ignora(cliente, cab_editor, modelo):
+    """
+    No se interpola nada que no sea una columna de la entidad. Un nombre inventado
+    —o algo peor— cae de vuelta a lo que diga el modelo, sin reventar la pantalla de
+    quien solo queria un filtro.
+    """
+    assert con_nombre_del_mes(cliente, cab_editor, modelo, "mes").status_code == 201
+
+    bueno = estados(cliente, cab_editor, modelo, "mes_nombre")
+    for basura in ("no_existe", "sucursal_nombre", "1; DROP TABLE dim_calendario"):
+        assert estados(cliente, cab_editor, modelo, "mes_nombre",
+                       ordenar_por=basura) == bueno, basura

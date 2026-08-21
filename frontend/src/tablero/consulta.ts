@@ -177,8 +177,14 @@ export function useDatosWidget(
     widget.tipo === 'tabla_dinamica'
       ? ((widget.pivote as string | undefined) || undefined)
       : undefined
-  const ordenarPor = pivote ? (campos.data?.dimensiones
-    .find((d) => d.clave === pivote)?.ordenar_por ?? null) : null
+  // Lo que diga el widget primero, y el modelo como respaldo: el orden de las
+  // columnas es de la hoja, y quien la arma no tiene por qué publicar una versión
+  // del modelo —que se lo cambia a los demás tableros— para ver los meses en orden.
+  const ordenPor = (widget.orden_por as Record<string, string> | undefined) ?? {}
+  const ordenarPor = pivote
+    ? (ordenPor[pivote] ?? campos.data?.dimensiones
+        .find((d) => d.clave === pivote)?.ordenar_por ?? null)
+    : null
   const ancho = useAnchuraDelPivote(modeloId, version, widget, filtros, rutas,
                                     pivote, ordenarPor)
   // Los valores distintos de la columna de columnas, en el orden en que van. Con
@@ -268,15 +274,25 @@ export function useEstados(
    * diferencia entre cero consultas y seis por cada clic en cualquier otro filtro.
    */
   activo = true,
+  /**
+   * Por qué otra columna ordena ESTE widget la lista, si dijo alguna. Gana sobre lo
+   * que diga el modelo: el orden de una lista es presentación, y quien arma la hoja
+   * tiene que poder cambiarlo sin publicar una versión del modelo para todos.
+   */
+  ordenarPor?: string | null,
 ) {
   const [entidad, nombre] = (campo ?? '.').split('.')
   return useQuery({
-    queryKey: ['asociativo', modeloId, version, campo, selecciones] as const,
+    queryKey: ['asociativo', modeloId, version, campo, selecciones,
+               ordenarPor ?? null] as const,
     queryFn: () =>
       api.post<Estados>(`/modelos/${modeloId}/asociativo?version=${version}`, {
         entidad,
         campo: nombre,
         selecciones,
+        // Sólo el nombre pelado: el motor lo busca entre las columnas de esa
+        // entidad y no acepta nada de otra tabla.
+        ordenar_por: ordenarPor ? ordenarPor.split('.').pop() : null,
       }),
     enabled: activo && !!campo && !!entidad && !!nombre,
     retry: false,

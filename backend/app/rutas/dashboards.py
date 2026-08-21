@@ -271,6 +271,17 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
                         f"columnas a todas sus metricas, asi que no queda ninguna que "
                         f"abrir. Deja al menos una dentro.")
 
+        # Un orden que apunta a un desglose que el widget no tiene no ordena nada,
+        # y una lista mal ordenada no se distingue de una lista sin ordenar. Suele
+        # pasar al quitar el campo y dejar su ajuste detras.
+        orden_por = getattr(w, "orden_por", None)
+        if isinstance(orden_por, dict):
+            for campo in orden_por:
+                if campo not in w.dimensiones:
+                    errores.append(
+                        f"El widget '{w.titulo or w.id}' dice ordenar "
+                        f"'{campo}', que no es uno de sus desgloses.")
+
         # Un semaforo que compara contra una columna que no esta en el widget no
         # pinta nada, y no pintar es indistinguible de "va bien".
         semaforos = getattr(w, "semaforos", None)

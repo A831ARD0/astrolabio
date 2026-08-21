@@ -372,6 +372,61 @@ export function PanelWidget({
         </>
       )}
 
+      {/*
+        El «ordenar por columna» del modelo, decidido aquí. Va en el tablero porque
+        el orden de una lista es presentación: «Enero, Febrero, Marzo» no se lee de
+        otra forma en dos hojas distintas, y hasta ahora la única manera de arreglarlo
+        era publicar una versión del modelo —que se lo cambia a todos los tableros, y
+        que no todo el mundo puede hacer—. Lo que se ponga aquí gana sobre el modelo;
+        sin poner nada, manda el modelo.
+      */}
+      {(widget.tipo === 'filtro' || widget.tipo === 'tabla_dinamica') &&
+        (widget.dimensiones?.length ?? 0) > 0 && (
+          <div className="campo">
+            <label>
+              Ordenar los valores por
+              <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 8 }}>
+                sin elegir nada, como lo diga el modelo
+              </span>
+            </label>
+            {(widget.dimensiones ?? []).map((d) => {
+              const puesto = mapaDe<string>(widget, 'orden_por')
+              // Sólo columnas de la MISMA tabla: un orden que viniera de otra
+              // necesitaría una unión, y entonces el orden dependería de por dónde
+              // se une. Es la misma regla que en el modelo.
+              const entidad = d.split('.')[0]
+              const hermanas = dimensiones.filter(
+                (x) => x.entidad === entidad && x.clave !== d,
+              )
+              if (hermanas.length === 0) return null
+              return (
+                <div key={d} className="fila" style={{ alignItems: 'center', gap: 6 }}>
+                  <span className="chico" style={{ flex: 1, minWidth: 0 }}>
+                    {dimensiones.find((x) => x.clave === d)?.etiqueta ?? d}
+                  </span>
+                  <select
+                    style={{ flex: '0 0 150px' }}
+                    value={puesto[d] ?? ''}
+                    onChange={(e) => {
+                      const copia = { ...puesto }
+                      if (e.target.value) copia[d] = e.target.value
+                      else delete copia[d]
+                      alCambiar({ orden_por: copia })
+                    }}
+                  >
+                    <option value="">por su valor</option>
+                    {hermanas.map((x) => (
+                      <option key={x.clave} value={x.clave}>
+                        {x.etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
       {/* Con un solo desglose no hay orden que elegir. */}
       {!soloUna && widget.tipo !== 'texto' && (
         <Elegidas
@@ -490,7 +545,8 @@ function Elegidas({
     const cambios: Record<string, unknown> = {
       [campo]: claves.filter((c) => c !== clave),
     }
-    for (const mapa of ['etiquetas', 'formatos', 'totales_de', 'semaforos', 'estilos']) {
+    for (const mapa of ['etiquetas', 'formatos', 'totales_de', 'semaforos', 'estilos',
+                        'orden_por']) {
       const actual = mapaDe<unknown>(widget, mapa)
       if (clave in actual) {
         const copia = { ...actual }

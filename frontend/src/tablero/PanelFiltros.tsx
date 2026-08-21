@@ -37,6 +37,7 @@ function CampoAbierto({
   selecciones,
   alAlternar,
   alLimpiar,
+  ordenarPor,
 }: {
   campo: string
   etiqueta: string
@@ -45,8 +46,9 @@ function CampoAbierto({
   selecciones: Record<string, unknown[]>
   alAlternar: (campo: string, valor: unknown) => void
   alLimpiar: (campo: string) => void
+  ordenarPor?: string | null
 }) {
-  const estados = useEstados(modeloId, version, campo, selecciones)
+  const estados = useEstados(modeloId, version, campo, selecciones, true, ordenarPor)
   return (
     <FiltroCampo
       campo={campo}
@@ -71,6 +73,7 @@ function CampoCerrado({
   alCerrar,
   alAlternar,
   alLimpiar,
+  ordenarPor,
 }: {
   campo: string
   etiqueta: string
@@ -82,10 +85,12 @@ function CampoCerrado({
   alCerrar: () => void
   alAlternar: (campo: string, valor: unknown) => void
   alLimpiar: (campo: string) => void
+  ordenarPor?: string | null
 }) {
   // `activo`: los estados se piden solo cuando se abre. El resumen del botón sale
   // de las selecciones, que ya están aquí.
-  const estados = useEstados(modeloId, version, campo, selecciones, abierto)
+  const estados = useEstados(modeloId, version, campo, selecciones, abierto,
+                             ordenarPor)
   return (
     <FiltroColapsado
       campo={campo}
@@ -106,6 +111,7 @@ function CampoCerrado({
 export function PanelFiltros({
   campos,
   etiquetas,
+  ordenPor,
   modeloId,
   version,
   selecciones,
@@ -115,6 +121,12 @@ export function PanelFiltros({
   campos: string[]
   /** Los nombres que puso el widget, que pesan más que los del modelo. */
   etiquetas: Record<string, string>
+  /**
+   * Por qué columna ordena este widget cada lista, `{campo: campoDeOrden}`. Es el
+   * «ordenar por columna» del modelo, decidido en la hoja: el orden de un filtro es
+   * presentación, y cambiarlo no debería costar publicar una versión del modelo.
+   */
+  ordenPor?: Record<string, string>
   modeloId: number
   version: number
   selecciones: Record<string, unknown[]>
@@ -168,6 +180,7 @@ export function PanelFiltros({
             modeloId={modeloId}
             version={version}
             selecciones={selecciones}
+            ordenarPor={ordenPor?.[campo]}
             abierto={abierto === campo}
             alAbrir={() => setAbierto(campo)}
             alCerrar={() => setAbierto(null)}
@@ -182,6 +195,7 @@ export function PanelFiltros({
             modeloId={modeloId}
             version={version}
             selecciones={selecciones}
+            ordenarPor={ordenPor?.[campo]}
             alAlternar={alAlternar}
             alLimpiar={alLimpiar}
           />

@@ -913,11 +913,27 @@ inventario puesto, que es la verdad.
 Al menos una métrica tiene que quedarse dentro: sin ninguna no hay columnas que abrir,
 y se dice al guardar.
 
-**Las columnas se ordenan por `ordenar_por`.** Si abres en columnas el nombre del mes
-—texto— y el modelo dice que esa columna se ordena por el número del mes, las columnas
-salen *Enero, Febrero, Marzo* y no *abril, agosto, diciembre*. Es el mismo dato que ya
-ordenaba los filtros, aplicado a la matriz. Sin `ordenar_por` puesto, una columna de
-texto sale alfabética y la pantalla lo avisa.
+**Las columnas se ordenan por otra columna.** Si abres en columnas el nombre del mes
+—texto— ordenado por sí mismo sale *abril, agosto, diciembre*: no es un orden, es un
+error que lo parece. Se arregla diciendo por qué otra columna va, y eso se puede decir
+en **dos sitios**:
+
+- En el **modelo**, en el inspector de la entidad: la última columna de la tabla de
+  campos. Vale para todos los tableros, y hace falta publicar una versión.
+- En el **tablero**, en el panel del widget: **Ordenar los valores por**, con un
+  desplegable por cada desglose. Vale sólo para ese widget y no toca el modelo.
+
+Lo del widget gana sobre lo del modelo. Están los dos a propósito: el orden de una
+lista es presentación, y quien arma una hoja tiene que poder cambiarlo sin publicar una
+versión del modelo —que se lo cambia a los demás tableros, y que no todo el mundo
+puede hacer—. Cuando el orden es una propiedad del dato («los meses van así»), va en el
+modelo y no se repite widget a widget.
+
+Sólo se ofrecen columnas de la **misma tabla**: un orden que viniera de otra necesitaría
+una unión, y entonces el orden dependería de por dónde se une.
+
+El mismo control ordena la lista de un **panel de filtros**, que es donde más se nota:
+un desplegable de meses que empieza en abril es inservible.
 
 Con esto, una matriz de meses con dos o tres columnas de cálculo al lado ya sale sin
 ningún truco. En Power BI lo mismo pide una tabla desconectada de encabezados, con una

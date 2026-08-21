@@ -581,6 +581,36 @@ def test_dejar_fuera_una_metrica_que_no_es_del_widget_se_rechaza(cliente, cab_ad
     assert "que no son metricas suyas" in " ".join(r.json()["detail"]["errores"])
 
 
+def test_el_widget_puede_decir_por_donde_ordena(cliente, cab_admin, modelo_dash):
+    """
+    El orden de una lista es presentacion, y se decide en la hoja: cambiarlo no
+    deberia costar publicar una version del modelo, que se lo cambia a todos los
+    tableros. Se guarda en el widget y sobrevive el viaje.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  orden_por={"dim_calendario.mes":
+                                             "dim_calendario.anio_mes"}))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "p1")
+    assert w["orden_por"] == {"dim_calendario.mes": "dim_calendario.anio_mes"}
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_ordenar_un_desglose_que_el_widget_no_tiene_se_rechaza(cliente, cab_admin,
+                                                               modelo_dash):
+    """
+    Suele quedar al quitar el campo y dejar su ajuste detras. No ordena nada, y una
+    lista mal ordenada no se distingue de una sin ordenar.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  orden_por={"cat_marca.marca_nombre":
+                                             "cat_marca.marca_id"}))
+    assert r.status_code == 422, r.text
+    assert "no es uno de sus desgloses" in " ".join(r.json()["detail"]["errores"])
+
+
 def test_la_tabla_dinamica_consulta_igual_que_las_demas(cliente, cab_admin,
                                                         modelo_dash):
     """

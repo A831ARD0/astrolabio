@@ -335,8 +335,8 @@ def comprobar_grano(modelo: Modelo, entidad: str) -> dict:
 
 
 def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
-                        selecciones: dict[str, list], ctx: ContextoUsuario
-                        ) -> dict[str, list]:
+                        selecciones: dict[str, list], ctx: ContextoUsuario,
+                        ordenar_por: str | None = None) -> dict[str, list]:
     """
     Estados asociativos. Tambien pasa por la capa de politicas: si un usuario no
     puede ver una sucursal, esa sucursal no debe aparecer ni como 'excluida' en
@@ -347,7 +347,7 @@ def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
     predicados = capa.resolver(ctx)
 
     motor = MotorAsociativo(modelo, conexion())
-    estados = motor.estados(entidad, campo, selecciones)
+    estados = motor.estados(entidad, campo, selecciones, ordenar_por)
 
     if predicados:
         visibles = _valores_visibles(modelo, entidad, campo, predicados)
