@@ -282,6 +282,17 @@ def _revisar_widgets(definicion: DefinicionDashboard) -> None:
                         f"El widget '{w.titulo or w.id}' dice ordenar "
                         f"'{campo}', que no es uno de sus desgloses.")
 
+        # Quedarse al margen de la seleccion de un campo que el widget no tiene no
+        # deja nada al margen: el widget se filtra igual y quien lo configuro cree
+        # que no. Suele quedar al cambiar el desglose.
+        inmunes = getattr(w, "ignora_seleccion", None)
+        if isinstance(inmunes, list):
+            for campo in inmunes:
+                if campo not in w.dimensiones:
+                    errores.append(
+                        f"El widget '{w.titulo or w.id}' dice no hacer caso a la "
+                        f"seleccion de '{campo}', que no es uno de sus desgloses.")
+
         # Un semaforo que compara contra una columna que no esta en el widget no
         # pinta nada, y no pintar es indistinguible de "va bien".
         semaforos = getattr(w, "semaforos", None)

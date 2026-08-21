@@ -847,3 +847,32 @@ def test_el_limite_exacto_no_se_confunde_con_un_recorte(cliente, cab_admin,
     justo = _consultar(cliente, cab_admin, modelo_dash, limite=n)
     assert len(justo["filas"]) == n
     assert justo["truncado"] is False, "caben justas: no se corto nada"
+
+
+def test_un_widget_puede_quedarse_al_margen_de_una_seleccion(cliente, cab_admin,
+                                                             modelo_dash):
+    """
+    Cuando la columna es el EJE, la seleccion no la puede recortar: una matriz de
+    meses tiene que seguir mostrando los doce aunque alguien elija julio. Se guarda
+    en el widget y sobrevive el viaje.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  ignora_seleccion=["dim_calendario.mes"]))
+    assert r.status_code == 201, r.text
+    w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "p1")
+    assert w["ignora_seleccion"] == ["dim_calendario.mes"]
+    cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)
+
+
+def test_quedarse_al_margen_de_un_campo_que_no_tiene_se_rechaza(cliente, cab_admin,
+                                                                modelo_dash):
+    """
+    No deja nada al margen —el widget se filtra igual— y quien lo configuro cree que
+    no. Es la clase de ajuste que se queda detras al cambiar el desglose.
+    """
+    r = cliente.post("/api/dashboards", headers=cab_admin,
+                     json=_pivote(modelo_dash,
+                                  ignora_seleccion=["cat_marca.marca_nombre"]))
+    assert r.status_code == 422, r.text
+    assert "no es uno de sus desgloses" in " ".join(r.json()["detail"]["errores"])

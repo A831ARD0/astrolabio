@@ -560,6 +560,9 @@ function Elegidas({
     const fuera = (widget.fuera_del_pivote as string[] | undefined) ?? []
     if (fuera.includes(clave))
       cambios.fuera_del_pivote = fuera.filter((m) => m !== clave)
+    const inmunes = (widget.ignora_seleccion as string[] | undefined) ?? []
+    if (inmunes.includes(clave))
+      cambios.ignora_seleccion = inmunes.filter((c) => c !== clave)
     alCambiar(cambios as Partial<Widget>)
   }
 

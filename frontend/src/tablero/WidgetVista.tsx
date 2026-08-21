@@ -185,6 +185,15 @@ function WidgetDatos({
     )
   }
   if (!datos.data) {
+    // Si lo que falló es una consulta de apoyo de la dinámica, la principal ni se
+    // lanzó: decirle a alguien que elija una métrica cuando ya eligió cuatro le
+    // manda a buscar donde no está.
+    if (datos.errorAyuda)
+      return (
+        <div className="error-caja chico" style={{ margin: 8 }}>
+          {datos.errorAyuda}
+        </div>
+      )
     return <div className="vacio chico">Elige una métrica para este widget.</div>
   }
   if (datos.data.filas.length === 0) {
@@ -201,6 +210,14 @@ function WidgetDatos({
   // Un recorte se avisa SIEMPRE y encima del dato, no en un pie ni en un tooltip.
   // Lo que hay debajo es una cifra parcial con toda la pinta de estar completa, y
   // es la clase de número que acaba en una junta.
+  // Con datos, la matriz se dibuja igual y el fallo va encima: las columnas de fuera
+  // salen en blanco y en blanco no se distingue de «no hay dato».
+  const avisoAyuda = datos.errorAyuda ? (
+    <div className="error-caja chico" style={{ margin: '4px 8px' }}>
+      {datos.errorAyuda}
+    </div>
+  ) : null
+
   const aviso = datos.data.truncado ? (
     <Recortado widget={widget} datos={datos.data} />
   ) : datos.data.mes_usado != null ? (
@@ -212,11 +229,31 @@ function WidgetDatos({
       Comparado contra <strong>{String(datos.data.mes_usado)}</strong>
     </div>
   ) : null
+  // Un widget que se queda al margen de una selección tiene que DECIRLO, y sólo
+  // cuando esa selección está puesta. Alguien elige julio, esta tabla no cambia, y
+  // sin este renglón la lectura es «está roto» — o peor, se firma una cifra sin
+  // filtrar creyéndola filtrada.
+  const alMargen = ((widget.ignora_seleccion as string[] | undefined) ?? [])
+    .filter((c) => (selecciones[c]?.length ?? 0) > 0)
+  const avisoMargen = alMargen.length > 0 ? (
+    <div className="mes-usado" role="status">
+      No le afecta la selección de{' '}
+      <strong>{alMargen.map(etiquetaDe).join(', ')}</strong>
+    </div>
+  ) : null
+
+  const encabezado = (avisoAyuda || avisoMargen || aviso) ? (
+    <>
+      {avisoAyuda}
+      {avisoMargen}
+      {aviso}
+    </>
+  ) : null
 
   if (widget.tipo === 'kpi') {
     return (
       <>
-        {aviso}
+        {encabezado}
         <Kpi widget={widget} datos={datos.data} formatoDe={formatoDe}
              etiquetaDe={etiquetaDe} semDe={semDe} />
       </>
@@ -225,7 +262,7 @@ function WidgetDatos({
   if (widget.tipo === 'tabla') {
     return (
       <>
-        {aviso}
+        {encabezado}
         <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
                metricas={widget.metricas} semDe={semDe}
                // Aparte del semáforo: uno dice algo del dato y cambia por fila, esto
@@ -242,7 +279,7 @@ function WidgetDatos({
   if (widget.tipo === 'tabla_dinamica') {
     return (
       <>
-        {aviso}
+        {encabezado}
         <TablaDinamica
           widget={widget}
           datos={datos.data}
@@ -261,7 +298,7 @@ function WidgetDatos({
   if (TIPOS_GRAFICO.includes(widget.tipo)) {
     return (
       <>
-        {aviso}
+        {encabezado}
         <Grafico
           widget={widget}
           datos={datos.data}

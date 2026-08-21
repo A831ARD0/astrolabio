@@ -167,7 +167,22 @@ export function useDatosWidget(
   rutasTablero: Record<string, string> = {},
 ) {
   const campos = useCampos(modeloId, version)
-  const filtros = [...filtrosDeSelecciones(selecciones), ...(widget.filtros ?? [])]
+  /**
+   * Campos cuya selección de la hoja NO se aplica a este widget.
+   *
+   * Hace falta cuando la columna es el EJE de la tabla: una matriz de meses tiene
+   * que seguir mostrando los doce aunque alguien seleccione julio, porque los meses
+   * son el dibujo y no el recorte. En Power BI eso se consigue con una tabla de
+   * encabezados desconectada —a la que el segmentador no llega—; aquí se dice.
+   *
+   * Se aplica sólo a las selecciones de la hoja, no a los filtros propios del
+   * widget: ésos los escribió quien armó el widget, para este widget.
+   */
+  const inmunes = (widget.ignora_seleccion as string[] | undefined) ?? []
+  const filtros = [
+    ...filtrosDeSelecciones(selecciones).filter((f) => !inmunes.includes(f.campo)),
+    ...(widget.filtros ?? []),
+  ]
   const rutas = { ...rutasTablero, ...(widget.rutas_elegidas ?? {}) }
   const limite = widget.limite ?? 1000
 
@@ -228,7 +243,7 @@ export function useDatosWidget(
     limite: pivote ? Math.min(limite * columnas, TOPE_MOTOR) : limite,
   }
 
-  return useQuery({
+  const consulta = useQuery({
     // La clave incluye el cuerpo entero: dos widgets que piden lo mismo comparten
     // una sola consulta, y cambiar una selección invalida solo lo que cambió.
     queryKey: ['consulta', modeloId, version, cuerpo] as const,
@@ -261,6 +276,18 @@ export function useDatosWidget(
       truncado: d.truncado || (pivote ? !!ancho.data?.truncado : false),
     }),
   })
+
+  /**
+   * Lo que falló en una de las consultas de apoyo de la dinámica.
+   *
+   * Las dos pueden fallar sin que la principal se entere, y entonces no se ve un
+   * error: se ven columnas en blanco —o el widget entero pidiendo una métrica que
+   * ya eligió—. Una métrica borrada del modelo que el widget sigue nombrando deja
+   * las TRES columnas de fuera vacías, porque viajan juntas en una consulta. Eso
+   * hay que decirlo: en blanco es indistinguible de «no hay dato».
+   */
+  const errorAyuda = ((ancho.error ?? sueltas.error) as Error | null)?.message ?? null
+  return Object.assign(consulta, { errorAyuda })
 }
 
 export function useEstados(

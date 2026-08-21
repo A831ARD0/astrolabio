@@ -935,6 +935,32 @@ una unión, y entonces el orden dependería de por dónde se une.
 El mismo control ordena la lista de un **panel de filtros**, que es donde más se nota:
 un desplegable de meses que empieza en abril es inservible.
 
+#### Cuando la columna es el eje y la selección no debe recortarla
+
+Selecciona julio en el panel de filtros y una matriz de meses se queda con una sola
+columna. A veces es lo que se quiere; en una tabla «mes a mes» no lo es: los meses son
+el **dibujo**, no el recorte, y la tabla tiene que seguir mostrando los doce mientras
+las demás cifras de la hoja sí se recortan.
+
+Para eso, en el panel del widget:
+
+```
+No le afecta la selección de
+  ☑ MES
+  ☐ Sucursal
+```
+
+Se saltan sólo las **selecciones de la hoja**, no los filtros propios del widget: ésos
+los escribió quien armó el widget, para este widget.
+
+Y cuando esa selección está puesta, el widget **lo dice** encima de la tabla —«No le
+afecta la selección de MES»—. Sin ese renglón, alguien elige julio, esta tabla no
+cambia, y la lectura es «está roto»; o peor, se firma una cifra sin filtrar creyéndola
+filtrada.
+
+Es lo que en Power BI se consigue con una tabla de encabezados desconectada, a la que
+el segmentador no llega.
+
 Con esto, una matriz de meses con dos o tres columnas de cálculo al lado ya sale sin
 ningún truco. En Power BI lo mismo pide una tabla desconectada de encabezados, con una
 columna de orden y una medida con `SWITCH` — porque allí no se pueden poner columnas
