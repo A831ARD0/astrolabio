@@ -876,3 +876,19 @@ def test_quedarse_al_margen_de_un_campo_que_no_tiene_se_rechaza(cliente, cab_adm
                                   ignora_seleccion=["cat_marca.marca_nombre"]))
     assert r.status_code == 422, r.text
     assert "no es uno de sus desgloses" in " ".join(r.json()["detail"]["errores"])
+
+
+def test_se_puede_pedir_que_no_salgan_las_filas_sin_datos(cliente, cab_admin,
+                                                          modelo_dash):
+    """
+    Dos criterios y no uno: vacio y cero son distintos. Un renglon sin una sola cifra
+    es ruido; «vendio cero» es un dato, y a veces el que importa. Se guarda cual de
+    los dos y sobrevive el viaje.
+    """
+    for criterio in ("sin_dato", "sin_dato_ni_cero"):
+        r = cliente.post("/api/dashboards", headers=cab_admin,
+                         json=_pivote(modelo_dash, filas_vacias=criterio))
+        assert r.status_code == 201, r.text
+        w = next(x for x in r.json()["definicion"]["widgets"] if x["id"] == "p1")
+        assert w["filas_vacias"] == criterio
+        cliente.delete(f"/api/dashboards/{r.json()['id']}", headers=cab_admin)

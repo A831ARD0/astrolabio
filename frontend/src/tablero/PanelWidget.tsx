@@ -444,6 +444,83 @@ export function PanelWidget({
         />
       )}
 
+      {/*
+        Esconder los renglones que no dicen nada. Dos criterios y no uno porque vacío
+        y cero son distintos: un renglón sin una sola cifra es ruido, pero «vendió
+        cero» es un dato, y a veces el que importa.
+
+        Se filtra antes de los totales, así que el pie es de lo que se ve. Y se filtra
+        sobre lo que ya bajó: con un máximo de filas alcanzado, esconder las vacías no
+        trae las que faltaban.
+      */}
+      {(widget.tipo === 'tabla' || widget.tipo === 'tabla_dinamica') && (
+        <div className="campo">
+          <label>Filas sin datos</label>
+          <select
+            value={String(widget.filas_vacias ?? 'mostrar')}
+            onChange={(e) =>
+              alCambiar({
+                filas_vacias:
+                  e.target.value === 'mostrar' ? undefined : e.target.value,
+              })
+            }
+          >
+            <option value="mostrar">mostrarlas todas</option>
+            <option value="sin_dato">ocultar las que no tienen ni una cifra</option>
+            <option value="sin_dato_ni_cero">
+              ocultar también las que están en cero
+            </option>
+          </select>
+          <span className="chico tenue">
+            En una dinámica se juzga la fila entera: sus meses y las columnas de fuera.
+            Una familia sin ventas pero con inventario sí dice algo.
+          </span>
+        </div>
+      )}
+
+      {/*
+        Un widget puede quedarse al margen de una selección de la hoja. Hace falta
+        cuando la columna es el EJE: una matriz de meses tiene que seguir mostrando
+        los doce aunque alguien seleccione julio, porque los meses son el dibujo y no
+        el recorte. En Power BI eso se consigue con una tabla de encabezados
+        desconectada, a la que el segmentador no llega.
+
+        Sólo las selecciones de la hoja, no los filtros propios del widget: ésos los
+        escribió quien armó el widget, para este widget.
+      */}
+      {widget.tipo !== 'filtro' && widget.tipo !== 'texto' &&
+        (widget.dimensiones?.length ?? 0) > 0 && (
+          <div className="campo">
+            <label>
+              No le afecta la selección de
+              <span className="chico tenue" style={{ fontWeight: 400, marginLeft: 8 }}>
+                sin marcar nada, se filtra como todo lo demás
+              </span>
+            </label>
+            <div className="atajos">
+              {(widget.dimensiones ?? []).map((d) => {
+                const puestas = (widget.ignora_seleccion as string[] | undefined) ?? []
+                return (
+                  <label key={d} className="chico" style={{ display: 'block' }}>
+                    <input
+                      type="checkbox"
+                      checked={puestas.includes(d)}
+                      onChange={(e) =>
+                        alCambiar({
+                          ignora_seleccion: e.target.checked
+                            ? [...puestas, d]
+                            : puestas.filter((x) => x !== d),
+                        })
+                      }
+                    />{' '}
+                    {dimensiones.find((x) => x.clave === d)?.etiqueta ?? d}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
       <Seleccionables
         clave="dimensiones"
         titulo={

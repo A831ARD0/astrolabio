@@ -941,6 +941,32 @@ una unión, y entonces el orden dependería de por dónde se une.
 El mismo control ordena la lista de un **panel de filtros**, que es donde más se nota:
 un desplegable de meses que empieza en abril es inservible.
 
+#### Esconder las filas que no dicen nada
+
+En el panel del widget, para una tabla y una dinámica:
+
+```
+Filas sin datos
+  ( mostrarlas todas                            )
+  ( ocultar las que no tienen ni una cifra      )
+  ( ocultar también las que están en cero       )
+```
+
+**Son dos criterios y no uno porque vacío y cero son distintos.** Un renglón sin una
+sola cifra es ruido; «vendió cero» es un dato, y a veces es el que importa. Se elige en
+vez de decidirlo por ti.
+
+En una dinámica se juzga la fila **entera**: sus celdas de todos los meses *y* las
+columnas de fuera. Una familia sin ventas pero con inventario sí dice algo, y no se
+esconde.
+
+Se filtra antes de los totales, así que el pie es de lo que se ve. Con «ocultar también
+los ceros», ojo si algún total es un promedio: quitar filas en cero cambia el promedio,
+igual que quitarlas a mano lo cambiaría.
+
+Y se filtra sobre lo que ya bajó: si el widget tiene un máximo de filas y se alcanzó,
+esconder las vacías no trae las que faltaban.
+
 #### Cuando la columna es el eje y la selección no debe recortarla
 
 Selecciona julio en el panel de filtros y una matriz de meses se queda con una sola

@@ -20,7 +20,8 @@ import { Th } from '../comunes/Th'
 import type { ResultadoConsulta, Widget } from '../api/tipos'
 import { Grafico } from './Grafico'
 import { PanelFiltros } from './PanelFiltros'
-import { claveCol, claveFila, cruzar } from './pivote'
+import type { FilasVacias } from './pivote'
+import { claveCol, claveFila, cruzar, filaVacia } from './pivote'
 import {
   type EstiloColumna,
   estiloCabecera,
@@ -265,6 +266,7 @@ function WidgetDatos({
         {encabezado}
         <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
                metricas={widget.metricas} semDe={semDe}
+               filasVacias={widget.filas_vacias as FilasVacias | undefined}
                // Aparte del semáforo: uno dice algo del dato y cambia por fila, esto
                // es del informe y es igual en todas. Ver `estiloColumna.ts`.
                estilos={
@@ -515,6 +517,22 @@ function TablaDinamica({
   for (const f of filasSueltas ?? [])
     porFilaSuelta.set(claveFila(dimsFila.map((d) => f[d])), f)
 
+  // Las filas que no dicen nada se van ANTES de los totales, para que el pie sea de
+  // lo que se ve y no de lo que se pidió. Se juzga la fila COMPLETA: sus celdas de
+  // todos los meses y también las columnas de fuera, porque una familia sin ventas
+  // pero con inventario sí dice algo.
+  const criterio = (widget.filas_vacias as FilasVacias | undefined) ?? 'mostrar'
+  if (criterio !== 'mostrar')
+    cruce.filas = cruce.filas.filter((f) => {
+      const suelta = porFilaSuelta.get(claveFila(f.claves))
+      const valores = [
+        ...cruce.columnas.flatMap((c) =>
+          enMatriz.map((m) => f.celdas.get(claveCol(c))?.[m])),
+        ...aparte.map((m) => suelta?.[m]),
+      ]
+      return !filaVacia(valores, criterio)
+    })
+
   /** El total de una métrica a lo largo de una fila. */
   const totalFila = (fila: (typeof cruce.filas)[number], m: string) =>
     totalizar(
@@ -728,6 +746,7 @@ function Tabla({
   semDe,
   totalesDe,
   estilos,
+  filasVacias,
 }: {
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
@@ -737,12 +756,18 @@ function Tabla({
   totalesDe: (m: string) => Total
   /** El formato de cada columna: negrita, alineación, colores y marco. */
   estilos: Record<string, EstiloColumna>
+  /** Si se esconden las filas que no dicen nada. Ver `filaVacia`. */
+  filasVacias?: FilasVacias
 }) {
-  const orden = useOrden(datos.filas, (f, c) => f[c])
+  // Se filtra antes de ordenar y de totalizar, para que el pie sea de lo que se ve.
+  const visibles = (filasVacias && filasVacias !== 'mostrar')
+    ? datos.filas.filter((f) => !filaVacia(metricas.map((m) => f[m]), filasVacias))
+    : datos.filas
+  const orden = useOrden(visibles, (f, c) => f[c])
 
   // El total es de las filas que se trajeron, no del universo: si el widget tiene
   // un máximo de filas y se alcanzó, esto suma esas. Se dice en el pie.
-  const totales = metricas.map((m) => totalizar(datos.filas.map((f) => f[m]),
+  const totales = metricas.map((m) => totalizar(visibles.map((f) => f[m]),
                                                 totalesDe(m)))
   const hayTotales = totales.some((t) => t !== null)
 
