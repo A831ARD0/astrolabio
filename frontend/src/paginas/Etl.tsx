@@ -595,7 +595,38 @@ export function Etl() {
                         ? 'todas'
                         : 'datos'}
                   </span>
-                  {i === 0 && <span className="etiqueta dim">principal</span>}
+                  {i === 0 ? (
+                    <span className="etiqueta dim">principal</span>
+                  ) : (
+                    /*
+                      El principal es el del FROM: los pasos se aplican SOBRE él y los
+                      demás orígenes sólo se le unen. Cambiarlo es la diferencia entre
+                      «las conexiones, y de paso su sucursal» y «las sucursales, y de
+                      paso su conexión» — que con una unión por la izquierda son dos
+                      listas distintas.
+
+                      Sin esto había que borrar los dos y volver a agregarlos en el
+                      otro orden, y con ellos se iban los pasos.
+                    */
+                    <button
+                      className="chico"
+                      title={
+                        'Hacerlo el principal: los pasos se aplicarán sobre esta ' +
+                        'tabla. Ojo, seguirán apuntando a las columnas que tenían.'
+                      }
+                      onClick={() =>
+                        setD({
+                          ...d,
+                          origenes: [
+                            o,
+                            ...d.origenes.filter((x) => x.nombre !== o.nombre),
+                          ],
+                        })
+                      }
+                    >
+                      hacer principal
+                    </button>
+                  )}
                   <button
                     onClick={() =>
                       setD({

@@ -547,6 +547,24 @@ maestro trae las cuarenta sucursales y después llama al proyecto que las transf
 En la pantalla de *Flujos*, los proyectos salen en su propia lista y solo se pueden
 encadenar — editarlos se hace aquí, donde sus pasos son secciones.
 
+### El origen principal, y por qué importa cuál es
+
+El primer origen lleva la etiqueta **principal**: es el del `FROM`. Los pasos se aplican
+**sobre él**, y los demás orígenes sólo se le unen. Los demás traen un botón **hacer
+principal** que lo cambia de sitio.
+
+No es una preferencia de orden: cambia la lista. «Las conexiones, y de paso su sucursal»
+y «las sucursales, y de paso su conexión» son dos cosas distintas en cuanto la unión es
+**por la izquierda** — la primera pierde las sucursales sin conexión, y la segunda no.
+
+Es el caso de un catálogo de sucursales: si arrancas de la tabla de conexiones, una
+sucursal que todavía no tiene ambiente operativo no puede aparecer, porque no está ahí.
+Arrancando del catálogo, aparece con sus columnas de conexión vacías — que es la verdad.
+
+Al cambiar el principal, **los pasos siguen apuntando a las columnas que tenían**. Un
+filtro sobre una columna que sólo existía en el origen anterior deja de tener sentido, y
+la vista previa lo dice. Revisa los pasos después de cambiarlo.
+
 ### Qué es cada grupo de orígenes
 
 No son cuatro vistas de lo mismo: de cada grupo sale un origen distinto, y eso cambia
