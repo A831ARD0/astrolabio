@@ -360,17 +360,23 @@ def _compilar_sql(t: Transformacion, resolver: dict[str, str]) -> Compilada:
     # culpa a la tabla y no dice lo unico util: que falta agregarla como origen.
     alias = {o.nombre for o in t.origenes}
     propias = {c.alias_or_name for c in arbol.find_all(exp.CTE)}
-    faltan = sorted(
+    # Un conjunto: una tabla nombrada tres veces —dos alias del mismo catálogo, o
+    # tres subconsultas— es UNA que falta, y repetirla tres veces en el aviso lo hace
+    # parecer roto justo cuando alguien está leyéndolo para arreglar algo.
+    faltan = sorted({
         n.name for n in arbol.find_all(exp.Table)
         if n.name and n.name not in alias and n.name not in propias
-    )
+    })
     if faltan:
         disponibles = ", ".join(sorted(alias)) or "ninguno"
+        cuales = ", ".join(repr(f) for f in faltan)
         raise ErrorTransformacion(
-            f"La consulta lee de {', '.join(repr(f) for f in faltan)}, que no está "
-            f"entre los orígenes de esta transformación. Agrégalo desde «Orígenes "
-            f"disponibles», a la izquierda, y volverá a funcionar. "
-            f"Orígenes de esta transformación: {disponibles}.")
+            f"La consulta lee de {cuales}, que no "
+            + ("están" if len(faltan) > 1 else "está")
+            + " entre los orígenes de esta transformación. "
+            + ("Agrégalas" if len(faltan) > 1 else "Agrégalo")
+            + " desde «Orígenes disponibles», a la izquierda, y volverá a "
+              f"funcionar. Orígenes de esta transformación: {disponibles}.")
 
     cuerpo = arbol.sql(dialect=DIALECTO, pretty=True)
     # Sin origenes no hay CTE que anteponer, y un `WITH` vacio no es SQL. Pasa

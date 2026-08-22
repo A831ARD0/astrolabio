@@ -653,3 +653,25 @@ def test_en_modo_sql_una_tabla_sin_origen_da_un_error_util(cliente, cab_admin):
     assert "cat_zonas" in detalle
     assert "no está entre los orígenes" in detalle
     assert "Orígenes de esta transformación: v" in detalle
+
+
+def test_una_tabla_nombrada_varias_veces_se_nombra_una_vez_en_el_aviso(cliente,
+                                                                      cab_admin):
+    """
+    Unir el mismo catálogo dos veces por columnas distintas —para averiguar por qué
+    identificador pairea un hecho— es una tabla que falta, no dos. Repetirla en el
+    aviso lo hace parecer roto justo cuando alguien lo está leyendo para arreglar algo.
+    """
+    r = cliente.post("/api/transformaciones/previsualizar", headers=cab_admin,
+                     json={
+        "definicion": {
+            "nombre": "sql_repetida",
+            "origenes": [{"nombre": "v", "tipo": "tabla", "referencia": "fact_venta"}],
+            "pasos": [],
+            "sql": ("SELECT COUNT(*) FROM v "
+                    "LEFT JOIN cat_zonas AS a ON v.sucursal_id = a.sucursal_id "
+                    "LEFT JOIN cat_zonas AS b ON v.sucursal_id = b.zona_id"),
+        }})
+    assert r.status_code == 422, r.text
+    detalle = str(r.json()["detail"])
+    assert detalle.count("cat_zonas") == 1, detalle
