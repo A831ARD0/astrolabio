@@ -455,6 +455,29 @@ export function PanelWidget({
       */}
       {(widget.tipo === 'tabla' || widget.tipo === 'tabla_dinamica') && (
         <div className="campo">
+          <div className="fila" style={{ alignItems: 'center', gap: 8 }}>
+            <label style={{ flex: 1 }}>Alto de las filas</label>
+            {/*
+              Del widget y no de la columna: una columna no tiene alto propio, el alto
+              lo comparten todas las filas. Con un alto puesto manda él y no el
+              relleno — si el relleno siguiera mandando, bajar el número no compactaría
+              nada.
+            */}
+            <input
+              type="number"
+              min={14}
+              max={120}
+              step={2}
+              style={{ flex: '0 0 80px' }}
+              placeholder="automático"
+              title="Alto de cada fila en píxeles. Vacío: el de siempre"
+              value={String(widget.alto_fila ?? '')}
+              onChange={(e) =>
+                alCambiar({ alto_fila: e.target.value ? Number(e.target.value) : undefined })
+              }
+            />
+          </div>
+
           <label>Filas sin datos</label>
           <select
             value={String(widget.filas_vacias ?? 'mostrar')}
@@ -1022,6 +1045,27 @@ function EstiloDeColumna({
           <option value="centro">Centrado</option>
           <option value="derecha">Derecha</option>
         </select>
+        {/*
+          Sin ancho, la columna se ajusta a su contenido — y un título como
+          «% Seguimiento Efectivo Tareas» sobre una columna de porcentajes ocupa
+          cuatro veces lo que la cifra. Con un ancho puesto, la cabecera parte el
+          texto en varias líneas en vez de recortarlo.
+        */}
+        <input
+          type="number"
+          min={40}
+          max={600}
+          step={10}
+          style={{ width: 72 }}
+          placeholder="ancho"
+          title="Ancho de la columna en píxeles. Vacío: se ajusta al contenido"
+          value={e.ancho ?? ''}
+          onChange={(ev) =>
+            cambia({
+              ancho: ev.target.value ? Number(ev.target.value) : undefined,
+            })
+          }
+        />
       </div>
 
       <div className="fila-estilo">

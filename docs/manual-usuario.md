@@ -941,6 +941,36 @@ una unión, y entonces el orden dependería de por dónde se une.
 El mismo control ordena la lista de un **panel de filtros**, que es donde más se nota:
 un desplegable de meses que empieza en abril es inservible.
 
+#### El nombre, el ancho y el alto de las columnas
+
+Cada columna de la lista se **despliega** con el triangulito de su derecha, y ahí está
+todo lo suyo:
+
+| | |
+|---|---|
+| **Etiqueta** | cómo se llama la columna *en este widget*. Vacío: el nombre del modelo |
+| **Formato** | número, moneda, porcentaje… |
+| **Semáforo** | los colores por umbral |
+| **Fila de totales** | qué suma, o si no suma |
+| **Formato de la columna** | negrita, alineación, **ancho**, colores, marco |
+
+El **ancho** va en píxeles; vacío, la columna se ajusta a su contenido. Con un ancho
+puesto pasan dos cosas distintas a propósito:
+
+- La **cabecera parte el texto** en varias líneas, incluso dentro de una palabra. Un
+  título como «% Seguimiento Efectivo Tareas» sobre una columna de porcentajes ocupa
+  cuatro veces lo que la cifra; partido cabe, y recortado se perdería.
+- Los **datos se recortan** con puntos suspensivos. Una cifra partida en dos líneas no
+  se lee.
+
+Si el título parte muy feo, la salida no es ensanchar: es **renombrar la columna** en
+Etiqueta. «% Seg. Efec.» dice lo mismo en un tercio del sitio.
+
+El **Alto de las filas** está en el panel del widget, no en la columna: una columna no
+tiene alto propio, el alto lo comparten todas las filas. Afecta a las filas de datos y
+no a la cabecera — recortar la cabecera al alto de una fila dejaría el título cortado,
+que es el problema que el ancho venía a resolver.
+
 #### Esconder las filas que no dicen nada
 
 En el panel del widget, para una tabla y una dinámica:

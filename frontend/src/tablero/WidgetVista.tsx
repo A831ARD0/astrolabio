@@ -60,6 +60,18 @@ export interface PropsWidget {
   editando: boolean
 }
 
+/**
+ * El alto de las filas, cuando el widget lo fija.
+ *
+ * Va en el `<table>` como variable y no celda por celda: es una sola declaración para
+ * toda la tabla. Y es del WIDGET y no de la columna, porque una columna no tiene alto
+ * propio — el alto lo comparten todas las filas.
+ */
+function altoDeFila(px: unknown): CSSProperties | undefined {
+  const n = Number(px)
+  return n > 0 ? ({ '--alto-fila': `${n}px` } as CSSProperties) : undefined
+}
+
 /** Etiquetas y formatos vienen del catálogo del modelo, no del widget. */
 function useEtiquetas(modeloId: number) {
   const campos = useCampos(modeloId)
@@ -267,6 +279,7 @@ function WidgetDatos({
         <Tabla datos={datos.data} etiquetaDe={etiquetaDe} formatoDe={formatoDe}
                metricas={widget.metricas} semDe={semDe}
                filasVacias={widget.filas_vacias as FilasVacias | undefined}
+               altoFila={widget.alto_fila}
                // Aparte del semáforo: uno dice algo del dato y cambia por fila, esto
                // es del informe y es igual en todas. Ver `estiloColumna.ts`.
                estilos={
@@ -565,7 +578,7 @@ function TablaDinamica({
           una columna numérica (el mes como número, o año-mes).
         </div>
       )}
-      <table className="datos">
+      <table className="datos" style={altoDeFila(widget.alto_fila)}>
         <thead>
           <tr>
             {dimsFila.map((d) => (
@@ -747,6 +760,7 @@ function Tabla({
   totalesDe,
   estilos,
   filasVacias,
+  altoFila,
 }: {
   datos: ResultadoConsulta
   etiquetaDe: (c: string) => string
@@ -758,6 +772,8 @@ function Tabla({
   estilos: Record<string, EstiloColumna>
   /** Si se esconden las filas que no dicen nada. Ver `filaVacia`. */
   filasVacias?: FilasVacias
+  /** El alto de las filas en píxeles, si el widget lo fija. */
+  altoFila?: unknown
 }) {
   // Se filtra antes de ordenar y de totalizar, para que el pie sea de lo que se ve.
   const visibles = (filasVacias && filasVacias !== 'mostrar')
@@ -774,7 +790,7 @@ function Tabla({
 
   return (
     <div className="tabla-envoltura" style={{ height: '100%', border: 0 }}>
-      <table className="datos">
+      <table className="datos" style={altoDeFila(altoFila)}>
         <thead>
           <tr>
             {datos.columnas.map((c) => (

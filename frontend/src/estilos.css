@@ -768,6 +768,18 @@ table.datos th {
   white-space: nowrap;
 }
 table.datos td { padding: 4px 9px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+/* El alto de las filas, cuando el widget lo fija. Con el alto puesto manda el, y no
+   el relleno: si el relleno siguiera mandando, bajar el numero no compactaria nada.
+   Va como variable para decirlo UNA vez en la tabla y no en cada celda.
+
+   Solo las filas de DATOS. La cabecera se mide sola: con un ancho puesto parte el
+   titulo en varias lineas, y recortarla al alto de una fila deja el titulo cortado
+   por arriba y por abajo — que es peor que el problema que el ancho venia a resolver. */
+table.datos[style*="--alto-fila"] td {
+  height: var(--alto-fila);
+  padding-top: 0;
+  padding-bottom: 0;
+}
 table.datos td.num { text-align: right; font-family: var(--mono); }
 
 /* ------------------------------------------------------------------ yaml */

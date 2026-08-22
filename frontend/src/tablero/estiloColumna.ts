@@ -52,6 +52,16 @@ export interface EstiloColumna {
   marco?: string
   /** De qué lados. Sin decir nada: los dos lados de la columna. */
   lados?: Lado[]
+  /**
+   * Ancho en píxeles. Sin nada, la columna se ajusta a su contenido.
+   *
+   * Con un ancho puesto, **la cabecera parte el texto en varias líneas** en vez de
+   * recortarlo: el caso que motivó esto es un título como «% Seguimiento Efectivo
+   * Tareas» sobre una columna de porcentajes, que ocupa cuatro veces lo que la cifra
+   * y se cortaba por la derecha. Los datos, en cambio, se recortan con puntos
+   * suspensivos — una cifra partida en dos líneas no se lee.
+   */
+  ancho?: number
 }
 
 const HACIA: Record<Alineacion, CSSProperties['textAlign']> = {
@@ -95,7 +105,19 @@ export function estiloCelda(
   if (e.alineacion) s.textAlign = HACIA[e.alineacion]
   if (e.color) s.color = e.color
   if (e.fondo) s.background = e.fondo
+  if (e.ancho) Object.assign(s, ancho(e.ancho), { textOverflow: 'ellipsis' })
   return Object.keys(s).length ? s : undefined
+}
+
+/**
+ * El ancho, en los tres sitios donde hay que decirlo.
+ *
+ * Sólo `width` no basta: una tabla de ancho automático lo trata como una sugerencia y
+ * lo estira si el contenido no cabe, que es justo lo que se quiere evitar. Con el
+ * mínimo y el máximo iguales, la columna mide lo que se pidió.
+ */
+function ancho(px: number): CSSProperties {
+  return { width: px, minWidth: px, maxWidth: px, overflow: 'hidden' }
 }
 
 /** Para la cabecera: la alineación y el marco. Ver la nota de arriba. */
@@ -103,6 +125,15 @@ export function estiloCabecera(e: EstiloColumna | undefined): CSSProperties | un
   if (!e) return undefined
   const s: CSSProperties = { ...marco(e, { cabecera: true }) }
   if (e.alineacion) s.textAlign = HACIA[e.alineacion]
+  // La cabecera PARTE el texto; los datos se recortan. Un título largo sobre una
+  // columna estrecha cabe en dos líneas, y una cifra partida en dos no se lee.
+  //
+  // Y parte también DENTRO de una palabra: «Seguimiento» sola no cabe en 72 px, se
+  // desbordaba, y el recorte se la comía por la izquierda —«uimiento»—, que es peor
+  // que el problema que el ancho venía a resolver.
+  if (e.ancho)
+    Object.assign(s, ancho(e.ancho),
+                  { whiteSpace: 'normal', overflowWrap: 'anywhere' })
   return Object.keys(s).length ? s : undefined
 }
 
@@ -111,6 +142,7 @@ export function estiloTotal(e: EstiloColumna | undefined): CSSProperties | undef
   if (!e) return undefined
   const s: CSSProperties = { ...marco(e, { ultima: true }) }
   if (e.alineacion) s.textAlign = HACIA[e.alineacion]
+  if (e.ancho) Object.assign(s, ancho(e.ancho), { textOverflow: 'ellipsis' })
   return Object.keys(s).length ? s : undefined
 }
 
