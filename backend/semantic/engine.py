@@ -884,6 +884,18 @@ class Consulta:
     filtros: list[dict] = dc_field(default_factory=list)
     rutas_elegidas: dict[str, str] = dc_field(default_factory=dict)
     limite: int = 5000
+    #: Sacar tambien las filas del desglose que no tienen ninguna cifra.
+    #:
+    #: Por omision las filas salen de las CIFRAS: sin cifras no hay filas, y en vez de
+    #: una tabla vacia el widget dice por que. Eso esta bien para explorar, pero no
+    #: para un informe de una sucursal fija: ahi un renglon en cero es la respuesta, y
+    #: un recuadro explicando que no hay datos es un hueco en la hoja.
+    #:
+    #: Con esto los valores del desglose salen de sus propias tablas —pasando por los
+    #: mismos filtros y las mismas politicas por fila, que es lo que impide que un
+    #: widget sin datos revele los nombres que alguien no puede ver— y las cifras se
+    #: le pegan por la izquierda. Es el «mostrar elementos sin datos» de Power BI.
+    filas_sin_cifras: bool = False
 
 
 @dataclass
@@ -972,6 +984,22 @@ class Compilador:
                 joins.append(self._sql_join(tramo[-2:], alias, grafo, izquierda))
                 vistos.add(paso)
         return alias, joins
+
+    def _alcanza(self, desde: str, hasta: str) -> bool:
+        """
+        Si `hasta` se alcanza desde `desde` SIN atravesar un hecho.
+
+        Es la pregunta que separa «filtrar el catalogo» de «filtrar por lo que hay en
+        los hechos»: cat_sucursal llega a cat_region por una relacion suya, y a
+        dim_calendario solo pasando por las facturas — y eso ultimo no es un atributo
+        de la sucursal, es su actividad.
+        """
+        if desde == hasta:
+            return True
+        try:
+            return bool(self.m.rutas_minimas(desde, hasta))
+        except ErrorModelo:                      # pragma: no cover
+            return False
 
     def sondas_de_vacio(self, c: Consulta, predicados: list | None = None,
                         ) -> list[dict]:
@@ -1170,8 +1198,11 @@ class Compilador:
                 opcionales.add(ent)
 
         # Todas las metricas de este CTE comparten uniones: `compilar` las agrupa
-        # por eso, precisamente para poder unir aqui de una sola forma.
-        grafo = self.m.grafo_con(metricas[0].uniones)
+        # por eso, precisamente para poder unir aqui de una sola forma. Sin ninguna
+        # metrica esto no agrega nada: son los VALORES del desglose que sobreviven a
+        # los filtros y a las politicas, que es de donde salen las filas de una tabla
+        # que quiere mostrar tambien lo que no tiene cifras.
+        grafo = self.m.grafo_con(metricas[0].uniones if metricas else ())
         alias, joins = self._plan_alcance(ent_metrica, objetivos, rutas_elegidas,
                                           grafo, opcionales)
 
@@ -1535,6 +1566,46 @@ class Compilador:
                          [f"{e}.{cc}" for e, cc in dims_cte]))
             parametros.extend(params)          # el orden importa: CTE por CTE
 
+        # Los valores del desglose, cuando se piden tambien las filas sin cifras. Uno
+        # por entidad —las columnas de una misma tabla salen juntas y no se cruzan
+        # consigo mismas— y despues se cruzan entre si. Se piden por el mismo camino
+        # que una metrica (`_cte_metrica` sin ninguna): mismas rutas, mismos filtros y
+        # mismas politicas. Si cada uno resolviera lo suyo, lo que alguien puede ver
+        # dependeria de por que pantalla lo pregunta.
+        piezas_dim: list[str] = []
+        de_donde: dict[str, str] = {}
+        if c.filas_sin_cifras and dims:
+            for j, ent in enumerate(dict.fromkeys(e for e, _ in dims)):
+                mias = [d for d in dims if d[0] == ent]
+
+                # Un filtro que solo llega a esta tabla ATRAVESANDO un hecho no se
+                # aplica aqui, y no es un descuido: «las sucursales de 2099» a traves
+                # de las facturas son «las sucursales que facturaron en 2099», que es
+                # justo lo contrario de lo que se pidio. Un filtro de fecha no borra
+                # sucursales del catalogo. Sin esto la opcion revienta con «no hay
+                # relacion» en cuanto la hoja filtra por mes, que es siempre.
+                suyos = [f for f in filtros_cte
+                         if self._alcanza(ent, str(f["campo"]).split(".", 1)[0])]
+
+                # Con las politicas NO se hace lo mismo: si una protege algo que desde
+                # aqui no se alcanza, no se emite la lista —se falla cerrado— porque
+                # saltarsela seria publicar los valores que tapa.
+                for pr in (predicados or []):
+                    if not self._alcanza(ent, pr.entidad):
+                        raise ErrorModelo(
+                            f"No se pueden mostrar las filas sin cifras de "
+                            f"'{ent}': la politica '{pr.politica}' protege "
+                            f"'{pr.entidad}', que desde ahi solo se alcanza pasando "
+                            f"por un hecho, y la lista de valores saldria sin ese "
+                            f"permiso aplicado. Quita esa opcion en este widget.")
+
+                cuerpo_d, params_d = self._cte_metrica(
+                    ent, [], mias, suyos, c.rutas_elegidas, predicados)
+                piezas_dim.append(f"u{j} AS (\n  {cuerpo_d}\n)")
+                for e2, cc2 in mias:
+                    de_donde[f"{e2}.{cc2}"] = f"u{j}"
+                parametros.extend(params_d)
+
         # Sin un solo CTE no hay ninguna tabla que leer, y el SQL saldria como
         # `WITH  SELECT … FROM`, que no es SQL. Pasa con una compuesta que no
         # depende de nada —`0.05`, un objetivo escrito a mano— pedida sola: es
@@ -1591,8 +1662,13 @@ class Compilador:
             quedan dentro: quien pide el porcentaje de logro pidio una columna, no
             tres.
             """
+            # El alias tambien cuando la cifra viene envuelta: una metrica de un
+            # hecho se llamaba sola —la columna del CTE ya tiene su nombre— pero
+            # `COALESCE(m0."x", 0)` no, y la columna salia llamandose asi en la
+            # cabecera y en el Excel.
             return [f"{expresion(n, sitio, prefijo)} AS {_cita(n)}"
-                    if self.m.metricas[n].compuesta
+                    if (self.m.metricas[n].compuesta
+                        or self.m.metricas[n].sin_dato_cero)
                     else expresion(n, sitio, prefijo)
                     for n in c.metricas]
 
@@ -1631,6 +1707,15 @@ class Compilador:
                     for cd in cols_dim)
                 + f" FROM {n} AS l CROSS JOIN periodos AS c")
 
+        # Y las combinaciones del desglose que no tienen ni una cifra. Van a la espina
+        # como una rama mas, asi que las que si tienen cifras no se duplican: es un
+        # UNION.
+        if piezas_dim:
+            partes_espina.append(
+                "SELECT " + ", ".join(
+                    f"{de_donde[cd]}.{_cita(cd)} AS {_cita(cd)}" for cd in cols_dim)
+                + " FROM " + ", ".join(sorted(set(de_donde.values()))))
+
         espina = "\n  UNION\n  ".join(partes_espina)
 
         joins = []
@@ -1643,7 +1728,7 @@ class Compilador:
             ) or "TRUE"
             joins.append(f"LEFT JOIN {n} ON {cond}")
 
-        piezas = [f"{n} AS (\n  {b}\n)" for n, b, _, _ in ctes]
+        piezas = [f"{n} AS (\n  {b}\n)" for n, b, _, _ in ctes] + piezas_dim
         if libres and cols_cal:
             piezas.append(self._cte_periodos(
                 cols_cal, cols_dim, ctes, filtros_periodo, filtros_cte,

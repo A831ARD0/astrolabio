@@ -140,6 +140,7 @@ function useFueraDelPivote(
     filtros,
     rutas_elegidas: rutasElegidas,
     limite,
+    filas_sin_cifras: widget.filas_sin_cifras === true,
   }
   return useQuery({
     queryKey: ['fuera-pivote', modeloId, version, cuerpo] as const,
@@ -241,6 +242,10 @@ export function useDatosWidget(
     // El usuario escribió filas de tabla; el motor cuenta filas planas. La
     // traducción se hace aquí, no en la cabeza de quien lo lee.
     limite: pivote ? Math.min(limite * columnas, TOPE_MOTOR) : limite,
+    // Sacar también las filas del desglose que no tienen ninguna cifra. Sin esto, un
+    // informe de una sucursal fija sale con un recuadro explicando que no hay datos
+    // donde debería salir un cero.
+    filas_sin_cifras: widget.filas_sin_cifras === true,
   }
 
   const consulta = useQuery({

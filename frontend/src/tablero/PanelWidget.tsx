@@ -475,6 +475,30 @@ export function PanelWidget({
             En una dinámica se juzga la fila entera: sus meses y las columnas de fuera.
             Una familia sin ventas pero con inventario sí dice algo.
           </span>
+
+          {/*
+            La contraria de la de arriba, y por eso va junta: una esconde filas que
+            existen, ésta crea las que no. Hace falta en un informe de una sucursal
+            fija —ahí la respuesta es «cero», no un recuadro explicando que no hay
+            datos— y estorba explorando, donde una tabla con cuarenta renglones en
+            blanco no dice nada. Por eso se elige.
+          */}
+          <label className="chico" style={{ display: 'block', marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={widget.filas_sin_cifras === true}
+              onChange={(e) =>
+                alCambiar({ filas_sin_cifras: e.target.checked || undefined })
+              }
+            />{' '}
+            Mostrar las filas aunque no tengan ninguna cifra
+            <span className="tenue">
+              {' '}
+              — los valores del desglose salen de sus propias tablas, con los mismos
+              filtros y permisos. Sin esto, sin cifras no hay filas y el widget explica
+              por qué en vez de enseñar un cero
+            </span>
+          </label>
         </div>
       )}
 

@@ -94,6 +94,8 @@ class PeticionConsulta(BaseModel):
     filtros: list[dict] = []
     rutas_elegidas: dict[str, str] = {}
     limite: int = Field(default=5000, le=100_000)
+    #: Sacar tambien las filas del desglose sin ninguna cifra. Ver `Consulta`.
+    filas_sin_cifras: bool = False
 
 
 class GuardarDefinicion(BaseModel):
@@ -1259,7 +1261,7 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
         res = ejecutar_consulta(m, Consulta(
             dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
             filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
-            limite=cuerpo.limite,
+            limite=cuerpo.limite, filas_sin_cifras=cuerpo.filas_sin_cifras,
         ), ctx)
     except ErrorModelo as e:
         # Ambiguedad de ruta, metrica no desglosable, metrica inexistente: son

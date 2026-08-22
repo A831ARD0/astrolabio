@@ -967,6 +967,41 @@ igual que quitarlas a mano lo cambiaría.
 Y se filtra sobre lo que ya bajó: si el widget tiene un máximo de filas y se alcanzó,
 esconder las vacías no trae las que faltaban.
 
+#### Cuando la respuesta es «cero» y no «no hay datos»
+
+Las filas de una tabla salen de las **cifras**: sin cifras no hay filas, y en vez de una
+tabla vacía el widget explica por qué —la tabla no está cargada, la unión no casa, una
+política tapa todo, los filtros no dejan nada—. Eso está bien para explorar.
+
+No está bien para un informe de una sucursal fija. Ahí la respuesta es **cero**, y un
+recuadro explicando que no hay datos es un hueco en la hoja que alguien firma. Para eso,
+en el panel del widget:
+
+```
+☑ Mostrar las filas aunque no tengan ninguna cifra
+```
+
+Con eso, los valores del desglose salen de **sus propias tablas** y las cifras se les
+pegan al lado. Es el «mostrar elementos sin datos» de Power BI. Para que la celda diga
+`0` en vez de quedarse en blanco, marca la métrica con **«Si no hay dato, cero»**.
+
+Tres reglas que la hacen segura, y conviene conocerlas:
+
+- **Los permisos por fila se aplican igual.** Es lo que impide que un widget sin datos
+  se convierta en la forma más fácil de averiguar los nombres que alguien no puede ver.
+  Si una política protege una tabla que desde el desglose sólo se alcanza atravesando un
+  hecho, la opción se niega en vez de saltarse el permiso.
+- **Los filtros de su propia tabla sí acotan.** Filtrar la región deja las sucursales de
+  esa región, no todas.
+- **Un filtro de fecha no borra valores del catálogo.** Una sucursal no deja de existir
+  porque no facturara en un mes: su tabla sólo llega al calendario *atravesando* las
+  facturas, y ese camino significa «las que facturaron», que es lo contrario de lo que se
+  pidió. Ese filtro no se aplica a la lista — y como una hoja filtra por mes siempre, sin
+  esta decisión la opción sería inservible.
+
+Su contraria es **Filas sin datos**, más arriba: una crea filas que no existen, la otra
+esconde las que no dicen nada. Puestas juntas se anulan, así que elige una.
+
 #### Cuando la columna es el eje y la selección no debe recortarla
 
 Selecciona julio en el panel de filtros y una matriz de meses se queda con una sola
