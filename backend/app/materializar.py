@@ -28,7 +28,7 @@ import duckdb
 
 from app.config import config
 from semantic.transformacion import (
-    Compilada, ErrorTransformacion, Transformacion, compilar,
+    Compilada, ErrorTransformacion, PasoRenombrar, Transformacion, compilar,
 )
 
 # Filas que se traen en una vista previa. Suficiente para ver la forma del
@@ -265,12 +265,58 @@ def _conexion_trabajo() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def _renombres_que_no_se_hacen(t: Transformacion, compilada: Compilada, con) -> None:
+    """
+    Un renombre cuyo destino ya existe NO se hace, y nadie lo dice.
+
+    `SELECT * EXCLUDE (Id_DB), Id_DB AS Id_Sucursal` sobre una tabla que ya traia
+    `Id_Sucursal` no falla: DuckDB desambigua y la columna nueva acaba llamandose
+    `Id_Sucursal_1`. El renombre no surtio efecto, la columna que el usuario cree haber
+    creado apunta a otro dato, y todo sigue funcionando — hasta que un cambio ajeno
+    quita la original, el renombre por fin se hace, y las cifras cambian de sitio sin
+    que nada señale la causa.
+
+    Paso de verdad: un catalogo de sucursales que sirvio un identificador durante meses
+    y empezo a servir otro al cambiar el origen principal, dejando media docena de
+    widgets en blanco.
+
+    Se comprueba contra las columnas que le LLEGAN a ese paso —una consulta vacia por
+    cada renombre, que no cuesta nada— y no contra el resultado final, porque un paso
+    posterior puede quitar la columna legitimamente.
+    """
+    if t.es_sql:
+        return
+    for i, paso in enumerate(t.pasos, start=1):
+        if not isinstance(paso, PasoRenombrar):
+            continue
+        antes = compilada.etapas[i - 1][0]
+        llegan = [d[0] for d in con.execute(
+            f"{_hasta(compilada.sql, antes)} SELECT * FROM {antes} LIMIT 0",
+            compilada.parametros).description]
+        # Las que se van con el EXCLUDE dejan su nombre libre: renombrar A→B y B→C a la
+        # vez es legitimo, y el intercambio tambien.
+        se_van = {c.lower() for c in paso.cambios}
+        quedan = {c.lower() for c in llegan if c.lower() not in se_van}
+        for de, a in paso.cambios.items():
+            if a.lower() in quedan:
+                raise ErrorTransformacion(
+                    f"El renombre '{de}' → '{a}' no se puede hacer: en ese punto ya "
+                    f"hay una columna llamada '{a}'. No fallaria —la nueva acabaria "
+                    f"llamandose '{a}_1'— y entonces '{a}' seria la de antes y no la "
+                    f"que acabas de renombrar. Elige otro nombre, o quita la que "
+                    f"estorba con «Elegir columnas» antes de este paso.")
+
+
 def previsualizar(t: Transformacion, con_conteos: bool = True) -> ResultadoPrevia:
     """Ejecuta la transformación acotada, sin escribir nada."""
     compilada = compilar(t, _resolver(t))
     con = _conexion_trabajo()
     t0 = time.perf_counter()
     try:
+        # ANTES de la consulta de la previa, y no despues: en DuckDB una consulta nueva
+        # sobre la misma conexion deja el cursor anterior sin resultado, asi que
+        # comprobar en medio devolvia las columnas de la comprobacion.
+        _renombres_que_no_se_hacen(t, compilada, con)
         cur = con.execute(
             f"SELECT * FROM ({compilada.sql}) LIMIT {FILAS_PREVIA}",
             compilada.parametros,
@@ -329,6 +375,9 @@ def ejecutar(t: Transformacion, comprimir: str = "zstd") -> ResultadoEjecucion:
         temporal.mkdir(parents=True, exist_ok=True)
 
         archivo = temporal / f"{t.nombre}.parquet"
+        # Antes de escribir: comprobarlo despues del COPY seria escribir un Parquet
+        # entero para tirarlo.
+        _renombres_que_no_se_hacen(t, compilada, con)
         con.execute(
             f"COPY ({compilada.sql}) TO '{archivo}' "
             f"(FORMAT parquet, COMPRESSION {_compresion(comprimir)})",

@@ -547,6 +547,26 @@ maestro trae las cuarenta sucursales y después llama al proyecto que las transf
 En la pantalla de *Flujos*, los proyectos salen en su propia lista y solo se pueden
 encadenar — editarlos se hace aquí, donde sus pasos son secciones.
 
+### Renombrar a un nombre que ya existe
+
+No se deja, y el motivo merece contarse porque cuesta caro. `Renombrar` compila a «trae
+todas las columnas menos ésta, y añádela con el nombre nuevo». Si el nombre nuevo ya
+existía, el motor **no falla**: desambigua, y la columna nueva acaba llamándose
+`Nombre_1`. El renombre no surtió efecto, y la columna que creías haber creado sigue
+siendo la de antes.
+
+Y eso sigue funcionando durante meses. Se rompe el día que un cambio ajeno —un origen
+principal distinto, un paso que quita la otra columna— hace desaparecer a la original: el
+renombre por fin se hace, la columna pasa a traer otro dato, y media docena de widgets se
+quedan en blanco sin que nada señale la causa.
+
+Así que ahora se rechaza al previsualizar y al ejecutar, diciendo cuál estorba. Se
+comprueba contra las columnas que **llegan a ese paso**, no contra el resultado final:
+un paso posterior puede quitar la columna legítimamente.
+
+Intercambiar dos nombres —`A → B` y `B → A` a la vez— sí vale: las dos se van juntas,
+así que ninguna estorba a la otra.
+
 ### El origen principal, y por qué importa cuál es
 
 El primer origen lleva la etiqueta **principal**: es el del `FROM`. Los pasos se aplican
