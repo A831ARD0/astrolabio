@@ -148,6 +148,16 @@ export function Imprimir({
   const [abierto, setAbierto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  /**
+   * Qué se está haciendo, para poder DECIRLO.
+   *
+   * Generar en el servidor tarda: abre esta misma hoja en su propio navegador, espera
+   * a que cada widget traiga sus cifras y luego imprime. Con el menú abierto encima,
+   * lo único que cambiaba era el botón de detrás —tapado por el propio menú—, así que
+   * desde fuera no se distingue «está trabajando» de «se atoró», y la salida natural
+   * es volver a pulsar.
+   */
+  const [haciendo, setHaciendo] = useState<'pdf' | 'png' | null>(null)
   const caja = useRef<HTMLDivElement | null>(null)
   // Fuera de la barra: la barra recorta lo que desborda. Ver `MenuFlotante`.
   const { boton, sitio } = useMenuFlotante(abierto)
@@ -199,6 +209,7 @@ export function Imprimir({
   async function delServidor(formato: 'pdf' | 'png') {
     setError(null)
     setOcupado(true)
+    setHaciendo(formato)
     try {
       const r = await fetch(`/api/dashboards/${dashboardId}/informe`, {
         method: 'POST',
@@ -235,6 +246,7 @@ export function Imprimir({
       setError(e instanceof Error ? e.message : 'No se pudo generar el informe')
     } finally {
       setOcupado(false)
+      setHaciendo(null)
     }
   }
 
@@ -270,14 +282,38 @@ export function Imprimir({
         onClick={() => setAbierto(!abierto)}
         disabled={ocupado}
       >
-        {ocupado ? '…' : 'PDF'}
+        {ocupado ? 'Generando…' : 'PDF'}
       </button>
-      {abierto && (
+      {/*
+        Mientras el servidor trabaja, el menú se convierte en el aviso. No se deja el
+        menú puesto con las opciones activas: quien no ve nada moverse vuelve a pulsar,
+        y entonces son dos navegadores abriendo la misma hoja.
+      */}
+      {abierto && haciendo && (
         <MenuFlotante sitio={sitio} clase="no-imprimir">
-          <button onClick={() => delServidor('pdf')}>
+          <div className="generando">
+            <span className="girando" aria-hidden="true" />
+            <div>
+              <strong>
+                {haciendo === 'pdf' ? 'Generando el PDF…' : 'Generando la imagen…'}
+              </strong>
+              <div className="chico tenue">
+                El servidor está abriendo esta hoja en su navegador y esperando a que
+                cada widget traiga sus cifras. Con una hoja larga puede tardar medio
+                minuto. No cierres la pestaña.
+              </div>
+            </div>
+          </div>
+        </MenuFlotante>
+      )}
+      {abierto && !haciendo && (
+        <MenuFlotante sitio={sitio} clase="no-imprimir">
+          <button onClick={() => delServidor('pdf')} disabled={ocupado}>
             <strong>Descargar PDF</strong>
           </button>
-          <button onClick={() => delServidor('png')}>Descargar imagen (PNG)</button>
+          <button onClick={() => delServidor('png')} disabled={ocupado}>
+            Descargar imagen (PNG)
+          </button>
           <div className="chico tenue" style={{ padding: '4px 8px 2px' }}>
             Una sola página con todo dentro, hecha en el servidor: sin diálogo y
             siempre igual, en Safari o en Chrome.

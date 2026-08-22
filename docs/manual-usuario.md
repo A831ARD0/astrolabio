@@ -1680,6 +1680,13 @@ medida, y ahí hay una diferencia que conviene saber: **Chrome lo respeta y Safa
 Las dos formas dibujan lo mismo y miden igual, porque es el mismo código: el servidor
 abre esta misma pantalla.
 
+**Mientras trabaja, lo dice.** Generar tarda: el servidor abre la hoja en su navegador y
+espera a que cada widget traiga sus cifras, y con una hoja larga eso puede ser medio
+minuto. Al pulsar, el menú se convierte en el aviso —con un anillo girando, porque un
+texto quieto se lee igual estando atorado— y el botón de la barra pasa a decir
+«Generando…». No se dejan las opciones puestas a propósito: quien no ve nada moverse
+vuelve a pulsar, y entonces son dos navegadores abriendo la misma hoja.
+
 Dos avisos que salen si el servidor no está del todo montado, y los dos traen la orden
 para arreglarlo:
 

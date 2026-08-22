@@ -2610,3 +2610,35 @@ html.una-hoja { overflow: hidden !important; }
   content: ' · ';
   color: var(--texto-tenue);
 }
+
+/* ------------------------------------------- generando un informe en el servidor */
+
+/* El aviso de «esto está trabajando». Ocupa el sitio del menú entero: una opción que
+   sigue ahí, apagada, invita a volver a pulsarla. */
+.generando {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  max-width: 260px;
+}
+
+/* Un anillo que gira. La animación es la señal de que sigue vivo: un texto quieto
+   —«generando…»— se lee igual estando atorado. */
+.generando .girando {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 2px solid var(--borde);
+  border-top-color: var(--acento);
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* Quien pidió que no se muevan las cosas no las ve moverse; el aviso sigue estando. */
+@media (prefers-reduced-motion: reduce) {
+  .generando .girando { animation-duration: 3s; }
+}
