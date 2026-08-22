@@ -1104,6 +1104,22 @@ el último del calendario y las ventas de ese mes saldrían en blanco.
 Si sólo lo quieres en un sitio y no en la métrica entera, `SIVACIO([metrica], 0)` hace
 lo mismo dentro de una fórmula suelta.
 
+#### Una columna con una constante
+
+Una **compuesta** cuya fórmula es sólo un número. En «Calcula desde» eliges
+`· otras métricas (compuesta)` y escribes:
+
+```
+1
+```
+
+Sale como una columna más, con ese valor en cada fila. Sirve para un objetivo escrito a
+mano, un factor, o una unidad para dividir.
+
+Lo único: **una constante no puede ir sola** en un widget. No sale de ninguna tabla, así
+que no tiene filas propias — pídela junto a la cifra con la que se compara y la
+acompañará fila por fila. Si va sola, el widget lo dice.
+
 ### Ordenar las métricas: tablas de medidas
 
 Una métrica sale en el panel con su signo **Σ**, así que no se confunde con una

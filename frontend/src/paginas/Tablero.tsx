@@ -141,10 +141,22 @@ export function Tablero() {
   // La rejilla se mide: react-grid-layout necesita píxeles. El alto también, y no
   // solo el ancho, porque en modo pantalla la fila mide lo que sobre del alto
   // visible entre las filas que pida la hoja.
+  //
+  // Se resta el relleno, y no es un detalle: `clientWidth` lo INCLUYE, así que a la
+  // rejilla se le decía que tenía dieciséis píxeles más de los que puede usar. El
+  // resultado era un margen de dieciocho a la izquierda y de dos a la derecha —la
+  // última columna se salía por encima del relleno— y una hoja «cabe en la pantalla»
+  // un poco más alta de lo que cabe.
   useEffect(() => {
     const medir = () => {
       const el = document.getElementById('rejilla')
-      if (el) setCaja({ ancho: el.clientWidth, alto: el.clientHeight })
+      if (!el) return
+      const cs = getComputedStyle(el)
+      const menos = (a: string, b: string) => parseFloat(a) + parseFloat(b)
+      setCaja({
+        ancho: el.clientWidth - menos(cs.paddingLeft, cs.paddingRight),
+        alto: el.clientHeight - menos(cs.paddingTop, cs.paddingBottom),
+      })
     }
     medir()
     window.addEventListener('resize', medir)
