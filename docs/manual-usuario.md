@@ -1684,8 +1684,13 @@ abre esta misma pantalla.
 espera a que cada widget traiga sus cifras, y con una hoja larga eso puede ser medio
 minuto. Al pulsar, el menú se convierte en el aviso —con un anillo girando, porque un
 texto quieto se lee igual estando atorado— y el botón de la barra pasa a decir
-«Generando…». No se dejan las opciones puestas a propósito: quien no ve nada moverse
-vuelve a pulsar, y entonces son dos navegadores abriendo la misma hoja.
+«Generando… 12s». No se dejan las opciones puestas a propósito: quien no ve nada
+moverse vuelve a pulsar, y entonces son dos navegadores abriendo la misma hoja.
+
+El aviso lleva los **segundos transcurridos**, y eso es más que un adorno: «generando»
+a los tres segundos y a los cuarenta se leen igual, y ahí está toda la diferencia entre
+esperar y sospechar. El servidor se rinde a los sesenta, así que el número dice también
+cuánto queda de paciencia.
 
 Dos avisos que salen si el servidor no está del todo montado, y los dos traen la orden
 para arreglarlo:

@@ -158,6 +158,20 @@ export function Imprimir({
    * es volver a pulsar.
    */
   const [haciendo, setHaciendo] = useState<'pdf' | 'png' | null>(null)
+  /**
+   * Segundos que lleva. Sin esto, «Generando…» a los tres segundos y a los cuarenta
+   * se leen igual, y ahí está toda la diferencia entre esperar y sospechar. El
+   * renderizador del servidor se rinde a los sesenta, así que el número también dice
+   * cuánto queda de paciencia.
+   */
+  const [segundos, setSegundos] = useState(0)
+
+  useEffect(() => {
+    if (!haciendo) return
+    setSegundos(0)
+    const t = setInterval(() => setSegundos((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [haciendo])
   const caja = useRef<HTMLDivElement | null>(null)
   // Fuera de la barra: la barra recorta lo que desborda. Ver `MenuFlotante`.
   const { boton, sitio } = useMenuFlotante(abierto)
@@ -282,7 +296,7 @@ export function Imprimir({
         onClick={() => setAbierto(!abierto)}
         disabled={ocupado}
       >
-        {ocupado ? 'Generando…' : 'PDF'}
+        {ocupado ? (haciendo ? `Generando… ${segundos}s` : 'Generando…') : 'PDF'}
       </button>
       {/*
         Mientras el servidor trabaja, el menú se convierte en el aviso. No se deja el
@@ -295,7 +309,9 @@ export function Imprimir({
             <span className="girando" aria-hidden="true" />
             <div>
               <strong>
-                {haciendo === 'pdf' ? 'Generando el PDF…' : 'Generando la imagen…'}
+                {haciendo === 'pdf' ? 'Generando el PDF' : 'Generando la imagen'}
+                {' · '}
+                <span className="mono">{segundos}s</span>
               </strong>
               <div className="chico tenue">
                 El servidor está abriendo esta hoja en su navegador y esperando a que
