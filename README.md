@@ -201,7 +201,8 @@ rápido, y las tres ayudan:
 - **Úsalo y cuenta cómo te fue.** Un issue diciendo qué se rompió con datos de
   verdad vale más que diez estrellas.
 - **Patrocínalo.** Si tu organización lo usa en producción, el patrocinio es lo
-  que convierte tiempo libre en tiempo dedicado.
+  que convierte tiempo libre en tiempo dedicado. El botón **Sponsor** está arriba,
+  junto a «Watch» y «Fork».
 - **Contrátalo.** Implantación, conectores para tu sistema de gestión o soporte
   con tiempo de respuesta: abre un issue y lo hablamos.
 

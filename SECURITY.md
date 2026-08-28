@@ -2,11 +2,34 @@
 
 ## Reportar un fallo
 
-**No abras un issue público.** Escribe a **abelardo.wr.garcia@gmail.com** con lo
-que hiciste, lo que esperabas y lo que pasó. Si puedes, incluye la petición exacta.
+**No abras un issue público.** Hay dos vías privadas, y las dos llegan:
+
+1. **Aviso privado de GitHub** — la pestaña *Security* del repositorio,
+   «Report a vulnerability». Es la preferida: queda hilo, historial y un
+   identificador, y permite publicar el aviso cuando haya arreglo.
+2. **Correo** a **abelardo.wr.garcia@gmail.com**, si prefieres no pasar por
+   GitHub.
+
+Cuenta qué hiciste, qué esperabas y qué pasó. Si puedes, incluye la petición
+exacta.
 
 Respuesta en un plazo razonable (esto lo mantiene una persona, no un equipo). Se
 publicará el arreglo y se te dará crédito, salvo que prefieras que no.
+
+## Qué versiones reciben arreglos
+
+Solo **la última publicada**. Es lo honesto con un mantenedor único: sostener
+ramas viejas es una promesa que no se podría cumplir, y una promesa de seguridad
+que no se cumple es peor que no haberla hecho.
+
+| Versión | Arreglos |
+|---|---|
+| 0.1.x | Sí |
+| Anteriores | No — actualiza |
+
+Mientras la serie sea `0.x`, una versión menor puede traer cambios que rompan
+compatibilidad. Están en el [registro de cambios](CHANGELOG.md), y lo que haya
+que hacer al actualizar, en el [manual técnico](docs/manual-tecnico.md).
 
 ## Qué protege Astrolabio, y qué no
 

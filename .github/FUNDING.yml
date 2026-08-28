@@ -1,0 +1,23 @@
+# El botón «Sponsor» del repositorio.
+#
+# GitHub lee este archivo y pone el botón arriba, junto a «Watch» y «Fork». No
+# cobra comisión: el dinero va por Stripe directo a la cuenta del mantenedor.
+#
+# OJO: el botón solo aparece cuando el perfil está dado de alta en GitHub
+# Sponsors (github.com/sponsors). Con el archivo puesto y el alta sin terminar,
+# GitHub ignora la línea en silencio — que es exactamente el modo de fallar que
+# hace pensar que el archivo está mal.
+github: [A831ARD0]
+
+# Las demás quedan escritas y apagadas a propósito, para que se vea qué hay y no
+# haya que volver a buscarlo:
+#
+#   open_collective  Fondo con contabilidad pública. Es lo que desbloquea a las
+#                    empresas: una dirección de sistemas no manda dinero a una
+#                    cuenta personal, pero sí paga la factura de un colectivo.
+#                    Comisión ~10 % con anfitrión fiscal.
+#   custom           Cualquier URL propia: una página de contratación, PayPal,
+#                    una cuenta para transferencia. Admite hasta cuatro.
+#
+# open_collective: astrolabio
+# custom: ['https://astrolabio.example/apoyar']
