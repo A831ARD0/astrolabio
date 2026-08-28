@@ -89,11 +89,28 @@ están en el código y que se pueden verificar:
 
 ## Verlo funcionando
 
-Con datos ficticios —11.5 millones de filas, un modelo y tableros ya armados—
-para poder juzgarlo sin conectar nada tuyo:
+Solo hace falta Docker. Trae los datos dentro: un grupo automotriz ficticio de
+**40 sucursales y 10 años de historia**, con su modelo y sus tableros ya armados,
+para poder juzgarlo sin conectar nada tuyo.
 
 ```bash
 git clone https://github.com/a831ard0/astrolabio.git
+cd astrolabio
+docker compose -f docker-compose.demo.yml up -d --build
+```
+
+Abre <http://localhost:8080> y entra con `admin@example.com` /
+`astrolabio-demo-2026`.
+
+La primera vez tarda lo que tarde en construirse la imagen; generar los 11.5
+millones de filas son ocho segundos. Si el arranque se queja de que el puerto
+está ocupado, elige otro con `ASTROLABIO_DEMO_PUERTO=8090`. Para tirarlo todo,
+datos incluidos: `docker compose -f docker-compose.demo.yml down -v`.
+
+<details>
+<summary>Sin Docker, si vas a tocar el código</summary>
+
+```bash
 cd astrolabio/backend
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python demo/generar_datos.py    # datos ficticios: 11.5M filas, 8 s
@@ -101,13 +118,10 @@ python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python -m uvicorn app.main:app --port 8000
 ```
 
-En otra terminal:
+En otra terminal, `cd astrolabio/frontend && npm install && npm run dev`, y la
+interfaz queda en <http://localhost:5173> con recarga en caliente.
 
-```bash
-cd astrolabio/frontend && npm install && npm run dev
-```
-
-Abre <http://localhost:5173> y entra con `admin@example.com` / `astrolabio-demo-2026`.
+</details>
 
 > **La demostración de un minuto.** Entra después como `region@example.com` (la
 > misma contraseña) y abre **el mismo tablero**:
@@ -129,10 +143,11 @@ Con Docker, sin instalar Python ni Node —vale igual en Linux, macOS y Windows�
 cp .env.ejemplo .env && docker compose up -d --build
 ```
 
-Levanta una instalación **vacía y lista para tus datos**: crea el usuario
-administrador en el primer arranque y escribe su contraseña temporal en el
-registro (`docker compose logs api`). Si lo que quieres es ver el producto con
-datos dentro, usa la demostración de arriba.
+Ojo con la diferencia: este `docker-compose.yml` levanta una instalación
+**vacía y lista para tus datos** —crea el usuario administrador en el primer
+arranque y escribe su contraseña temporal en el registro, `docker compose logs
+api`—. El de la demostración es otro archivo, con otros volúmenes, y no se tocan:
+puedes tener los dos.
 
 Detalles, y lo que hay que saber de ODBC en un servidor Windows, en el
 [manual técnico](docs/manual-tecnico.md).

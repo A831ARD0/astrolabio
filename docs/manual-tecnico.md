@@ -44,6 +44,20 @@ de sobra en una laptop.
 
 ## 2. Instalar para desarrollar
 
+> **Solo quieres verlo funcionando, no tocarlo.** Entonces no hagas nada de esto:
+>
+> ```bash
+> docker compose -f docker-compose.demo.yml up -d --build
+> ```
+>
+> Levanta la aplicación con los datos ficticios ya dentro en
+> <http://localhost:8080>, sin Python ni Node en la máquina. Está en otro
+> proyecto de Compose y con otros volúmenes, así que no toca ninguna instalación
+> de verdad que tengas al lado. Los detalles, en el propio
+> [`docker-compose.demo.yml`](../docker-compose.demo.yml).
+
+Lo de abajo es para trabajar en el código, con recarga en caliente:
+
 ```bash
 git clone https://github.com/a831ard0/astrolabio.git
 cd astrolabio

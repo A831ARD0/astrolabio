@@ -1,0 +1,114 @@
+# Astrolabio con datos dentro, en un comando.
+#
+#   docker compose -f docker-compose.demo.yml up -d --build
+#
+# Y en http://localhost:8080 hay un grupo automotriz ficticio de 40 sucursales y
+# 10 anos de historia, con su modelo y sus tableros ya armados. Se entra con
+# admin@example.com / astrolabio-demo-2026.
+#
+# Existe porque para ver el producto habia que instalar Python y Node y correr
+# cinco comandos. Eso filtra a la mitad de quien solo queria mirar, y quien solo
+# queria mirar es exactamente a quien hay que convencer.
+#
+# --------------------------------------------------------------------------- #
+# Esto NO es una instalacion: es una demostracion
+# --------------------------------------------------------------------------- #
+#
+# `demo/generar_datos.py` BORRA la base analitica y la vuelve a escribir. Por eso
+# aqui todo esta separado de la instalacion de verdad, y en dos niveles:
+#
+#   - `name:` distinto, asi que es otro proyecto de Compose.
+#   - volumenes con otro nombre (`*_demo`).
+#
+# Sin lo primero, los dos archivos comparten proyecto —viven en el mismo
+# directorio— y `metadatos` seria EL MISMO volumen: levantar la demostracion
+# borraria los datos de produccion. Con esto, no se tocan ni queriendo.
+#
+# Para tirarlo todo, datos incluidos:
+#
+#   docker compose -f docker-compose.demo.yml down -v
+
+name: astrolabio-demo
+
+services:
+  # --- siembra: corre una vez, escribe los datos y se va ------------------- #
+  #
+  # Un servicio y no un `command` dentro de la API porque los dos escriben en el
+  # mismo archivo DuckDB y DuckDB no admite dos escritores. La API espera a que
+  # este termine bien; asi cuando arranca, el archivo ya esta escrito y cerrado.
+  semilla:
+    build: ./backend
+    environment:
+      ASTROLABIO_RUTA_DUCKDB: /app/analitico/astrolabio.duckdb
+      # Un `.env` a medio hacer es la primera forma de que esto no arranque, y la
+      # demostracion no puede pedir configuracion previa: son claves de juguete,
+      # a la vista, y solo valen aqui. En `produccion` el arranque las rechaza.
+      ASTROLABIO_ENTORNO: desarrollo
+      ASTROLABIO_CLAVE_SECRETA: demostracion-no-usar-en-produccion
+      # 20 veces menos filas, para una maquina justa de disco o de memoria:
+      #   ASTROLABIO_DEMO_RAPIDO=1 docker compose -f docker-compose.demo.yml up -d
+      RAPIDO: ${ASTROLABIO_DEMO_RAPIDO:-}
+    volumes:
+      - metadatos_demo:/app/datos
+      - analitico_demo:/app/analitico
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        # Se comprueban las DOS mitades. Con solo la marca, borrar el volumen de
+        # datos analiticos y dejar el de metadatos daria por sembrada una
+        # demostracion sin ninguna fila dentro.
+        if [ -f /app/datos/.demo-sembrada ] && [ -f /app/analitico/astrolabio.duckdb ]; then
+          echo "Ya estaba sembrada; no se vuelve a generar."
+          exit 0
+        fi
+        python demo/generar_datos.py $${RAPIDO:+--rapido}
+        python demo/sembrar.py
+        touch /app/datos/.demo-sembrada
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      semilla:
+        condition: service_completed_successfully
+    environment:
+      ASTROLABIO_ENTORNO: desarrollo
+      ASTROLABIO_CLAVE_SECRETA: demostracion-no-usar-en-produccion
+      ASTROLABIO_RUTA_DUCKDB: /app/analitico/astrolabio.duckdb
+    volumes:
+      - metadatos_demo:/app/datos
+      - analitico_demo:/app/analitico
+    # Sin puerto publicado: quien entra pasa por Caddy, igual que en produccion.
+    # Asi lo que se prueba aqui es lo mismo que se va a instalar, y no una version
+    # con la API al aire que en el servidor no existe.
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos_demo:/data
+      - caddy_config_demo:/config
+    ports:
+      # 8080 y no 80: en un portatil el 80 casi siempre esta ocupado, y una
+      # demostracion que no levanta por un puerto no llega a demostrar nada.
+      # Dentro sigue siendo el 80, que es lo que dice el Caddyfile.
+      #
+      # Y configurable, porque el 8080 tambien se ocupa —de hecho se ocupo al
+      # probar esto—. Si el arranque dice «port is already allocated»:
+      #
+      #   ASTROLABIO_DEMO_PUERTO=8090 docker compose -f docker-compose.demo.yml up -d
+      #
+      # En PowerShell: $env:ASTROLABIO_DEMO_PUERTO=8090 antes del comando.
+      - "${ASTROLABIO_DEMO_PUERTO:-8080}:80"
+
+volumes:
+  metadatos_demo:
+  analitico_demo:
+  caddy_datos_demo:
+  caddy_config_demo:
