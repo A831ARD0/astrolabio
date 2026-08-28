@@ -95,9 +95,13 @@ TRANSFORMACION = {
         {"nombre": "sucursales", "tipo": "tabla", "referencia": "cat_sucursal"},
     ],
     "pasos": [
+        # `en` y `traer`, que son los nombres que valida `PasoUnir`. Con
+        # `parejas`/`trae` la definicion se guardaba igual —nadie la valida al
+        # sembrar— y reventaba al abrirla: la pantalla de Transformar de la
+        # demostracion contestaba 422 en vez de ensenar los pasos.
         {"tipo": "unir", "con": "sucursales", "como": "izquierda",
-         "parejas": [["sucursal_id", "sucursal_id"]],
-         "trae": ["sucursal_nombre"]},
+         "en": [["sucursal_id", "sucursal_id"]],
+         "traer": ["sucursal_nombre"]},
         {"tipo": "filtrar", "condiciones": [
             {"campo": "es_cancelacion", "op": "=", "valor": False}]},
         {"tipo": "derivar", "nombre": "neto",
