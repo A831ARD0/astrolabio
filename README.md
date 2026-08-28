@@ -3,9 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Conectar, transformar, modelar y publicar.</strong><br>
-  Una plataforma de inteligencia de negocios que se puede auditar: cada cifra
-  se puede rastrear hasta la fila que la produjo.
+  <strong>La plataforma de inteligencia de negocios que se instala en tu servidor,<br>
+  no cobra por usuario y deja comprobar de dónde sale cada cifra.</strong>
 </p>
 
 <p align="center">
@@ -19,10 +18,31 @@
 
 ![Un tablero de Astrolabio](docs/img/tablero.png)
 
-## Qué es
+## Para quién es
 
-Astrolabio hace el recorrido completo de una herramienta de BI, en un solo
-programa que se instala en tu servidor:
+Si te reconoces en tres o más de estas, Astrolabio está hecho para ti:
+
+- Tienes **varias sucursales** y cada dirección quiere ver **solo lo suyo**, sin
+  que eso signifique mantener siete copias del mismo tablero.
+- Pagas **licencia por usuario** y el precio sube cada vez que alguien más
+  necesita mirar una cifra.
+- Tus datos están en el **sistema de gestión del sector** —un ERP o un DMS
+  propio, al que se llega por MySQL/MariaDB u ODBC— y hay que cruzarlos con un
+  **CRM aparte** para que el número signifique algo.
+- Alguien mandó un reporte y **el total no cuadraba**, y encontrar por qué llevó
+  media semana.
+- Los datos **no pueden salir de tu servidor**, por política o por contrato.
+- Tienes una persona técnica que puede administrar un contenedor. No hace falta
+  un equipo.
+
+**Para quién no es:** si buscas un servicio en la nube que se contrate con
+tarjeta y esté listo en diez minutos, esto no lo es. Astrolabio se instala, se
+administra y se respalda. A cambio, no hay renta mensual ni tus datos viajan a
+ningún sitio.
+
+## Qué hace
+
+El recorrido completo, en un solo programa:
 
 1. **Conecta** a tus orígenes (MySQL/MariaDB, cualquier cosa con driver ODBC,
    archivos CSV/Excel/Parquet) y trae los datos a Parquet local.
@@ -34,8 +54,24 @@ programa que se instala en tu servidor:
    verdad: dos personas abren el mismo tablero y ven cifras distintas, según lo
    que cada una tiene permitido ver.
 
-Está pensado para una organización mediana que hoy paga licencias por usuario y
-tiene un servidor donde instalarlo.
+## De dónde sale
+
+Astrolabio no salió de un ejercicio de aprendizaje. Salió de un **grupo
+automotriz con varias sucursales**, cruzando el sistema de gestión del
+concesionario con el CRM para contestar preguntas que no se podían contestar sin
+tres días de Excel: cuánta utilidad por unidad, qué pasó con los prospectos que
+no compraron, cómo va cada sucursal contra su objetivo.
+
+Eso explica las decisiones raras del producto. **Cada una es una cicatriz:**
+
+- El conteo de filas por paso está porque un `JOIN` duplicó facturas y el total
+  salió inflado sin que nada fallara.
+- Los tipos los declara el origen porque deducirlos guardó dinero como texto.
+- El motor se niega a elegir entre dos caminos porque elegir en silencio es cómo
+  una cifra cambia sin que nadie tocara nada.
+
+Si tu operación se parece a esa, los problemas que aquí ya están resueltos son
+los tuyos.
 
 ## Lo que lo hace distinto
 
@@ -51,7 +87,10 @@ están en el código y que se pueden verificar:
 | **El historial guarda los fallos** | Con el error, la hora y quién lo disparó. Es lo que se mira cuando una cifra no cuadra a las 3 de la mañana |
 | **Y avisa cuando algo falla** | Por correo o webhook, con silencio entre repeticiones y aviso al recuperarse |
 
-## En marcha en cinco minutos
+## Verlo funcionando
+
+Con datos ficticios —11.5 millones de filas, un modelo y tableros ya armados—
+para poder juzgarlo sin conectar nada tuyo:
 
 ```bash
 git clone https://github.com/a831ard0/astrolabio.git
@@ -70,8 +109,8 @@ cd astrolabio/frontend && npm install && npm run dev
 
 Abre <http://localhost:5173> y entra con `admin@example.com` / `astrolabio-demo-2026`.
 
-> **Entra después como `region@example.com`** (la misma contraseña) y abre el mismo
-> tablero. Es la demostración de un minuto de lo que hace la seguridad por fila:
+> **La demostración de un minuto.** Entra después como `region@example.com` (la
+> misma contraseña) y abre **el mismo tablero**:
 >
 > | Administración | Dirección Región Sur |
 > |---|---|
@@ -79,13 +118,21 @@ Abre <http://localhost:5173> y entra con `admin@example.com` / `astrolabio-demo-
 > | $184.99 MM, 36 sucursales | $5.1 MM, la suya |
 >
 > No es un filtro que se pueda quitar: el predicado se inyecta en el SQL, y el
-> total sin desglosar también viene filtrado.
+> total sin desglosar también viene filtrado. Es la diferencia entre esconder una
+> cifra y no habérsela mandado nunca.
+
+## Instalarlo
 
 Con Docker, sin instalar Python ni Node —vale igual en Linux, macOS y Windows—:
 
 ```bash
 cp .env.ejemplo .env && docker compose up -d --build
 ```
+
+Levanta una instalación **vacía y lista para tus datos**: crea el usuario
+administrador en el primer arranque y escribe su contraseña temporal en el
+registro (`docker compose logs api`). Si lo que quieres es ver el producto con
+datos dentro, usa la demostración de arriba.
 
 Detalles, y lo que hay que saber de ODBC en un servidor Windows, en el
 [manual técnico](docs/manual-tecnico.md).
@@ -145,6 +192,18 @@ políticas.
 Lo que falta está escrito, sin adornos, en cada documento de fase. Lo más notable:
 más conectores nativos (PostgreSQL, SQL Server, SQLite), una barra de selecciones
 con atrás y adelante, y que el fin de un flujo dispare otro flujo.
+
+## Apoyar el proyecto
+
+Astrolabio lo mantiene una sola persona. Hay tres maneras de que avance más
+rápido, y las tres ayudan:
+
+- **Úsalo y cuenta cómo te fue.** Un issue diciendo qué se rompió con datos de
+  verdad vale más que diez estrellas.
+- **Patrocínalo.** Si tu organización lo usa en producción, el patrocinio es lo
+  que convierte tiempo libre en tiempo dedicado.
+- **Contrátalo.** Implantación, conectores para tu sistema de gestión o soporte
+  con tiempo de respuesta: abre un issue y lo hablamos.
 
 ## Licencia
 
