@@ -17,6 +17,7 @@ import type {
   DefinicionDashboard,
   EnvioEntrada,
   EnvioInforme,
+  Filtro,
   FuncionFormula,
   MetricaCatalogo,
   ModeloResumen,
@@ -404,6 +405,11 @@ export function useVistaPrevia(id: number) {
       dimensiones?: string[]
       metricas: string[]
       limite?: number
+      /** Filtros por columna. Los aplica el motor, no la pantalla. */
+      filtros?: Filtro[]
+      /** Columna del resultado por la que ordenar, y sentido. */
+      orden?: string | null
+      descendente?: boolean
     }) => api.post<ResultadoDatos>(`/modelos/${id}/vista-previa`, v),
   })
 }
@@ -427,8 +433,14 @@ export function useComprobarGrano(id: number) {
 
 export function useMuestra(id: number) {
   return useMutation({
-    mutationFn: (v: { definicion?: Definicion; entidad: string; limite?: number }) =>
-      api.post<ResultadoDatos>(`/modelos/${id}/muestra`, v),
+    mutationFn: (v: {
+      definicion?: Definicion
+      entidad: string
+      limite?: number
+      filtros?: Filtro[]
+      orden?: string | null
+      descendente?: boolean
+    }) => api.post<ResultadoDatos>(`/modelos/${id}/muestra`, v),
   })
 }
 

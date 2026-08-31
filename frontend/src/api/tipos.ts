@@ -415,6 +415,15 @@ export interface ResultadoDatos extends ResultadoPrueba {
   politicas_aplicadas: string[]
   /** Solo la muestra: columnas marcadas como datos personales. */
   pii?: string[]
+  /**
+   * Había más filas de las que caben en el límite.
+   *
+   * El servidor pide una de más y la descarta, sólo para poder decirlo. Sin esto
+   * una tabla cortada se lee como si fuera todo: se ordena por una columna, sale
+   * una fila arriba, y esa fila es la primera de las doscientas que llegaron —no
+   * la primera de los datos.
+   */
+  truncado?: boolean
 }
 
 

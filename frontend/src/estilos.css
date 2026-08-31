@@ -782,6 +782,34 @@ table.datos[style*="--alto-fila"] td {
 }
 table.datos td.num { text-align: right; font-family: var(--mono); }
 
+/* La casilla que filtra una columna, dentro del propio encabezado. Ver `Th`.
+
+   `white-space: normal` porque el `th` los lleva a `nowrap` para que el rotulo no
+   se parta, y eso dejaba la casilla sin poder encogerse. */
+table.datos th .bajo-titulo {
+  white-space: normal;
+  margin-top: 3px;
+  font-weight: 400;
+}
+table.datos th input.filtro-columna {
+  width: 100%;
+  min-width: 60px;
+  box-sizing: border-box;
+  padding: 1px 4px;
+  font-size: 11px;
+  font-weight: 400;
+  height: 20px;
+}
+/* Un hueco del mismo alto donde no hay casilla, para que la cabecera no salga
+   escalonada. */
+table.datos th .bajo-titulo .sin-filtro { display: block; height: 20px; }
+/* Una casilla con algo escrito se ve desde lejos: con catorce columnas, buscar
+   cual esta filtrada mirando dentro de cada una es el trabajo que la casilla venia
+   a ahorrar. */
+table.datos th input.filtro-columna:not(:placeholder-shown) {
+  border-color: var(--acento);
+}
+
 /* ------------------------------------------------------------------ yaml */
 
 .yaml { flex: 1; min-height: 0; display: flex; flex-direction: column; }

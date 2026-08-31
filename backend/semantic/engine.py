@@ -896,6 +896,16 @@ class Consulta:
     #: widget sin datos revele los nombres que alguien no puede ver— y las cifras se
     #: le pegan por la izquierda. Es el «mostrar elementos sin datos» de Power BI.
     filas_sin_cifras: bool = False
+    #: Por que columna ordenar el resultado, y en que sentido.
+    #:
+    #: Importa porque el `limite` corta DESPUES de ordenar: sin esto, «las ultimas
+    #: cien facturas» no se puede pedir —salen las cien primeras que el motor
+    #: encuentre— y ordenar en pantalla la tabla ya recibida solo reordena esas
+    #: cien. Es una columna del RESULTADO: una dimension pedida
+    #: («entidad.campo») o el nombre de una metrica pedida. Cualquier otra cosa es
+    #: un error, no un ORDER BY a ciegas.
+    orden: str | None = None
+    descendente: bool = False
 
 
 @dataclass
@@ -1111,7 +1121,10 @@ class Compilador:
             f"FROM {_cita(e.tabla)}", [])
 
     def compilar_muestra(self, entidad: str, limite: int,
-                         predicados: list | None = None) -> ConsultaCompilada:
+                         predicados: list | None = None,
+                         filtros: list[dict] | None = None,
+                         orden: str | None = None,
+                         descendente: bool = False) -> ConsultaCompilada:
         """
         Unas filas de una entidad, tal como estan en su tabla, sin agregar nada.
 
@@ -1139,6 +1152,23 @@ class Compilador:
             params.extend(p.parametros)
 
         columnas = [c.nombre for c in ent.campos.values() if c.visible]
+
+        # Los filtros de quien mira, ademas de los de seguridad. Van al servidor y
+        # no a la tabla ya recibida porque el LIMITE corta despues: filtrar las
+        # quinientas filas que llegaron es filtrar la muestra, no los datos, y de
+        # las dos cosas la pantalla se ve igual.
+        for f in (filtros or []):
+            campo = str(f.get("campo", ""))
+            duena, _, col = campo.partition(".")
+            if duena != entidad or col not in columnas:
+                raise ErrorModelo(
+                    f"No se puede filtrar por '{campo}': no es una columna visible "
+                    f"de '{entidad}'.")
+        mios, params_mios = self._predicados_sql(
+            filtros or [], f"{base}.", por_columna=True)
+        where.extend(mios)
+        params.extend(params_mios)
+
         # DISTINCT solo si una politica obligo a unir otra tabla: ese JOIN puede
         # multiplicar filas, y una muestra con la misma fila repetida seis veces
         # por culpa de un permiso no se parece a los datos que describe.
@@ -1149,6 +1179,17 @@ class Compilador:
             sql += "\n  " + "\n  ".join(joins)
         if where:
             sql += "\nWHERE " + " AND ".join(where)
+        if orden:
+            # Por posicion, igual que en la agregada: ni un identificador del
+            # usuario dentro del SQL, ni un ORDER BY que el motor tenga que
+            # resolver entre la columna de salida y la de la tabla.
+            col = orden.split(".", 1)[1] if orden.startswith(f"{entidad}.") else orden
+            if col not in columnas:
+                raise ErrorModelo(
+                    f"No se puede ordenar por '{orden}': no es una columna visible "
+                    f"de '{entidad}'.")
+            sql += (f"\nORDER BY {columnas.index(col) + 1}"
+                    f" {'DESC' if descendente else 'ASC'} NULLS LAST")
         sql += f"\nLIMIT {int(limite)}"
         return ConsultaCompilada(sql, params)
 
@@ -1346,10 +1387,55 @@ class Compilador:
                 valores = list(f["valor"])
                 donde.append(f"{col} IN ({', '.join('?' for _ in valores)})")
                 params.extend(valores)
+            elif op in ("LIKE", "ILIKE"):
+                # `ESCAPE` explicito: sin el, un `%` dentro del valor es un
+                # comodin y no un por ciento, y peor todavia, `\%` no casa con
+                # nada —comprobado— asi que escaparlo a mano no arregla nada.
+                donde.append(f"{col} {op} ? ESCAPE '\\'")
+                params.append(f["valor"])
             else:
                 donde.append(f"{col} {op} ?")
                 params.append(f["valor"])
         return donde, params
+
+    def _posicion_del_orden(self, c: "Consulta",
+                            columnas: list[str]) -> int | None:
+        """
+        La columna por la que ordenar, devuelta como POSICION en el SELECT.
+
+        Por posicion y no por nombre porque en la capa final conviven la columna de
+        salida y la del CTE de donde salio, con el mismo nombre: un ORDER BY por
+        nombre deja en manos del motor cual de las dos, y aqui no hay nada que
+        adivinar. De paso, ningun texto del usuario acaba dentro del SQL.
+
+        Se exige que sea una columna PEDIDA. Ordenar por algo que no esta en la
+        tabla se puede escribir en SQL, pero el resultado seria un orden que no se
+        puede ver ni explicar: la fila de arriba estaria arriba por un motivo
+        invisible.
+        """
+        if not c.orden:
+            return None
+        if c.orden not in columnas:
+            raise ErrorModelo(
+                f"No se puede ordenar por '{c.orden}': no es ninguna de las "
+                f"columnas de esta consulta. Las que hay son: "
+                f"{', '.join(columnas)}.")
+        return columnas.index(c.orden) + 1
+
+    @staticmethod
+    def _order_by(pos: int | None, c: "Consulta", por_omision: str) -> str:
+        """
+        El ORDER BY final. Los vacios SIEMPRE al final, suba o baje el resto: es la
+        misma regla que sigue la ordenacion en pantalla, y que una tabla ordenara
+        distinto segun quien la ordeno seria peor que no poder ordenarla.
+
+        `NULLS LAST` va explicito aunque hoy sea el valor por omision de DuckDB:
+        es un ajuste de sesion, y el dia que alguien lo cambie no se tiene que
+        mover el orden de los informes.
+        """
+        if pos is None:
+            return por_omision
+        return f"{pos} {'DESC' if c.descendente else 'ASC'} NULLS LAST"
 
     def _mes_del_contexto(
         self, c: Consulta, dims: list[tuple[str, str]], con_ventana: bool,
@@ -1769,10 +1855,16 @@ class Compilador:
         # columnas. La espina repite los CTE en su UNION, pero SQL los referencia
         # por nombre: los parametros se ligan una vez, en el orden de los CTE.
         if not mes_oculto:
+            # El orden pedido gana sobre el orden por dimensiones, y va aqui —no en
+            # pantalla— porque el LIMITE corta despues: «las ultimas cien facturas»
+            # no se puede contestar reordenando las cien primeras.
+            pos = self._posicion_del_orden(c, cols_dim + list(c.metricas))
             sql = (
                 f"{cuerpo_final}\nSELECT\n  " + ",\n  ".join(sel) +
                 f"\nFROM {fuente}"
-                f"\nORDER BY " + ", ".join(f"{alias_f}.{_cita(cd)}" for cd in cols_dim) +
+                f"\nORDER BY " + self._order_by(
+                    pos, c,
+                    ", ".join(f"{alias_f}.{_cita(cd)}" for cd in cols_dim)) +
                 f"\nLIMIT {int(c.limite)}"
             )
             return ConsultaCompilada(sql, parametros)
@@ -1824,8 +1916,11 @@ class Compilador:
             f"SELECT\n  " + ",\n  ".join(sel_arriba) +
             f"\nFROM detalle AS d"
             f"\nJOIN mes_que_manda AS x ON d.{col_mes} IS NOT DISTINCT FROM x.mes"
-            + (("\nORDER BY " + ", ".join(f"d.{_cita(cd)}" for cd in cols_vistas))
-               if cols_vistas else "")
+            + ("\nORDER BY " + self._order_by(
+                self._posicion_del_orden(
+                    c, cols_vistas + [COL_MES_USADO] + list(c.metricas)),
+                c, ", ".join(f"d.{_cita(cd)}" for cd in cols_vistas))
+               if (cols_vistas or c.orden) else "")
             + f"\nLIMIT {int(c.limite)}"
         )
         # Los parametros de `mes_que_manda` van al final porque su CTE va despues.

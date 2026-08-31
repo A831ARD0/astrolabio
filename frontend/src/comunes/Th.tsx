@@ -23,6 +23,7 @@ export function Th({
   className,
   style,
   titulo,
+  debajo,
 }: {
   orden: EstadoOrden
   /** Con qué se ordena esta columna. La lee la función `valor` de `useOrden`. */
@@ -31,6 +32,18 @@ export function Th({
   className?: string
   style?: React.CSSProperties
   titulo?: string
+  /**
+   * Algo más dentro del encabezado, bajo el rótulo: hoy la casilla que filtra esa
+   * columna.
+   *
+   * Dentro del `th` y no en una segunda fila de la cabecera porque el `th` es el
+   * que está pegado arriba al desplazar. Una fila aparte tendría que pegarse a una
+   * altura calculada a mano —la del rótulo— y cualquier cambio de tipografía la
+   * dejaría descuadrada o solapada.
+   *
+   * No va en el papel: en una impresión no se filtra nada.
+   */
+  debajo?: ReactNode
 }) {
   const activa = orden.clave === clave
   // La alineación del `th` no llega al rótulo por su cuenta: el rótulo vive dentro de
@@ -53,6 +66,7 @@ export function Th({
         <span>{children}</span>
         <span className="flecha">{!activa ? '↕' : orden.dir === 'asc' ? '↑' : '↓'}</span>
       </button>
+      {debajo !== undefined && <div className="bajo-titulo">{debajo}</div>}
       {/* `aria-hidden` para que no se lea dos veces. */}
       <span className="solo-papel" aria-hidden="true">
         {children}

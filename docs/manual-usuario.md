@@ -1212,6 +1212,44 @@ Cambiar el grano borra el resultado anterior. Ese cuadro afirma algo de unas col
 concretas; dejarlo puesto tras quitar una sería afirmar de un grano nuevo lo que se
 comprobó del viejo.
 
+### La pestaña «Datos»: filtrar y ordenar por columna
+
+La pestaña **Datos** del modelo tiene dos vistas: **Resultado** —tus métricas, con el
+desglose que elijas— y **Muestra de filas** —una tabla tal cual está, sin agregar
+nada—. Las dos ejecutan **lo que tienes en pantalla**, sin publicar.
+
+Debajo del título de cada columna hay una casilla. Lo que escribas ahí **lo filtra el
+servidor**, no la pantalla:
+
+| Escribes | Busca |
+|---|---|
+| `AOA` | contiene `AOA` (en columnas de texto) · igual a `AOA` (en números) |
+| `=AOA` | exactamente `AOA` |
+| `>100` | mayor que 100. También `>=`, `<`, `<=`, `<>` y `!=` |
+| `2026-08` | contiene `2026-08` — la forma corta de «las de agosto» |
+| `AOA, CAOA` | cualquiera de la lista |
+
+Se aplica con **Enter**, o al salir de la casilla. Un clic en el título ordena:
+ascendente, descendente, y un tercer clic vuelve al orden de origen.
+
+**Por qué esto importa más de lo que parece.** La tabla llega recortada —200 filas en
+Resultado, las que elijas en Muestra— y el recorte se hace **después** de ordenar y
+filtrar. Es decir:
+
+- Ordenar por fecha de mayor a menor **sí** te da las facturas más recientes, porque
+  el orden viaja a la consulta.
+- Si el resultado se cortó, sale un aviso: *«hay más de 200: se enseñan las 200
+  primeras del orden actual»*. Sin ese aviso una tabla recortada se lee como si fuera
+  todo, se suma y se firma.
+
+Dos límites que conviene saber:
+
+- **Las métricas no llevan casilla, sólo se ordenan.** Filtrar una métrica es filtrar
+  una cifra ya sumada, y estos filtros se aplican antes de sumar: la casilla daría un
+  número distinto del que estás viendo. Ordenar de mayor a menor contesta casi siempre
+  la misma pregunta.
+- En **Muestra de filas** se filtran las columnas de esa tabla, no de las relacionadas.
+
 ### Ver el modelo como texto
 
 La pestaña **YAML** enseña el modelo tal cual se guarda. Cuando tienes trabajo sin

@@ -96,6 +96,9 @@ class PeticionConsulta(BaseModel):
     limite: int = Field(default=5000, le=100_000)
     #: Sacar tambien las filas del desglose sin ninguna cifra. Ver `Consulta`.
     filas_sin_cifras: bool = False
+    #: Columna del resultado por la que ordenar, y sentido. Ver `Consulta.orden`.
+    orden: str | None = None
+    descendente: bool = False
 
 
 class GuardarDefinicion(BaseModel):
@@ -192,6 +195,9 @@ class VistaPrevia(BaseModel):
     filtros: list[dict] = []
     rutas_elegidas: dict[str, str] = {}
     limite: int = Field(default=200, le=5000)
+    #: Columna del resultado por la que ordenar, y sentido. Ver `Consulta.orden`.
+    orden: str | None = None
+    descendente: bool = False
 
 
 class MuestraEntidad(BaseModel):
@@ -200,6 +206,12 @@ class MuestraEntidad(BaseModel):
     definicion: Definicion | None = None
     entidad: str
     limite: int = Field(default=50, le=500)
+    #: Filtros y orden por columna, aplicados por el motor y no por la pantalla:
+    #: el limite corta despues, asi que filtrar lo ya recibido filtraria la muestra
+    #: y no la tabla. Ver `Compilador.compilar_muestra`.
+    filtros: list[dict] = []
+    orden: str | None = None
+    descendente: bool = False
 
 
 class ComprobarGrano(BaseModel):
@@ -1058,6 +1070,7 @@ def vista_previa(modelo_id: int, cuerpo: VistaPrevia, sesion: SesionDep,
             dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
             filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
             limite=cuerpo.limite,
+            orden=cuerpo.orden, descendente=cuerpo.descendente,
         ), ctx)
     except ErrorModelo as e:
         detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}
@@ -1082,8 +1095,11 @@ def vista_previa(modelo_id: int, cuerpo: VistaPrevia, sesion: SesionDep,
                             f"La consulta no se pudo ejecutar. "
                             f"{en_castellano(e)}")
 
+    # `truncado` sale de `ejecutar_consulta`, que ya pide una fila de mas para
+    # poder saberlo. Sin decirlo, la tabla recortada se lee como si fuera todo.
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
-            "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas}
+            "sql": res.sql, "truncado": res.truncado,
+            "politicas_aplicadas": res.politicas_aplicadas}
 
 
 @router.post("/{modelo_id}/muestra")
@@ -1102,7 +1118,8 @@ def muestra(modelo_id: int, cuerpo: MuestraEntidad, sesion: SesionDep,
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"La entidad '{cuerpo.entidad}' no esta en el modelo")
     try:
-        res = ejecutar_muestra(m, cuerpo.entidad, cuerpo.limite, ctx)
+        res = ejecutar_muestra(m, cuerpo.entidad, cuerpo.limite, ctx,
+                               cuerpo.filtros, cuerpo.orden, cuerpo.descendente)
     except ErrorModelo as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
     except PoliticaInvalida as e:
@@ -1114,7 +1131,8 @@ def muestra(modelo_id: int, cuerpo: MuestraEntidad, sesion: SesionDep,
                             f"No se pudo leer la tabla. {en_castellano(e)}")
 
     return {"columnas": res.columnas, "filas": res.filas, "ms": res.ms,
-            "sql": res.sql, "politicas_aplicadas": res.politicas_aplicadas,
+            "sql": res.sql, "truncado": res.truncado,
+            "politicas_aplicadas": res.politicas_aplicadas,
             # Que columnas son datos personales, para poder avisarlo en pantalla.
             "pii": [c.nombre for c in m.entidades[cuerpo.entidad].campos.values()
                     if c.pii and c.visible]}
@@ -1262,6 +1280,7 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
             dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
             filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
             limite=cuerpo.limite, filas_sin_cifras=cuerpo.filas_sin_cifras,
+            orden=cuerpo.orden, descendente=cuerpo.descendente,
         ), ctx)
     except ErrorModelo as e:
         # Ambiguedad de ruta, metrica no desglosable, metrica inexistente: son
@@ -1333,6 +1352,7 @@ def exportar(modelo_id: int, cuerpo: PeticionExportar, sesion: SesionDep,
             dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
             filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
             limite=cuerpo.limite,
+            orden=cuerpo.orden, descendente=cuerpo.descendente,
         ), ctx)
     except ErrorModelo as e:
         detalle: dict = {"error": type(e).__name__, "mensaje": str(e)}

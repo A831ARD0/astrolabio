@@ -288,16 +288,26 @@ def _por_que_vacio(modelo: Modelo, consulta: Consulta, predicados: list) -> str 
 
 
 def ejecutar_muestra(modelo: Modelo, entidad: str, limite: int,
-                     ctx: ContextoUsuario) -> Resultado:
+                     ctx: ContextoUsuario, filtros: list[dict] | None = None,
+                     orden: str | None = None,
+                     descendente: bool = False) -> Resultado:
     """
     Unas filas de una entidad, sin agregar. Mismo camino que `ejecutar_consulta`:
     pasa por la capa de politicas antes de tocar el motor.
+
+    `filtros` y `orden` los aplica el MOTOR, no la pantalla, porque el limite corta
+    despues: sin ellos, «las ultimas facturas» de una tabla de cien mil filas no se
+    puede pedir.
     """
     preparar(modelo)
     capa = CapaPoliticas(modelo, modelo.politicas)
     predicados = capa.resolver(ctx)
 
-    compilada = Compilador(modelo).compilar_muestra(entidad, limite, predicados)
+    # Una fila mas que el limite, igual que en `ejecutar_consulta` y por lo mismo:
+    # contando las que vuelven no se distingue «justo caben cincuenta» de «hay
+    # cinco mil y se cortaron en cincuenta». Se descarta al devolver.
+    compilada = Compilador(modelo).compilar_muestra(
+        entidad, limite + 1, predicados, filtros, orden, descendente)
 
     t0 = time.perf_counter()
     cur = conexion().execute(compilada.sql, compilada.parametros)
@@ -305,9 +315,14 @@ def ejecutar_muestra(modelo: Modelo, entidad: str, limite: int,
     filas = [dict(zip(columnas, f)) for f in cur.fetchall()]
     ms = (time.perf_counter() - t0) * 1000
 
+    truncado = len(filas) > limite
+    if truncado:
+        del filas[limite:]
+
     return Resultado(
         columnas=columnas, filas=filas, sql=compilada.sql, ms=round(ms, 1),
         politicas_aplicadas=[p.politica for p in predicados],
+        truncado=truncado,
     )
 
 
