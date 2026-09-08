@@ -16,7 +16,7 @@
 
 import { loader } from '@monaco-editor/react'
 import type { Monaco } from '@monaco-editor/react'
-import * as monacoLocal from 'monaco-editor'
+import * as monacoLocal from './monacoNucleo'
 import ObreroEditor from 'monaco-editor/editor/editor.worker?worker'
 // Solo para los tipos de los proveedores. `Monaco` da el objeto global, pero los
 // parametros de `provideCompletionItems`/`provideHover` no se infieren solos.
@@ -34,11 +34,14 @@ import type { FuncionFormula } from '../api/tipos'
  * está en `node_modules` y el editor deja de depender de que haya salida a
  * internet.
  *
+ * Y sale por piezas, no entero: `monacoNucleo` es el editor sin ningún servicio
+ * de lenguaje, y ahí está explicado por qué y cómo se regenera al actualizar.
+ *
  * El obrero va aparte porque Monaco lo arranca solo y, sin decirle de dónde
  * sacarlo, revienta al montar. Solo hace falta el genérico: los servicios de
- * lenguaje que traen los suyos (TypeScript, JSON) no se usan aquí.
+ * lenguaje que traen los suyos (TypeScript, JSON) ya no entran.
  *
- * La ruta del obrero es `monaco-editor/editor/…` y no la clásica
+ * Su ruta es `monaco-editor/editor/…` y no la clásica
  * `monaco-editor/esm/vs/editor/…`: desde la 0.56 el paquete declara `exports`
  * con `"./*": "./esm/vs/*.js"`, así que el prefijo `esm/vs` ya no se escribe
  * —escribirlo hace que Vite no resuelva el módulo y arranque sin avisar en la
