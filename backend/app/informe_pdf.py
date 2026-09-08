@@ -192,10 +192,10 @@ def generar(dashboard_id: int, *, hoja: str | None = None, correo: str,
                 estado = pagina.evaluate("() => window.__informe ?? null")
                 if estado is None:
                     raise InformeFallido(
-                        f"La aplicacion pidio contraseña al abrir el tablero: el "
+                        f"La aplicación pidió contraseña al abrir el tablero: el "
                         f"usuario del informe ({correo}) no pudo entrar. Revisa que "
                         f"exista y que ASTROLABIO_URL_PUBLICA apunte a esta misma "
-                        f"instalacion.")
+                        f"instalación.")
                 if not estado.get("listo"):
                     raise InformeFallido(str(estado.get("error") or
                                              "La hoja no se pudo preparar."))

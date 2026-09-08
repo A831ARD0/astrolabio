@@ -168,7 +168,7 @@ distintas. Elige cuál usar en todo el tablero:
 
 Se elige una vez, aplica a todo el tablero y **se guarda con él**, así que la
 cifra es reproducible: quien abra el tablero mañana verá el mismo número por el
-mismo camino. Un widget puede sobreescribir la elección si de verdad quiere medir
+mismo camino. Un widget puede sobrescribir la elección si de verdad quiere medir
 por el otro camino.
 
 ---

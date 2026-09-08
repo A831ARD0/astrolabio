@@ -268,7 +268,7 @@ def _por_que_vacio(modelo: Modelo, consulta: Consulta, predicados: list) -> str 
     for s in sondas:
         try:
             if cuenta(s["sola"]) == 0:
-                return (f"«{s['entidad']}» no tiene ni una fila: la tabla esta vacia. "
+                return (f"«{s['entidad']}» no tiene ni una fila: la tabla está vacía. "
                         f"Falta cargarla.")
             if cuenta(s["unida"]) == 0:
                 por = (" por " + ", ".join(s["uniones"])) if s["uniones"] else ""

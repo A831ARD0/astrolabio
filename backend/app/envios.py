@@ -196,8 +196,8 @@ def enviar(sesion: Session, envio: EnvioInforme,
     duenio = sesion.get(Usuario, envio.creado_por) if envio.creado_por else None
     if duenio is None:
         raise EnvioInvalido(
-            "El envio no tiene dueño, y el informe se genera con su sesion para que "
-            "las politicas de seguridad por fila sean las de alguien. Vuelve a crearlo.")
+            "El envío no tiene dueño, y el informe se genera con su sesión para que "
+            "las políticas de seguridad por fila sean las de alguien. Vuelve a crearlo.")
 
     filtros, periodo = filtros_del_periodo(sesion, envio, hoy)
     quiere_pdf = envio.cuerpo in ("pdf", "ambos")

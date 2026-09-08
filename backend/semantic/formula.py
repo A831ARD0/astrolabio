@@ -129,7 +129,7 @@ CATALOGO: dict[str, Funcion] = {
            "Suma todos los valores del grupo.",
            "SUMA(Importe_Venta)", 1, 1, True),
         _f("PROMEDIO", "PROMEDIO(numero)", "agregacion",
-           "Media aritmetica del grupo. Ignora los vacios.",
+           "Media aritmética del grupo. Ignora los vacíos.",
            "PROMEDIO(Utilidad)", 1, 1, True),
         _f("CONTAR", "CONTAR([campo])", "agregacion",
            "Cuenta filas. Sin argumento cuenta todas; con uno, solo las que no "
@@ -139,59 +139,59 @@ CATALOGO: dict[str, Funcion] = {
            "Cuenta cuantos valores DISTINTOS hay.",
            "CONTARUNICOS(Numero_Factura)", 1, 1, True),
         _f("MINIMO", "MINIMO(campo)", "agregacion",
-           "El valor mas chico del grupo.", "MINIMO(Fecha_Factura)", 1, 1, True),
+           "El valor más chico del grupo.", "MINIMO(Fecha_Factura)", 1, 1, True),
         _f("MAXIMO", "MAXIMO(campo)", "agregacion",
-           "El valor mas grande del grupo.", "MAXIMO(Fecha_Factura)", 1, 1, True),
+           "El valor más grande del grupo.", "MAXIMO(Fecha_Factura)", 1, 1, True),
         _f("MEDIANA", "MEDIANA(numero)", "agregacion",
            "El valor de en medio. A diferencia del promedio, no se la lleva un "
            "solo dato enorme.",
            "MEDIANA(Importe_Venta)", 1, 1, True),
         _f("DESVEST", "DESVEST(numero)", "agregacion",
-           "Desviacion estandar muestral.", "DESVEST(Utilidad)", 1, 1, True),
+           "Desviación estándar muestral.", "DESVEST(Utilidad)", 1, 1, True),
         _f("VARIANZA", "VARIANZA(numero)", "agregacion",
            "Varianza muestral.", "VARIANZA(Utilidad)", 1, 1, True),
         _f("PERCENTIL", "PERCENTIL(numero, fraccion)", "agregacion",
-           "El percentil pedido, con la fraccion entre 0 y 1.",
+           "El percentil pedido, con la fracción entre 0 y 1.",
            "PERCENTIL(Importe_Venta, 0.9)", 2, 2, True),
         _f("PRIMERO", "PRIMERO(campo)", "agregacion",
-           "El primer valor del grupo. Util cuando el grupo tiene un valor "
+           "El primer valor del grupo. Útil cuando el grupo tiene un valor "
            "constante y solo hace falta sacarlo.",
            "PRIMERO(Tipo_Venta)", 1, 1, True),
         _f("ULTIMO", "ULTIMO(campo)", "agregacion",
-           "El ultimo valor del grupo.", "ULTIMO(Tipo_Venta)", 1, 1, True),
+           "El último valor del grupo.", "ULTIMO(Tipo_Venta)", 1, 1, True),
         _f("LISTA", "LISTA(texto, separador)", "agregacion",
            "Pega en un solo texto todos los valores del grupo.",
            "LISTA(Tipo_Venta, ', ')", 1, 2, True),
 
         # ---- agregacion con condicion --------------------------------------
         _f("CALCULAR", "CALCULAR(expresion, condicion, ...)", "condicion",
-           "Calcula la expresion contando solo las filas que cumplen las "
+           "Calcula la expresión contando solo las filas que cumplen las "
            "condiciones. Es el equivalente honesto de CALCULATE: se le aplica a "
            "CADA agregacion que haya dentro. La condicion puede acotar por una "
            "columna de OTRA tabla escribiendola con su nombre delante: "
            "DIM_ORIGEN_VENTA.categoria_canal = 'Digital'.",
            "CALCULAR(SUMA(Importe_Venta), Tipo_Venta = 'Contado')", 2, None, True),
         _f("SUMASI", "SUMASI(numero, condicion)", "condicion",
-           "Suma solo las filas que cumplen la condicion.",
+           "Suma solo las filas que cumplen la condición.",
            "SUMASI(Importe_Venta, Unidades > 0)", 2, 2, True),
         _f("CONTARSI", "CONTARSI(condicion)", "condicion",
-           "Cuenta las filas que cumplen la condicion.",
+           "Cuenta las filas que cumplen la condición.",
            "CONTARSI(Utilidad < 0)", 1, 1, True),
         _f("PROMEDIOSI", "PROMEDIOSI(numero, condicion)", "condicion",
-           "Promedia solo las filas que cumplen la condicion.",
+           "Promedia solo las filas que cumplen la condición.",
            "PROMEDIOSI(Utilidad, Tipo_Venta = 'Contado')", 2, 2, True),
         _f("CONTARUNICOSSI", "CONTARUNICOSSI(campo, condicion)", "condicion",
-           "Cuenta valores distintos entre las filas que cumplen la condicion.",
+           "Cuenta valores distintos entre las filas que cumplen la condición.",
            "CONTARUNICOSSI(ID_Vehiculo, Unidades > 0)", 2, 2, True),
 
         # ---- logica ---------------------------------------------------------
         _f("SI", "SI(condicion, entonces, [si_no])", "condicion",
-           "Devuelve un valor u otro segun la condicion.",
+           "Devuelve un valor u otro según la condición.",
            "SI(Unidades > 0, Importe_Venta, 0)", 2, 3),
         _f("ELEGIR", "ELEGIR(expresion, valor1, resultado1, ..., [por_omision])",
            "condicion",
-           "Compara la expresion contra cada valor y devuelve el resultado que "
-           "case. El ultimo argumento suelto es el caso por omision.",
+           "Compara la expresión contra cada valor y devuelve el resultado que "
+           "case. El último argumento suelto es el caso por omisión.",
            "ELEGIR(Tipo_Venta, 'Contado', 1, 'Credito', 2, 0)", 3, None),
         _f("Y", "Y(condicion, condicion, ...)", "condicion",
            "Verdadero si todas se cumplen.",
@@ -200,7 +200,7 @@ CATALOGO: dict[str, Funcion] = {
            "Verdadero si al menos una se cumple.",
            "O(Tipo_Venta = 'Contado', Tipo_Venta = 'Credito')", 2, None),
         _f("NO", "NO(condicion)", "condicion",
-           "Invierte la condicion.", "NO(Unidades > 0)", 1, 1),
+           "Invierte la condición.", "NO(Unidades > 0)", 1, 1),
         _f("EN", "EN(campo, valor, valor, ...)", "condicion",
            "Verdadero si el campo es alguno de los valores.",
            "EN(Tipo_Venta, 'Contado', 'Credito')", 2, None),
@@ -208,19 +208,19 @@ CATALOGO: dict[str, Funcion] = {
            "Verdadero si el valor cae en el rango, extremos incluidos.",
            "ENTRE(Unidades, 1, 10)", 3, 3),
         _f("ESVACIO", "ESVACIO(campo)", "condicion",
-           "Verdadero si el valor esta vacio (NULL).",
+           "Verdadero si el valor está vacío (NULL).",
            "ESVACIO(Fecha_Factura)", 1, 1),
         _f("SIVACIO", "SIVACIO(campo, alterno)", "condicion",
-           "El valor, o el alterno si esta vacio.",
+           "El valor, o el alterno si está vacío.",
            "SIVACIO(Utilidad, 0)", 2, 2),
         _f("SIERROR", "SIERROR(expresion, alterno)", "condicion",
-           "El valor, o el alterno si el calculo falla (una conversion "
+           "El valor, o el alterno si el cálculo falla (una conversión "
            "imposible, por ejemplo).",
            "SIERROR(TEXTO_A_NUMERO(Folio), 0)", 2, 2),
 
         # ---- matematicas ----------------------------------------------------
         _f("DIVIDIR", "DIVIDIR(numerador, denominador, [si_cero])", "matematica",
-           "Division segura: dividir entre cero da vacio en vez de reventar la "
+           "División segura: dividir entre cero da vacío en vez de reventar la "
            "consulta entera.",
            "DIVIDIR(SUMA(Utilidad), SUMA(Importe_Venta))", 2, 3),
         _f("ABSOLUTO", "ABSOLUTO(numero)", "matematica",
@@ -237,17 +237,17 @@ CATALOGO: dict[str, Funcion] = {
         _f("POTENCIA", "POTENCIA(base, exponente)", "matematica",
            "Eleva a una potencia.", "POTENCIA(Unidades, 2)", 2, 2),
         _f("RAIZ", "RAIZ(numero)", "matematica",
-           "Raiz cuadrada.", "RAIZ(VARIANZA(Utilidad))", 1, 1),
+           "Raíz cuadrada.", "RAIZ(VARIANZA(Utilidad))", 1, 1),
         _f("LN", "LN(numero)", "matematica",
            "Logaritmo natural.", "LN(Importe_Venta)", 1, 1),
         _f("LOG10", "LOG10(numero)", "matematica",
            "Logaritmo base 10.", "LOG10(Importe_Venta)", 1, 1),
         _f("EXP", "EXP(numero)", "matematica",
-           "e elevado al numero.", "EXP(1)", 1, 1),
+           "e elevado al número.", "EXP(1)", 1, 1),
         _f("SIGNO", "SIGNO(numero)", "matematica",
-           "-1, 0 o 1 segun el signo.", "SIGNO(Utilidad)", 1, 1),
+           "-1, 0 o 1 según el signo.", "SIGNO(Utilidad)", 1, 1),
         _f("RESIDUO", "RESIDUO(numero, divisor)", "matematica",
-           "Resto de la division entera.", "RESIDUO(Unidades, 2)", 2, 2),
+           "Resto de la división entera.", "RESIDUO(Unidades, 2)", 2, 2),
 
         # ---- texto ----------------------------------------------------------
         _f("CONCATENAR", "CONCATENAR(texto, texto, ...)", "texto",
@@ -255,23 +255,23 @@ CATALOGO: dict[str, Funcion] = {
         _f("IZQUIERDA", "IZQUIERDA(texto, n)", "texto",
            "Los primeros n caracteres.", "IZQUIERDA(Numero_Factura, 3)", 2, 2),
         _f("DERECHA", "DERECHA(texto, n)", "texto",
-           "Los ultimos n caracteres.", "DERECHA(Numero_Factura, 4)", 2, 2),
+           "Los últimos n caracteres.", "DERECHA(Numero_Factura, 4)", 2, 2),
         _f("EXTRAE", "EXTRAE(texto, desde, largo)", "texto",
            "Un trozo del texto. `desde` empieza en 1.",
            "EXTRAE(Numero_Factura, 2, 5)", 3, 3),
         _f("LARGO", "LARGO(texto)", "texto",
-           "Cuantos caracteres tiene.", "LARGO(Numero_Factura)", 1, 1),
+           "Cuántos caracteres tiene.", "LARGO(Numero_Factura)", 1, 1),
         _f("MAYUSCULAS", "MAYUSCULAS(texto)", "texto",
-           "Todo en mayusculas.", "MAYUSCULAS(Tipo_Venta)", 1, 1),
+           "Todo en mayúsculas.", "MAYUSCULAS(Tipo_Venta)", 1, 1),
         _f("MINUSCULAS", "MINUSCULAS(texto)", "texto",
-           "Todo en minusculas.", "MINUSCULAS(Tipo_Venta)", 1, 1),
+           "Todo en minúsculas.", "MINUSCULAS(Tipo_Venta)", 1, 1),
         _f("RECORTAR", "RECORTAR(texto)", "texto",
            "Quita los espacios de los extremos.", "RECORTAR(Tipo_Venta)", 1, 1),
         _f("SUSTITUIR", "SUSTITUIR(texto, buscar, poner)", "texto",
            "Reemplaza todas las apariciones.",
            "SUSTITUIR(Numero_Factura, '-', '')", 3, 3),
         _f("CONTIENE", "CONTIENE(texto, buscado)", "texto",
-           "Verdadero si el texto contiene al otro. No distingue mayusculas.",
+           "Verdadero si el texto contiene al otro. No distingue mayúsculas.",
            "CONTIENE(Tipo_Venta, 'credito')", 2, 2),
         _f("EMPIEZACON", "EMPIEZACON(texto, prefijo)", "texto",
            "Verdadero si empieza con ese prefijo.",
@@ -282,16 +282,16 @@ CATALOGO: dict[str, Funcion] = {
         _f("TEXTO", "TEXTO(valor)", "texto",
            "Convierte cualquier valor a texto.", "TEXTO(ID_Sucursal)", 1, 1),
         _f("NUMERO", "NUMERO(valor)", "texto",
-           "Convierte a numero. Falla si no se puede; envuelvelo en SIERROR.",
+           "Convierte a número. Falla si no se puede; envuélvelo en SIERROR.",
            "NUMERO(Numero_Factura)", 1, 1),
 
         # ---- fechas ---------------------------------------------------------
         _f("ANIO", "ANIO(fecha)", "fecha",
-           "El año como numero.", "ANIO(Fecha_Factura)", 1, 1),
+           "El año como número.", "ANIO(Fecha_Factura)", 1, 1),
         _f("MES", "MES(fecha)", "fecha",
            "El mes, 1 a 12.", "MES(Fecha_Factura)", 1, 1),
         _f("DIA", "DIA(fecha)", "fecha",
-           "El dia del mes.", "DIA(Fecha_Factura)", 1, 1),
+           "El día del mes.", "DIA(Fecha_Factura)", 1, 1),
         _f("TRIMESTRE", "TRIMESTRE(fecha)", "fecha",
            "El trimestre, 1 a 4.", "TRIMESTRE(Fecha_Factura)", 1, 1),
         _f("SEMANA", "SEMANA(fecha)", "fecha",
@@ -301,38 +301,38 @@ CATALOGO: dict[str, Funcion] = {
         _f("FECHA", "FECHA(anio, mes, dia)", "fecha",
            "Arma una fecha.", "FECHA(2026, 1, 1)", 3, 3),
         _f("INICIOMES", "INICIOMES(fecha)", "fecha",
-           "El dia 1 de ese mes.", "INICIOMES(Fecha_Factura)", 1, 1),
+           "El día 1 de ese mes.", "INICIOMES(Fecha_Factura)", 1, 1),
         _f("FINMES", "FINMES(fecha)", "fecha",
-           "El ultimo dia de ese mes.", "FINMES(Fecha_Factura)", 1, 1),
+           "El último día de ese mes.", "FINMES(Fecha_Factura)", 1, 1),
         _f("INICIOANIO", "INICIOANIO(fecha)", "fecha",
            "El 1 de enero de ese año.", "INICIOANIO(Fecha_Factura)", 1, 1),
         _f("INICIOTRIMESTRE", "INICIOTRIMESTRE(fecha)", "fecha",
-           "El primer dia de ese trimestre.",
+           "El primer día de ese trimestre.",
            "INICIOTRIMESTRE(Fecha_Factura)", 1, 1),
         _f("INICIOSEMANA", "INICIOSEMANA(fecha)", "fecha",
            "El lunes de esa semana.", "INICIOSEMANA(Fecha_Factura)", 1, 1),
         _f("SUMARDIAS", "SUMARDIAS(fecha, n)", "fecha",
-           "Corre la fecha n dias. Con n negativo va hacia atras.",
+           "Corre la fecha n días. Con n negativo va hacia atrás.",
            "SUMARDIAS(Fecha_Factura, -30)", 2, 2),
         _f("SUMARMESES", "SUMARMESES(fecha, n)", "fecha",
            "Corre la fecha n meses.", "SUMARMESES(Fecha_Factura, -1)", 2, 2),
         _f("SUMARANIOS", "SUMARANIOS(fecha, n)", "fecha",
            "Corre la fecha n años.", "SUMARANIOS(Fecha_Factura, -1)", 2, 2),
         _f("DIFDIAS", "DIFDIAS(desde, hasta)", "fecha",
-           "Cuantos dias hay entre las dos fechas.",
+           "Cuántos días hay entre las dos fechas.",
            "DIFDIAS(Fecha_Factura, HOY())", 2, 2),
         _f("DIFMESES", "DIFMESES(desde, hasta)", "fecha",
-           "Cuantos meses hay entre las dos fechas.",
+           "Cuántos meses hay entre las dos fechas.",
            "DIFMESES(Fecha_Factura, HOY())", 2, 2),
         _f("DIFANIOS", "DIFANIOS(desde, hasta)", "fecha",
-           "Cuantos años hay entre las dos fechas.",
+           "Cuántos años hay entre las dos fechas.",
            "DIFANIOS(Fecha_Factura, HOY())", 2, 2),
         _f("NOMBREMES", "NOMBREMES(fecha)", "fecha",
            "El nombre del mes.", "NOMBREMES(Fecha_Factura)", 1, 1),
         _f("NOMBREDIA", "NOMBREDIA(fecha)", "fecha",
-           "El nombre del dia de la semana.", "NOMBREDIA(Fecha_Factura)", 1, 1),
+           "El nombre del día de la semana.", "NOMBREDIA(Fecha_Factura)", 1, 1),
         _f("FORMATOFECHA", "FORMATOFECHA(fecha, patron)", "fecha",
-           "La fecha como texto con el patron dado.",
+           "La fecha como texto con el patrón dado.",
            "FORMATOFECHA(Fecha_Factura, '%Y-%m')", 2, 2),
 
         # ---- tiempo ---------------------------------------------------------
@@ -579,7 +579,7 @@ def partir(texto: str) -> tuple[list[tuple[str, Tramo, int]], Tramo]:
     if len(returns) > 1:
         ini = returns[1][0]
         raise ErrorFormula([Fallo(
-            "Solo puede haber un RETURN, y tiene que ser el ultimo.",
+            "Solo puede haber un RETURN, y tiene que ser el último.",
             ini, 6)])
     if marcas[-1][2] != "RETURN":
         ini = marcas[-1][0]
@@ -655,8 +655,8 @@ def _extraer_referencias(tramo: Tramo, ctx: Contexto,
         if expresion is None:
             conocidas = list(ctx.metricas)
             parecida = difflib.get_close_matches(nombre, conocidas, 1, 0.6)
-            pista = f" ¿Querias decir [{parecida[0]}]?" if parecida else (
-                " Esta entidad todavia no tiene otras metricas."
+            pista = f" ¿Querías decir [{parecida[0]}]?" if parecida else (
+                " Esta entidad todavía no tiene otras métricas."
                 if not conocidas else
                 f" Las de esta entidad son: {', '.join(sorted(conocidas))}.")
             fallos.append(Fallo(
@@ -1086,8 +1086,8 @@ def _referencias_compuesta(
         if hallada is None:
             conocidas = list(ctx.metricas)
             parecida = difflib.get_close_matches(nombre, conocidas, 1, 0.6)
-            pista = (f" ¿Querias decir [{parecida[0]}]?" if parecida else
-                     " El modelo todavia no tiene otras metricas."
+            pista = (f" ¿Querías decir [{parecida[0]}]?" if parecida else
+                     " El modelo todavía no tiene otras métricas."
                      if not conocidas else
                      f" Las del modelo son: {', '.join(sorted(conocidas))}.")
             fallos.append(Fallo(
@@ -1224,8 +1224,8 @@ def _reescribir_ventanas(nodo: exp.Expression,
         if not (isinstance(cuantos, exp.Literal) and cuantos.is_int
                 and int(cuantos.name) > 0):
             raise ErrorFormula([Fallo(
-                "PROMEDIOMESES necesita saber cuantos meses, y tiene que ser un "
-                "numero escrito ahi mismo: PROMEDIOMESES([Unidades], 3).")])
+                "PROMEDIOMESES necesita saber cuántos meses, y tiene que ser un "
+                "número escrito ahí mismo: PROMEDIOMESES([Unidades], 3).")])
         desde = int(cuantos.name)
         divisor = desde
 
@@ -1291,9 +1291,9 @@ def compilar_compuesta(
         fallos.append(Fallo(
             f"{'La columna' if len(sueltas) == 1 else 'Las columnas'} "
             f"{', '.join(sueltas)} no se {'puede' if len(sueltas) == 1 else 'pueden'} "
-            f"usar aqui: una metrica compuesta no lee ninguna tabla, solo combina "
-            f"otras metricas. Escribe [{sueltas[0]}] si es una metrica, o mueve el "
-            f"calculo a una metrica del hecho donde vive esa columna.",
+            f"usar aquí: una métrica compuesta no lee ninguna tabla, solo combina "
+            f"otras métricas. Escribe [{sueltas[0]}] si es una métrica, o mueve el "
+            f"cálculo a una métrica del hecho donde vive esa columna.",
             0, len(expresion.split("\n")[0])))
 
     # El SUMA que lleva dentro una ventana de tiempo no cuenta: no vuelve a
@@ -1374,7 +1374,7 @@ def _revisar_nombres_de_funcion(expresion: str) -> list[Fallo]:
             continue
         parecida = difflib.get_close_matches(nombre.upper(), sorted(CATALOGO),
                                              1, 0.7)
-        pista = f" ¿Querias decir {parecida[0]}?" if parecida else ""
+        pista = f" ¿Querías decir {parecida[0]}?" if parecida else ""
         fallos.append(Fallo(
             f"No existe ninguna funcion '{nombre}'.{pista}",
             m.start(1), len(nombre)))
@@ -1441,13 +1441,13 @@ def _mal_prefijada(ctx: Contexto, tabla: str, campo: str) -> str:
     if ctx.externo(tabla, campo) is None and not any(
             e.lower() == tabla.lower() for e in entidades):
         return (f"'{tabla}' no es una tabla de este modelo."
-                + (f" ¿Querias decir {parecida[0]}?" if parecida else
+                + (f" ¿Querías decir {parecida[0]}?" if parecida else
                    f" Las que puedes nombrar son: {', '.join(entidades)}."))
     real = next(e for e in entidades if e.lower() == tabla.lower())
     columnas = sorted(ctx.externos.get(real) or ctx.campos)
     pista = difflib.get_close_matches(campo, columnas, 1, 0.6)
     return (f"'{campo}' no es una columna de '{real}'."
-            + (f" ¿Querias decir {real}.{pista[0]}?" if pista else
+            + (f" ¿Querías decir {real}.{pista[0]}?" if pista else
                f" Tiene: {', '.join(columnas[:8])}"
                f"{'…' if len(columnas) > 8 else ''}."))
 
@@ -1507,7 +1507,7 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
                 continue
             vistos.add(nombre.lower())
             parecido = difflib.get_close_matches(nombre, sorted(ctx.campos), 1, 0.6)
-            pista = (f" ¿Querias decir {parecido[0]}?" if parecido else
+            pista = (f" ¿Querías decir {parecido[0]}?" if parecido else
                      f" Los campos de la entidad son: "
                      f"{', '.join(sorted(ctx.campos))}.")
             fallos.append(Fallo(
@@ -1541,8 +1541,8 @@ def revisar(expresion: str, ctx: Contexto | None = None) -> list[dict]:
             _buscar(mascara, nombres[0]), len(nombres[0])))
     elif not hay_agregacion:
         fallos.append(Fallo(
-            "Esta formula no agrega nada: devolveria un valor por fila y una "
-            "metrica tiene que devolver uno por grupo. Envuelvela en SUMA, "
+            "Esta fórmula no agrega nada: devolvería un valor por fila y una "
+            "métrica tiene que devolver uno por grupo. Envuélvela en SUMA, "
             "CONTAR, PROMEDIO…", 0, len(expresion.split("\n")[0]),
             gravedad="advertencia"))
 

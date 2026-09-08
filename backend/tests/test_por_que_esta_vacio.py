@@ -155,7 +155,7 @@ def test_una_tabla_sin_cargar_lo_dice(monkeypatch, tmp_path):
     res = analitico.ejecutar_consulta(m, c, ADMIN)
     assert res.filas == []
     assert res.vacio_porque is not None
-    assert "ventas" in res.vacio_porque and "vacia" in res.vacio_porque
+    assert "ventas" in res.vacio_porque and "vacía" in res.vacio_porque
 
 
 def test_una_union_que_no_casa_lo_dice_y_dice_por_donde(monkeypatch, tmp_path):

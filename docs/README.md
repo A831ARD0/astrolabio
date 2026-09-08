@@ -29,6 +29,7 @@ hace que dentro de dos años se pueda cambiar algo sin volver a tropezar en lo m
 | | |
 |---|---|
 | [0001 · SQLite para los metadatos](adr/0001-sqlite-para-metadatos.md) | Por qué un archivo y no un servidor de base de datos |
+| [0002 · Alembic para el esquema](adr/0002-alembic-para-el-esquema.md) | Por qué las migraciones y no `create_all` |
 
 ## Cómo leer esto
 

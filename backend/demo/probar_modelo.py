@@ -58,7 +58,7 @@ verificar("muchos_a_muchos" in tipos, "Advierte de la relacion muchos-a-muchos")
 
 
 # --------------------------------------------------------------------------- #
-titulo(2, "Ambiguedad: dos caminos a cat_marca. ¿Se niega a adivinar?")
+titulo(2, "Ambigüedad: dos caminos a cat_marca. ¿Se niega a adivinar?")
 
 try:
     comp.compilar(Consulta(
@@ -148,7 +148,7 @@ print("  " + "\n  ".join(sql.splitlines()))
 
 
 # --------------------------------------------------------------------------- #
-titulo(4, "Metrica no desglosable: ¿avisa en vez de inventar?")
+titulo(4, "Métrica no desglosable: ¿avisa en vez de inventar?")
 
 try:
     comp.compilar(Consulta(
@@ -207,9 +207,9 @@ e = asoc.estados("cat_sucursal", "sucursal_nombre", sel)
 print(f"    posible  = {e['posible']}")
 print(f"    excluido = {len(e['excluido'])} sucursales")
 verificar(e["posible"] == ["Ekos Río Blanco"],
-          "Solo Ekos Río Blanco es posible en la region Sur")
+          "Solo Ekos Río Blanco es posible en la región Sur")
 
-print("\n  Estado alternativo (seleccion en el propio campo):")
+print("\n  Estado alternativo (selección en el propio campo):")
 sel = {"cat_region.region_nombre": ["Norte"]}
 e = asoc.estados("cat_region", "region_nombre", sel)
 print(f"    seleccionado = {e['seleccionado']}")

@@ -67,7 +67,7 @@ texto del SQL.
 
 ## 3. Versionado inmutable del modelo
 
-Guardar un modelo **no sobreescribe**: crea una `VersionModelo` nueva. Los
+Guardar un modelo **no sobrescribe**: crea una `VersionModelo` nueva. Los
 dashboards se anclan a una versión concreta.
 
 Consecuencia práctica: editar el modelo no puede cambiar en silencio las cifras
@@ -101,7 +101,7 @@ rompe algo.
 - El diagnóstico reporta 4 problemas, todos reales
 - La ambigüedad de ruta devuelve 422 con las dos opciones, no un número adivinado
 - El fan trap no infla: 4,826 unidades, no 526,300
-- Una versión nueva no sobreescribe la anterior
+- Una versión nueva no sobrescribe la anterior
 
 ---
 
