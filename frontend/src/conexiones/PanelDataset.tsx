@@ -141,6 +141,83 @@ function EditorColumnas({ ds }: { ds: Dataset }) {
   )
 }
 
+/**
+ * Las dos columnas que gobiernan el modo de carga: con cuál se parte el Parquet y
+ * con cuál se sigue lo nuevo.
+ *
+ * Estaban solo al crear el dataset, y eso dejaba a los datasets ya creados sin
+ * forma de llegar a la ventana móvil: la ventana reemplaza particiones, así que la
+ * sección ni se dibuja sin columna de partición. Quien ya tenía 28 datasets cargados
+ * no podía hacer nada con ellos desde la pantalla.
+ *
+ * No se filtra la lista a las columnas de tipo fecha. Cada driver nombra sus tipos a
+ * su manera —y el de un ODBC viejo puede no parecerse a nada— así que esconder
+ * columnas por el tipo escondería justo la buena. Se muestra el tipo al lado y se
+ * decide mirándolo.
+ */
+function EditorClaves({ ds }: { ds: Dataset }) {
+  const detalle = useDescribirTabla(ds.conexion_id, ds.esquema_origen, ds.tabla_origen)
+  const editar = useEditarDataset(ds.id)
+  const [particion, setParticion] = useState(ds.particionado ?? '')
+  const [incremental, setIncremental] = useState(ds.incremental ?? '')
+
+  const columnas = detalle.data?.columnas ?? []
+  const cambio =
+    particion !== (ds.particionado ?? '') || incremental !== (ds.incremental ?? '')
+
+  if (detalle.isLoading) return <div className="chico tenue">Leyendo el origen…</div>
+  if (detalle.isError) {
+    return <div className="error-caja chico">{(detalle.error as Error).message}</div>
+  }
+
+  const opciones = (
+    <>
+      <option value="">(ninguna)</option>
+      {columnas.map((c) => (
+        <option key={c.nombre} value={c.nombre}>
+          {c.nombre} — {c.tipo}
+        </option>
+      ))}
+    </>
+  )
+
+  return (
+    <>
+      <div className="fila-condicion">
+        <label className="chico suave">
+          Partir por{' '}
+          <select value={particion} onChange={(e) => setParticion(e.target.value)}>
+            {opciones}
+          </select>
+        </label>
+        <label className="chico suave">
+          Incremental por{' '}
+          <select value={incremental} onChange={(e) => setIncremental(e.target.value)}>
+            {opciones}
+          </select>
+        </label>
+        <button className="btn primario" disabled={!cambio || editar.isPending}
+                onClick={() => editar.mutate({ particionar_por: particion,
+                                               columna_incremental: incremental })}>
+          {editar.isPending ? 'Guardando…' : 'Guardar columnas de carga'}
+        </button>
+      </div>
+      <span className="chico tenue">
+        <strong>Partir por</strong> es una fecha: parte el Parquet en año/mes y es lo
+        que hace posible la ventana móvil y recargar un rango.{' '}
+        <strong>Incremental por</strong> es la columna que solo crece —una fecha de
+        alta o un id— y sirve para traer solo lo nuevo.
+      </span>
+      {editar.data?.avisos?.map((a) => (
+        <div key={a} className="aviso-caja">{a}</div>
+      ))}
+      {editar.isError && (
+        <div className="error-caja">{(editar.error as Error).message}</div>
+      )}
+    </>
+  )
+}
+
 /** La ventana móvil: qué recargar cada vez, sin que nadie escriba fechas. */
 function EditorVentana({ ds }: { ds: Dataset }) {
   const catalogo = useVentanas()
@@ -373,6 +450,10 @@ export function PanelDataset({
           {/* --------------------------------------------------------- columnas */}
           <h4>Columnas que se traen</h4>
           <EditorColumnas ds={ds} />
+
+          {/* ----------------------------------------------- columnas de carga */}
+          <h4>Columnas de carga</h4>
+          <EditorClaves ds={ds} />
 
           {/* ---------------------------------------------------------- ventana */}
           {ds.particionado && (

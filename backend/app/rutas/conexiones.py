@@ -897,6 +897,14 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
 
     if cuerpo.columna_incremental is not None:
         ds.columna_incremental = cuerpo.columna_incremental or None
+
+    # Cambiar la columna de particion cambia la FORMA del Parquet en disco: al
+    # partir se escriben carpetas anio=/mes= y dos columnas de mas. Un lote nuevo
+    # con esa forma junto a archivos planos deja el destino con dos esquemas
+    # distintos, y leerlo falla o devuelve nulos. Por eso se trata igual que un
+    # cambio de columnas: se borra la marca maxima y la siguiente carga reescribe.
+    cambio_particion = (cuerpo.particionar_por is not None
+                        and (cuerpo.particionar_por or None) != ds.particionar_por)
     if cuerpo.particionar_por is not None:
         ds.particionar_por = cuerpo.particionar_por or None
 
@@ -923,6 +931,11 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
             "la columna de partición. Quita primero la ventana.")
 
     avisos = []
+    if cambio_particion:
+        ds.marca_maxima = None
+        avisos.append("Cambió la columna de partición: la siguiente carga será "
+                      "completa y reescribirá el dataset. Lo que está en disco "
+                      "está partido de otra forma y no se puede mezclar.")
     if cambio_columnas:
         ds.marca_maxima = None
         avisos.append("Cambió el juego de columnas: la siguiente carga será "

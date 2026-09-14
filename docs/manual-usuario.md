@@ -98,7 +98,8 @@ prueba —el nombre es una etiqueta tuya, el servidor de datos no lo ve.
 Un *dataset* es una tabla de tu origen ya copiada a Parquet local. Se configura una
 vez y a partir de ahí recargarla es un botón.
 
-Lo que se decide al crearlo:
+Lo que se decide al crearlo —y que **también se puede cambiar después**, en el panel
+del dataset, bajo «Columnas de carga»:
 
 | Campo | Para qué | Consejo |
 |---|---|---|
@@ -115,6 +116,23 @@ lista: así, cuando el origen agregue una columna el mes que viene, llegará sol
 
 Dos cosas que la pantalla no te deja hacer, porque fallarían de madrugada: dejar
 fuera la columna de partición o la incremental, y dejarlo todo fuera.
+
+### Poner la partición después
+
+Un dataset que ya está cargado puede quedarse sin «Partir por» —al crearlo no se
+sabía todavía qué columna era la fecha buena— y entonces **la ventana móvil ni
+siquiera aparece**: la ventana reemplaza particiones, así que sin particiones no hay
+nada que reemplazar y la sección no se dibuja.
+
+Se arregla en el panel del dataset, en «Columnas de carga»: eliges la columna de
+fecha, guardas, y la sección «Ventana móvil» aparece debajo.
+
+Al guardar te avisa de que **la siguiente carga será completa**. No es una
+precaución de más: partir cambia la forma de lo que se escribe —carpetas
+`anio=/mes=` y dos columnas añadidas— y un lote así conviviendo con los archivos
+planos que ya están en disco dejaría el dataset con dos esquemas distintos. Leerlo
+fallaría, o —peor— devolvería nulos donde antes había datos. Así que la marca máxima
+se borra y el dataset se reescribe entero una vez.
 
 **Si cambias las columnas de un dataset que ya cargó, la siguiente carga será
 completa** y reescribirá todo. El archivo en disco tiene las columnas viejas, y

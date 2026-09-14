@@ -213,3 +213,66 @@ def test_la_carga_completa_se_salta_la_ventana(cliente, cab_admin, conexion_mysq
     d = cargar(cliente, cab_admin, ds, incremental="false", limite=500)
     assert d["modo"] == "completo"
     assert d["ventana"] is None
+
+
+@necesita_mysql
+def test_poner_la_particion_despues_obliga_a_carga_completa(cliente, cab_admin,
+                                                           conexion_mysql):
+    """
+    La columna de particion se podia elegir solo al crear el dataset, y eso dejaba a
+    los ya creados sin forma de llegar nunca a la ventana movil. Ahora se puede
+    poner despues; pero partir cambia la FORMA del Parquet —carpetas anio=/mes= y
+    dos columnas de mas— y un lote asi junto a los archivos planos que ya estan en
+    disco deja el destino con dos esquemas. Por eso la siguiente carga es completa.
+    """
+    r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets", headers=cab_admin,
+                     json={"nombre": "particion_despues", "tabla": "ventas",
+                           "columna_incremental": "venta_id"})
+    assert r.status_code == 201, r.text
+    ds = r.json()["id"]
+    cargar(cliente, cab_admin, ds, limite=500)
+
+    lista = cliente.get("/api/conexiones/datasets/lista", headers=cab_admin).json()
+    assert next(d for d in lista["datasets"] if d["id"] == ds)["marca_maxima"]
+
+    r = cliente.patch(f"/api/conexiones/datasets/{ds}", headers=cab_admin,
+                      json={"particionar_por": "fecha_emision"})
+    assert r.status_code == 200, r.text
+    assert any("partición" in a for a in r.json()["avisos"]), r.json()
+
+    lista = cliente.get("/api/conexiones/datasets/lista", headers=cab_admin).json()
+    despues = next(d for d in lista["datasets"] if d["id"] == ds)
+    assert despues["marca_maxima"] is None, "sin borrar la marca, la carga seria incremental"
+    assert despues["particionado"] == "fecha_emision"
+
+    # Y ahora la ventana movil, que antes era inalcanzable, se deja guardar.
+    r = cliente.patch(f"/api/conexiones/datasets/{ds}", headers=cab_admin,
+                      json={"ventana": "mes_actual_y_anterior"})
+    assert r.status_code == 200, r.text
+    assert r.json()["ventana_dicha"]
+
+
+@necesita_mysql
+def test_guardar_la_misma_particion_no_borra_la_marca(cliente, cab_admin,
+                                                     conexion_mysql):
+    """
+    Guardar sin cambiar nada no puede costar una recarga completa: el panel manda
+    las dos columnas juntas, asi que tocar solo la incremental reenvia la particion
+    tal cual.
+    """
+    r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets", headers=cab_admin,
+                     json={"nombre": "misma_particion", "tabla": "ventas",
+                           "particionar_por": "fecha_emision",
+                           "columna_incremental": "venta_id"})
+    ds = r.json()["id"]
+    cargar(cliente, cab_admin, ds, limite=500)
+
+    r = cliente.patch(f"/api/conexiones/datasets/{ds}", headers=cab_admin,
+                      json={"particionar_por": "fecha_emision",
+                            "columna_incremental": "venta_id"})
+    assert r.status_code == 200, r.text
+    assert r.json()["avisos"] == []
+
+    lista = cliente.get("/api/conexiones/datasets/lista", headers=cab_admin).json()
+    assert next(d for d in lista["datasets"]
+                if d["id"] == ds)["marca_maxima"] is not None
