@@ -117,6 +117,21 @@ lista: así, cuando el origen agregue una columna el mes que viene, llegará sol
 Dos cosas que la pantalla no te deja hacer, porque fallarían de madrugada: dejar
 fuera la columna de partición o la incremental, y dejarlo todo fuera.
 
+### Recargar un rango
+
+Reemplaza **meses completos**, no días. El Parquet está partido por año/mes y esa es
+la pieza mínima que se puede sustituir, así que pedir «del 15 al 20 de marzo» recarga
+**marzo entero**: el rango se estira solo hasta el día 1 y el último día del mes, y
+eso es lo que verás en el historial.
+
+No es un detalle cosmético. Antes se borraba por meses pero se volvía a traer por las
+fechas exactas, y lo que quedaba entre el día 1 y el inicio del rango no lo reponía
+nadie: la carga terminaba en verde y el mes se quedaba con una parte de sus filas.
+
+Las bajas en el origen también se reflejan: los meses que toca el rango quedan igual
+que allá, incluso si allá ya no hay filas. Por eso las particiones se calculan del
+rango pedido y no de los datos traídos.
+
 ### Poner la partición después
 
 Un dataset que ya está cargado puede quedarse sin «Partir por» —al crearlo no se

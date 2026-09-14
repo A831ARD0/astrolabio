@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app import avisos
 from app.auditoria import registrar
 from app.conectores import ErrorConector, PeticionIngesta, crear
+from app.conectores.base import a_meses_completos
 from app.config import config
 from app.modelos_db import CargaEjecucion, Conexion, Dataset, EstadoCarga
 from app.seguridad import descifrar
@@ -95,6 +96,12 @@ def ejecutar_carga(
             rango_desde, rango_hasta = resolver_ventana(ventana, ds.zona_horaria)
         except VentanaInvalida as e:
             error_ventana = str(e)
+
+    # A meses completos ya aqui, y no solo dentro de la peticion, para que el
+    # historial diga lo que de verdad se reescribio. Si guardara "del 15 al 20"
+    # mientras marzo entero se reescribe, la corrida seria imposible de auditar.
+    if rango_desde and rango_hasta:
+        rango_desde, rango_hasta = a_meses_completos(rango_desde, rango_hasta)
 
     es_particion = bool(rango_desde or rango_hasta)
     usa_incremental = bool(

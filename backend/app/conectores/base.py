@@ -17,7 +17,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -111,6 +111,32 @@ def particiones_del_rango(desde: str, hasta: str) -> list[str]:
         salida.append(f"anio={anio}/mes={mes}")
         anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
     return salida
+
+
+def a_meses_completos(desde: str, hasta: str) -> tuple[str, str]:
+    """
+    Estira un rango hasta cubrir meses enteros: del dia 1 del primero al ultimo
+    dia del ultimo.
+
+    Sin esto, una recarga de rango PIERDE filas en silencio, porque las dos mitades
+    de la operacion no hablaban de lo mismo:
+
+      - se BORRA por particiones, y la particion minima es el mes entero;
+      - se VOLVIA A TRAER por las fechas exactas del rango.
+
+    Recargar "del 15 al 20 de marzo" borraba marzo completo y devolvia seis dias.
+    Lo del 1 al 14 no lo reponia nadie, la carga terminaba en verde y el historial
+    decia "exito". Medido en la base de pruebas: marzo pasaba de 1689 filas a 312.
+
+    Se estira en vez de estrechar porque estrechar no es posible: el borrado no
+    sabe de dias. Y se hace aqui, en la peticion, para que ningun conector pueda
+    saltarselo construyendo su WHERE por su cuenta.
+    """
+    d = date.fromisoformat(desde[:10])
+    h = date.fromisoformat(hasta[:10])
+    primero = d.replace(day=1)
+    ultimo = (h.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    return primero.isoformat(), ultimo.isoformat()
 
 
 def borrar_particiones(destino: Path, particiones: list[str]) -> None:
@@ -299,6 +325,13 @@ class PeticionIngesta:
     reemplazar_todo: bool = False
     rango_desde: str | None = None        # requiere particionar_por
     rango_hasta: str | None = None
+
+    def __post_init__(self) -> None:
+        # El rango se estira a meses completos ANTES de que nadie lo mire, porque
+        # lo que se borra son meses. Ver `a_meses_completos`.
+        if self.rango_desde and self.rango_hasta:
+            self.rango_desde, self.rango_hasta = a_meses_completos(
+                self.rango_desde, self.rango_hasta)
 
 
 @dataclass

@@ -409,8 +409,11 @@ export function PanelDataset({
                 </button>
               </div>
               <span className="chico tenue">
-                Reemplaza solo las particiones que cubre el rango. Las bajas en el
-                origen también se reflejan: el rango se deja igual que allá.
+                Se reemplazan los <strong>meses completos</strong> que toca el
+                rango: el Parquet está partido por mes y esa es la pieza mínima que
+                se puede sustituir. Pedir del 15 al 20 de marzo recarga marzo entero.
+                Las bajas en el origen también se reflejan: el mes se deja igual que
+                allá.
               </span>
             </>
           )}
