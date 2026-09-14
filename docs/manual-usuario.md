@@ -134,6 +134,41 @@ dice, con el nombre de la columna. En un lote incremental pequeño se deja pasar
 tres filas traigan la fecha vacía es raro pero posible, y tumbar la carga por eso
 sería peor que el problema.
 
+### Cuando la fecha no es una fecha
+
+Debajo de «Partir por» hay un campo, **«Convertirla en fecha»**, donde se escribe una
+expresión que convierte esa columna. Existe porque la lista de formatos raros no
+acaba nunca: el mismo `03/04` es marzo o abril según el país, y hay codificaciones
+que no son un formato sino una cuenta.
+
+| lo que trae el origen | qué escribir |
+|---|---|
+| `20260914` (entero) | `try_strptime(CAST("Dt Movim" AS VARCHAR), '%Y%m%d')` |
+| `14/09/2026` (texto) | `try_strptime("fecha", '%d/%m/%Y')` |
+| `09/14/2026` (texto) | `try_strptime("fecha", '%m/%d/%Y')` |
+| `1260914` (siglo aparte) | `try_strptime(CAST("fecha" + 19000000 AS VARCHAR), '%Y%m%d')` |
+| fecha + hora en dos columnas | `try_strptime(CAST("Dt" AS VARCHAR) \|\| lpad(CAST("Hr" AS VARCHAR), 6, '0'), '%Y%m%d%H%M%S')` |
+
+Las columnas se nombran como en el origen, **entre comillas dobles**. La expresión es
+SQL de DuckDB y se evalúa sobre las filas ya traídas, así que puede usar varias
+columnas.
+
+**Usa `try_strptime`, no `strptime`.** La diferencia importa: `strptime` lanza un
+error con el primer valor vacío o ilegible y tumba la carga entera, mientras que
+`try_strptime` deja esa fila vacía y la manda a la partición `sin_fecha`. Un origen
+con un 1% de celdas vacías es lo normal, y no es motivo para no cargar el otro 99%.
+
+Al guardar se prueba con **50 filas de verdad** y se dice cuántas dieron fecha, con
+dos ejemplos de la conversión: `20260914 → 2026-09-14`. Eso es lo que deja ver de un
+vistazo si el formato se interpretó al derecho o al revés. Si no se feche ninguna, no
+se guarda.
+
+Una consecuencia que conviene conocer: **con expresión, la ventana móvil y la recarga
+por rango no filtran en el origen.** Allí la fecha no es una fecha y el driver
+rechaza la comparación —un Pervasive contesta «Error converting to numeric type»—,
+así que se lee la tabla entera y el recorte se hace al escribir. Se lee de más, pero
+se lee bien. Con una columna de fecha de verdad, el filtro sí viaja al origen.
+
 ### Recargar un rango
 
 Reemplaza **meses completos**, no días. El Parquet está partido por año/mes y esa es

@@ -48,6 +48,8 @@ export interface Dataset {
   mb: number
   incremental: string | null
   particionado: string | null
+  /** Cómo convertir la columna de partición en fecha. null = ya lo es. */
+  expresion_particion: string | null
   /** null = todas las columnas del origen. */
   columnas: string[] | null
   ventana: string | null
@@ -337,6 +339,8 @@ export interface CambioDataset {
   ventana?: string
   columna_incremental?: string
   particionar_por?: string
+  /** `''` la quita. */
+  expresion_particion?: string
 }
 
 export function useEditarDataset(datasetId: number) {

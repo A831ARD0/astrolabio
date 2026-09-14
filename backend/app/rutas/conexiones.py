@@ -97,6 +97,7 @@ class CrearDataset(BaseModel):
     tabla: str
     columna_incremental: str | None = None
     particionar_por: str | None = None
+    expresion_particion: str | None = None
     limite: int | None = None
     #: None = todas. Ver la nota en `Dataset.columnas`.
     columnas: list[str] | None = None
@@ -113,6 +114,7 @@ class EditarDataset(BaseModel):
     ventana: str | None = None
     columna_incremental: str | None = None
     particionar_por: str | None = None
+    expresion_particion: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -169,6 +171,86 @@ def _revisar_columnas(conector, tabla: str, esquema: str | None,
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"La columna {etiqueta} '{col}' tiene que estar entre las que se "
                 f"traen. Sin ella la carga no puede {'partir' if col == particion else 'saber por dónde seguir'}.")
+
+
+def _revisar_expresion(conector, tabla: str, esquema: str | None,
+                       particion: str | None, expresion: str | None) -> str | None:
+    """
+    Prueba la expresion de partición contra filas de verdad, antes de guardarla.
+
+    Sin esto, una expresión equivocada no se descubre hasta la carga de las 6 de la
+    mañana, y lo que se ve entonces es un dataset vacío. Aquí se traen 50 filas del
+    origen, se evalúa la expresión encima y se dice cuántas dieron fecha —con dos
+    ejemplos de la conversión, que es lo que deja ver de un vistazo si el formato
+    se interpretó al derecho o al revés: 03/04 puede ser marzo o abril.
+
+    La muestra no demuestra que las 140 mil filas vayan a convertirse. Para eso
+    está el guardia de `cargas`, que tumba la carga completa si no se feche
+    ninguna. Esto atrapa lo que se puede atrapar antes de gastar tres minutos.
+    """
+    if not expresion:
+        return None
+    if not particion:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "La expresión convierte la columna de partición, así que primero hay "
+            "que elegir 'Partir por'.")
+
+    import duckdb
+    import pyarrow as pa
+
+    try:
+        cols, filas = conector.muestra(tabla, esquema, 50, None)
+    except ErrorConector as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if not filas:
+        return ("La tabla no devolvió ninguna fila de muestra, así que la expresión "
+                "no se pudo probar. Se comprobará en la primera carga.")
+
+    datos = {}
+    for i, c in enumerate(cols):
+        valores = [f[i] for f in filas]
+        try:
+            datos[c] = pa.array(valores)
+        except Exception:
+            # Una columna que pyarrow no sabe tipar (mezcla rara del driver) no
+            # puede tumbar la prueba de las demas: se pasa como texto.
+            datos[c] = pa.array([None if v is None else str(v) for v in valores])
+
+    con = duckdb.connect()
+    con.register("muestra", pa.table(datos))
+    try:
+        ok, total = con.execute(
+            f"SELECT COUNT(TRY_CAST(({expresion}) AS DATE)), COUNT(*) FROM muestra"
+        ).fetchone()
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"La expresión no se pudo evaluar: {str(e).splitlines()[0]}. Las "
+            f"columnas se nombran como en el origen y entre comillas dobles, por "
+            f'ejemplo: try_strptime(CAST("{particion}" AS VARCHAR), \'%Y%m%d\')')
+
+    if not ok:
+        crudos = con.execute(
+            f'SELECT DISTINCT "{particion}" FROM muestra '
+            f'WHERE "{particion}" IS NOT NULL LIMIT 3').fetchall()
+        ejemplos = ", ".join(str(c[0]) for c in crudos) or "(todas vacías)"
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Ninguna de las {total} filas de muestra dio una fecha. Los valores "
+            f"de '{particion}' son así: {ejemplos}. Revisa el formato de la "
+            f"expresión antes de guardar: tal cual está, la carga dejaría el "
+            f"dataset vacío.")
+
+    pares = con.execute(
+        f'SELECT "{particion}", TRY_CAST(({expresion}) AS DATE) FROM muestra '
+        f"WHERE TRY_CAST(({expresion}) AS DATE) IS NOT NULL LIMIT 2").fetchall()
+    muestras = "; ".join(f"{a} → {b}" for a, b in pares)
+    aviso = f"{ok} de {total} filas de muestra dieron fecha. {muestras}"
+    if ok < total:
+        aviso += (f". Las otras {total - ok} quedarían en la partición "
+                  f"'sin_fecha'.")
+    return aviso
 
 
 def _revisar_ventana(ventana: str | None, particion: str | None,
@@ -802,6 +884,9 @@ def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
                       cuerpo.columnas, cuerpo.columna_incremental,
                       cuerpo.particionar_por)
     zona = "America/Mexico_City"
+    aviso_expresion = _revisar_expresion(
+        _conector(fila), cuerpo.tabla, cuerpo.esquema,
+        cuerpo.particionar_por, cuerpo.expresion_particion)
     ventana_dicha = _revisar_ventana(cuerpo.ventana, cuerpo.particionar_por, zona)
 
     ds = Dataset(
@@ -809,6 +894,7 @@ def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
         esquema_origen=cuerpo.esquema, tabla_origen=cuerpo.tabla,
         columna_incremental=cuerpo.columna_incremental,
         particionar_por=cuerpo.particionar_por, creado_por=actor.id,
+        expresion_particion=cuerpo.expresion_particion or None,
         columnas=cuerpo.columnas or None, ventana=cuerpo.ventana or None,
         zona_horaria=zona,
     )
@@ -854,6 +940,7 @@ def listar_datasets(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.edito
             "conexion_id": ds.conexion_id, "esquema_origen": ds.esquema_origen,
             "filas": ds.filas, "mb": round(ds.bytes_parquet / 1024 / 1024, 1),
             "incremental": ds.columna_incremental,
+            "expresion_particion": ds.expresion_particion,
             "particionado": ds.particionar_por,
             "columnas": ds.columnas,          # null = todas
             "ventana": ds.ventana,
@@ -893,7 +980,8 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
     ds = _dataset(sesion, dataset_id)
     antes = {"columnas": ds.columnas, "ventana": ds.ventana,
              "columna_incremental": ds.columna_incremental,
-             "particionar_por": ds.particionar_por}
+             "particionar_por": ds.particionar_por,
+             "expresion_particion": ds.expresion_particion}
 
     if cuerpo.columna_incremental is not None:
         ds.columna_incremental = cuerpo.columna_incremental or None
@@ -908,6 +996,15 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
     if cuerpo.particionar_por is not None:
         ds.particionar_por = cuerpo.particionar_por or None
 
+    # La expresion cambia la fecha de CADA fila, asi que mueve las particiones:
+    # las mismas filas pasan a otro anio/mes. Igual que cambiar la columna, exige
+    # reescribir el dataset entero.
+    cambio_particion = cambio_particion or (
+        cuerpo.expresion_particion is not None
+        and (cuerpo.expresion_particion or None) != ds.expresion_particion)
+    if cuerpo.expresion_particion is not None:
+        ds.expresion_particion = cuerpo.expresion_particion or None
+
     cambio_columnas = False
     if cuerpo.columnas is not None:
         nuevas = cuerpo.columnas or None
@@ -916,6 +1013,12 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
                           ds.tabla_origen, ds.esquema_origen, nuevas,
                           ds.columna_incremental, ds.particionar_por)
         ds.columnas = nuevas
+
+    aviso_expresion = None
+    if cuerpo.expresion_particion is not None or cambio_particion:
+        aviso_expresion = _revisar_expresion(
+            _conector(_obtener(sesion, ds.conexion_id)), ds.tabla_origen,
+            ds.esquema_origen, ds.particionar_por, ds.expresion_particion)
 
     ventana_dicha = None
     if cuerpo.ventana is not None:
@@ -931,6 +1034,8 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
             "la columna de partición. Quita primero la ventana.")
 
     avisos = []
+    if aviso_expresion:
+        avisos.append(aviso_expresion)
     if cambio_particion:
         ds.marca_maxima = None
         avisos.append("Cambió la columna de partición: la siguiente carga será "
@@ -944,7 +1049,8 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
 
     despues = {"columnas": ds.columnas, "ventana": ds.ventana,
                "columna_incremental": ds.columna_incremental,
-               "particionar_por": ds.particionar_por}
+               "particionar_por": ds.particionar_por,
+               "expresion_particion": ds.expresion_particion}
     registrar(sesion, accion="dataset_editado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="dataset", objeto_id=ds.id,
               detalle={"nombre": ds.nombre,

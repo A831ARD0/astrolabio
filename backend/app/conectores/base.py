@@ -178,6 +178,29 @@ def marca_archivo() -> str:
     return f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
 
+def _dia_despues(iso: str) -> str:
+    """El dia siguiente, para comparar con `<` y no perder las horas del ultimo."""
+    return (date.fromisoformat(iso[:10]) + timedelta(days=1)).isoformat()
+
+
+def expresion_fecha(p: "PeticionIngesta") -> str:
+    """
+    Con que se calcula la fecha de particion, en SQL de DuckDB.
+
+    Sin expresion, la columna se castea tal cual. Con expresion, se evalua la que
+    escribio quien conoce el origen —`strptime(CAST("Dt Movim" AS VARCHAR),
+    '%Y%m%d')`— y el resultado se castea igual.
+
+    El TRY_CAST envuelve SIEMPRE, tambien a la expresion, por dos razones: acepta
+    que la expresion devuelva TIMESTAMP en vez de DATE (strptime lo hace), y hace
+    que una fila suelta que no encaje caiga en 'sin_fecha' en vez de tumbar la
+    carga entera. Lo que no se tolera, y por eso el guardia de `cargas`, es que no
+    encaje NINGUNA.
+    """
+    dentro = p.expresion_particion or cita_origen(p.particionar_por or "")
+    return f"TRY_CAST(({dentro}) AS DATE)"
+
+
 def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
                   tabla: str = "lote") -> ResultadoIngesta:
     """
@@ -215,19 +238,34 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
         # venir como texto con cadenas vacias mezcladas. Un CAST duro tumba la
         # carga completa; TRY_CAST manda lo ilegible a su propia particion y
         # reporta cuantas filas fueron, en vez de fallar o de callarlo.
-        col = cita_origen(p.particionar_por)
+        fecha = expresion_fecha(p)
         sin_fecha = con.execute(
-            f"SELECT COUNT(*) FROM {tabla} WHERE TRY_CAST({col} AS DATE) IS NULL"
+            f"SELECT COUNT(*) FROM {tabla} WHERE {fecha} IS NULL"
         ).fetchone()[0]
+        # Recorte al rango, aqui y no solo en el origen.
+        #
+        # Con expresion de particion el origen NO filtra: alli la fecha no es una
+        # fecha y nadie sabe como compararla. Llega la tabla entera, y si se
+        # escribiera tal cual, las filas de fuera del rango se sumarian a sus
+        # particiones —que no se borraron— y quedarian por duplicado.
+        #
+        # Se aplica siempre, tambien cuando el origen ya filtro: repetir el corte
+        # no cuesta nada y cierra la puerta a un origen que devuelva de mas.
+        recorte = ""
+        if p.rango_desde and p.rango_hasta:
+            recorte = (f" WHERE {fecha} >= DATE '{p.rango_desde}'"
+                       f" AND {fecha} < DATE '{_dia_despues(p.rango_hasta)}'")
+            filas = con.execute(
+                f"SELECT COUNT(*) FROM {tabla}{recorte}").fetchone()[0]
         # FILENAME_PATTERN con uuid: en una carga incremental el lote nuevo cae
         # dentro de una particion que ya tiene archivos, y con el nombre por
         # defecto (data_0.parquet) se sobreescribiria lo anterior. Quien decide
         # que se borra es el modo, no el nombre del archivo.
         con.execute(f"""
             COPY (SELECT *,
-                         YEAR(TRY_CAST({col} AS DATE))  AS anio,
-                         MONTH(TRY_CAST({col} AS DATE)) AS mes
-                  FROM {tabla})
+                         YEAR({fecha})  AS anio,
+                         MONTH({fecha}) AS mes
+                  FROM {tabla}{recorte})
             TO '{destino}' (FORMAT parquet, COMPRESSION zstd,
                             PARTITION_BY (anio, mes), OVERWRITE_OR_IGNORE,
                             FILENAME_PATTERN 'lote_{{uuid}}')
@@ -236,8 +274,8 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
             particiones = [
                 f"anio={a}/mes={m}" if a is not None else "anio=/mes="
                 for a, m in con.execute(f"""
-                    SELECT DISTINCT YEAR(TRY_CAST({col} AS DATE)),
-                                    MONTH(TRY_CAST({col} AS DATE))
+                    SELECT DISTINCT YEAR({fecha}),
+                                    MONTH({fecha})
                     FROM {tabla} ORDER BY 1, 2
                 """).fetchall()
             ]
@@ -321,6 +359,11 @@ class PeticionIngesta:
     columna_incremental: str | None = None
     desde: str | None = None
     particionar_por: str | None = None
+    # Expresion de DuckDB que convierte esa columna en fecha. Ver `expresion_fecha`.
+    # Cuando hay expresion, el rango NO se puede filtrar en el origen: la forma de
+    # la fecha alli no la conoce nadie mas que quien escribio la expresion, y aqui
+    # solo se sabe interpretarla despues de traerla.
+    expresion_particion: str | None = None
     limite: int | None = None
     reemplazar_todo: bool = False
     rango_desde: str | None = None        # requiere particionar_por

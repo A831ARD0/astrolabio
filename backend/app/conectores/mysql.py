@@ -21,6 +21,7 @@ import pymysql
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
     ResultadoPrueba, TablaOrigen, cita_origen, escribir_lote,
+    expresion_fecha,
 )
 #: Comillas de DuckDB para nombres que vienen del ORIGEN: tabla y columnas de
 #: MySQL leidas a traves del escaneador. Son nombres ajenos, se escapan.
@@ -323,8 +324,13 @@ class ConectorMySQL(Conector):
             donde.append(f"{_ident_duck(p.columna_incremental)} > ?")
             params.append(p.desde)
         if p.rango_desde or p.rango_hasta:
-            # TRY_CAST igual que al particionar: la columna suele ser texto.
-            fecha = f"TRY_CAST({_ident_duck(p.particionar_por)} AS DATE)"
+            # La MISMA expresion que se usa al particionar, y no un TRY_CAST a
+            # pelo: si la fecha se calcula de una forma para partir y de otra
+            # para filtrar, el rango que se trae no coincide con las particiones
+            # que se borran. Aqui se puede porque este filtro lo evalua DuckDB,
+            # no el origen; en ODBC lo evalua el driver y por eso alli no se
+            # filtra cuando hay expresion.
+            fecha = expresion_fecha(p)
             if p.rango_desde:
                 donde.append(f"{fecha} >= TRY_CAST(? AS DATE)")
                 params.append(p.rango_desde)

@@ -126,6 +126,16 @@ class Dataset(Base):
     tabla_origen: Mapped[str] = mapped_column(String(160))
     columna_incremental: Mapped[str | None] = mapped_column(String(120), nullable=True)
     particionar_por: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Como convertir esa columna en fecha, cuando no lo es. Expresion de DuckDB
+    # que se evalua sobre las filas YA TRAIDAS, con las columnas por su nombre:
+    #
+    #     try_strptime(CAST("Dt Movim" AS VARCHAR), '%Y%m%d')
+    #
+    # NULL = la columna ya es una fecha y basta un TRY_CAST. Existe porque los
+    # origenes antiguos guardan las fechas como enteros (20260914) o como texto en
+    # el formato de su pais, y cada uno el suyo: codificar los formatos uno a uno
+    # seria una lista que nunca acaba.
+    expresion_particion: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Columnas a traer. NULL = todas, y es lo que hay que guardar cuando se
     # quieren todas: una lista congelada dejaria fuera para siempre las columnas
     # que el origen agregue despues, sin avisar.

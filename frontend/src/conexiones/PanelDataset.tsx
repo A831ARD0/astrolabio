@@ -160,10 +160,13 @@ function EditorClaves({ ds }: { ds: Dataset }) {
   const editar = useEditarDataset(ds.id)
   const [particion, setParticion] = useState(ds.particionado ?? '')
   const [incremental, setIncremental] = useState(ds.incremental ?? '')
+  const [expresion, setExpresion] = useState(ds.expresion_particion ?? '')
 
   const columnas = detalle.data?.columnas ?? []
   const cambio =
-    particion !== (ds.particionado ?? '') || incremental !== (ds.incremental ?? '')
+    particion !== (ds.particionado ?? '') ||
+    incremental !== (ds.incremental ?? '') ||
+    expresion !== (ds.expresion_particion ?? '')
 
   if (detalle.isLoading) return <div className="chico tenue">Leyendo el origen…</div>
   if (detalle.isError) {
@@ -198,10 +201,33 @@ function EditorClaves({ ds }: { ds: Dataset }) {
         </label>
         <button className="btn primario" disabled={!cambio || editar.isPending}
                 onClick={() => editar.mutate({ particionar_por: particion,
-                                               columna_incremental: incremental })}>
+                                               columna_incremental: incremental,
+                                               expresion_particion: expresion })}>
           {editar.isPending ? 'Guardando…' : 'Guardar columnas de carga'}
         </button>
       </div>
+      {particion && (
+        <div className="fila-condicion" style={{ alignItems: 'flex-start' }}>
+          <label className="chico suave" style={{ flex: 1 }}>
+            Convertirla en fecha (opcional){' '}
+            <input type="text" value={expresion} style={{ width: '100%' }}
+                   placeholder={`la columna ya es una fecha`}
+                   onChange={(e) => setExpresion(e.target.value)} />
+          </label>
+        </div>
+      )}
+      {particion && (
+        <span className="chico tenue">
+          Si «{particion}» no es una fecha —en muchos orígenes viene como el entero{' '}
+          <span className="mono">20260914</span> o como texto— aquí se escribe cómo
+          convertirla, y se comprueba con 50 filas de verdad al guardar. Por ejemplo:{' '}
+          <span className="mono">
+            try_strptime(CAST("{particion}" AS VARCHAR), '%Y%m%d')
+          </span>
+          . Con expresión, la ventana y el rango no filtran en el origen: se lee la
+          tabla entera y el recorte se hace aquí.
+        </span>
+      )}
       <span className="chico tenue">
         <strong>Partir por</strong> es una fecha: parte el Parquet en año/mes y es lo
         que hace posible la ventana móvil y recargar un rango.{' '}

@@ -162,7 +162,8 @@ def ejecutar_carga(
             # modo incremental nunca llega a activarse.
             columna_incremental=ds.columna_incremental,
             desde=ds.marca_maxima if usa_incremental else None,
-            particionar_por=ds.particionar_por, limite=limite,
+            particionar_por=ds.particionar_por,
+            expresion_particion=ds.expresion_particion, limite=limite,
             reemplazar_todo=(modo == "completo"),
             rango_desde=rango_desde, rango_hasta=rango_hasta,
         ), str(ruta_dataset(ds.nombre)))
@@ -175,6 +176,16 @@ def ejecutar_carga(
         # usuario veia "Error 500" pelado, y el rollback de la sesion se llevaba
         # por delante el registro de la ejecucion, asi que el historial decia
         # "todavia no se ha cargado nunca". Sin mensaje y sin rastro.
+        # Una expresion de particion que revienta es lo mas probable cuando hay
+        # una: `strptime` lanza excepcion con la primera cadena vacia, en vez de
+        # devolver NULL. Sin esta nota, el usuario lee "fallo inesperado" y no
+        # tiene por donde empezar; con ella, sabe que mirar y como arreglarlo.
+        if ds.expresion_particion:
+            _fallar(sesion, ejec, ds, actor,
+                    f"La expresion de particion fallo al convertir alguna fila: "
+                    f"{e}. Usa try_strptime en vez de strptime: strptime lanza "
+                    f"error con el primer valor vacio o ilegible, y try_strptime "
+                    f"devuelve vacio y manda esa fila a 'sin_fecha'.")
         _fallar(sesion, ejec, ds, actor, _inesperado(e, f"al traer {ds.tabla_origen}"))
 
     # Ninguna fila se pudo fechar: la columna de particion no es una fecha.
@@ -188,7 +199,11 @@ def ejecutar_carga(
     # Solo en la carga completa. En un lote incremental pequeño, que todas las
     # filas traigan la fecha vacia es raro pero posible, y tumbar la carga por eso
     # seria peor que el problema.
-    if (ds.particionar_por and modo == "completo"
+    # Tambien en una recarga por rango, y no solo en la completa: alli se borraron
+    # particiones antes de escribir, asi que una expresion equivocada no deja el
+    # dataset raro —lo deja vacio—. Solo el incremental conserva la manga ancha,
+    # porque ahi no se ha borrado nada y las filas sin fecha se quedan aparte.
+    if (ds.particionar_por and modo in ("completo", "particion")
             and r.filas > 0 and r.filas_sin_particion == r.filas):
         _fallar(sesion, ejec, ds, actor,
                 f"Ninguna de las {r.filas:,} filas se pudo fechar por "

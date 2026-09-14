@@ -498,10 +498,16 @@ class ConectorODBC(Conector):
             if p.columna_incremental and p.desde:
                 donde.append(f"{self._cita(p.columna_incremental, cita)} > ?")
                 params.append(p.desde)
-            if p.rango_desde:
+            # Con expresion de particion no se filtra en el origen: alli la
+            # fecha no es una fecha —es un entero 20260914, o texto— y no hay
+            # forma de compararla con un parametro de fecha. De hecho el driver
+            # lo rechaza: "Error converting to numeric type". Llega la tabla
+            # entera y el recorte al rango se hace al escribir, ya con la
+            # expresion aplicada. Se lee de mas, pero se lee bien.
+            if p.rango_desde and not p.expresion_particion:
                 donde.append(f"{self._cita(p.particionar_por, cita)} >= ?")
                 params.append(p.rango_desde)
-            if p.rango_hasta:
+            if p.rango_hasta and not p.expresion_particion:
                 # Hasta el final del dia: si la columna es DATETIME, comparar con
                 # '2026-03-31' se dejaria fuera todo lo de ese dia despues de las
                 # 00:00. Es el error clasico de una recarga por rango.
