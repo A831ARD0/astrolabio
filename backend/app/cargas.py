@@ -177,6 +177,27 @@ def ejecutar_carga(
         # "todavia no se ha cargado nunca". Sin mensaje y sin rastro.
         _fallar(sesion, ejec, ds, actor, _inesperado(e, f"al traer {ds.tabla_origen}"))
 
+    # Ninguna fila se pudo fechar: la columna de particion no es una fecha.
+    #
+    # Pasaba en silencio y con el peor final posible: la carga decia "exito", las
+    # filas acababan todas en la particion basura `anio=/mes=`, y a partir de ahi
+    # la ventana movil ya no recargaba nada —borra meses que no existen y vuelve a
+    # pedir al origen un rango de fechas contra una columna que no lo es—. El
+    # dataset se quedaba congelado sin una sola señal.
+    #
+    # Solo en la carga completa. En un lote incremental pequeño, que todas las
+    # filas traigan la fecha vacia es raro pero posible, y tumbar la carga por eso
+    # seria peor que el problema.
+    if (ds.particionar_por and modo == "completo"
+            and r.filas > 0 and r.filas_sin_particion == r.filas):
+        _fallar(sesion, ejec, ds, actor,
+                f"Ninguna de las {r.filas:,} filas se pudo fechar por "
+                f"'{ds.particionar_por}', asi que todas habrian quedado en la "
+                f"particion 'sin_fecha' y la ventana movil no recargaria nada. "
+                f"Esa columna no es una fecha que se pueda interpretar: si en el "
+                f"origen es un entero tipo 20260914 o texto, hay que convertirla "
+                f"antes, o partir por otra columna.".replace(",", " "))
+
     ejec.estado = EstadoCarga.exito
     # El Parquet de este dataset es otro. Cada hilo que ya le habia puesto una
     # vista encima tiene que rehacerla: si el origen cambio el tipo de una

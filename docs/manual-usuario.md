@@ -117,6 +117,23 @@ lista: así, cuando el origen agregue una columna el mes que viene, llegará sol
 Dos cosas que la pantalla no te deja hacer, porque fallarían de madrugada: dejar
 fuera la columna de partición o la incremental, y dejarlo todo fuera.
 
+### La columna de partición tiene que ser una fecha de verdad
+
+Si no lo es, no falla: **es peor**. La carga termina en verde y todas las filas caen
+en una partición basura llamada `sin_fecha`, porque la fecha no se pudo interpretar.
+A partir de ahí la ventana móvil no recarga nada —borra meses que no existen y le
+pide al origen un rango de fechas contra una columna que no lo es— y el dataset se
+queda congelado sin una sola señal.
+
+Pasa sobre todo con orígenes antiguos, donde las fechas suelen venir como **enteros
+con forma 20260914** o como texto. Ahí no vale con elegir esa columna: hay que
+convertirla antes, o partir por otra.
+
+Por eso una carga completa que no consigue fechar **ninguna** fila ahora falla y lo
+dice, con el nombre de la columna. En un lote incremental pequeño se deja pasar: que
+tres filas traigan la fecha vacía es raro pero posible, y tumbar la carga por eso
+sería peor que el problema.
+
 ### Recargar un rango
 
 Reemplaza **meses completos**, no días. El Parquet está partido por año/mes y esa es
