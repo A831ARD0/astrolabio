@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,6 +75,7 @@ def ejecutar_carga(
     rango_desde: str | None = None,
     rango_hasta: str | None = None,
     usar_ventana: bool = True,
+    avisar: "Callable[[int], None] | None" = None,
 ) -> dict:
     """
     Ejecuta la carga y deja constancia de como salio.
@@ -164,6 +165,7 @@ def ejecutar_carga(
             desde=ds.marca_maxima if usa_incremental else None,
             particionar_por=ds.particionar_por,
             expresion_particion=ds.expresion_particion, limite=limite,
+            avisar=avisar,
             reemplazar_todo=(modo == "completo"),
             rango_desde=rango_desde, rango_hasta=rango_hasta,
         ), str(ruta_dataset(ds.nombre)))

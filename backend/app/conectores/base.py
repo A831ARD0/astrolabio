@@ -17,6 +17,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -176,6 +177,22 @@ def marca_archivo() -> str:
     uno quiere al mirar la carpeta.
     """
     return f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+
+def avisar_avance(p: "PeticionIngesta", traidas: int) -> None:
+    """
+    Informa del avance sin poder estropear nada.
+
+    Se traga cualquier excepcion a proposito: esto existe para que una pantalla
+    ensene un numero, y no hay ningun fallo informando que justifique tirar una
+    ingesta de tres minutos que ya va por la mitad.
+    """
+    if p.avisar is None:
+        return
+    try:
+        p.avisar(traidas)
+    except Exception:          # noqa: BLE001 - ver el docstring
+        pass
 
 
 def _dia_despues(iso: str) -> str:
@@ -368,6 +385,11 @@ class PeticionIngesta:
     reemplazar_todo: bool = False
     rango_desde: str | None = None        # requiere particionar_por
     rango_hasta: str | None = None
+    #: Se llama con cuantas filas van traidas, una vez por bloque. Es solo para
+    #: que la pantalla pueda ensenar avance; no debe cambiar nada de la carga, y
+    #: por eso lo que lanza se ignora: un fallo al informar no puede tumbar una
+    #: ingesta de tres minutos que ya va por la mitad.
+    avisar: "Callable[[int], None] | None" = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         # El rango se estira a meses completos ANTES de que nadie lo mire, porque

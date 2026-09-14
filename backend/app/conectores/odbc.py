@@ -58,7 +58,7 @@ import pyodbc
 from app.conectores import perfiles_odbc as perfiles
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
-    ResultadoPrueba, TablaOrigen, cita_origen, escribir_lote,
+    ResultadoPrueba, TablaOrigen, avisar_avance, cita_origen, escribir_lote,
 )
 
 # Esquemas/catalogos que son del motor y no de nadie.
@@ -548,6 +548,7 @@ class ConectorODBC(Conector):
                 duck.register("bloque", _a_arrow(bloque, esquema, texto))
                 duck.execute("INSERT INTO lote SELECT * FROM bloque")
                 traidas += len(bloque)
+                avisar_avance(p, traidas)
 
             return escribir_lote(duck, destino, p, t0)
         finally:

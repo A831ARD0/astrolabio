@@ -72,12 +72,19 @@ class Trabajo:
     #: Alguien pidio pararlo. No se corta nada a la fuerza: el ejecutor lo mira
     #: ENTRE pasos y se detiene sin dejar nada a medias. Ver `cancelar`.
     parar: bool = False
+    #: Filas traidas del origen hasta ahora. Es lo unico que se puede saber de una
+    #: carga en marcha: cuantas van. No hay total contra el que compararlas —el
+    #: origen no dice cuantas va a devolver sin contarlas primero, y contarlas
+    #: costaria otra consulta entera— asi que se ensena el numero a secas y no un
+    #: porcentaje inventado.
+    traidas: int = 0
 
     def como_dict(self) -> dict:
         return {
             "id": self.id, "tipo": self.tipo, "objeto_id": self.objeto_id,
             "nombre": self.nombre, "estado": self.estado, "parando": self.parar,
             "a_la_par": self.a_la_par, "quien": self.actor_email,
+            "traidas": self.traidas,
             "encolado_en": self.encolado_en.isoformat(),
             "iniciado_en": self.iniciado_en.isoformat() if self.iniciado_en else None,
         }
@@ -210,7 +217,7 @@ def _ejecutar_carga(sesion, t: Trabajo) -> None:
         return
     try:
         r = ejecutar_carga(sesion, ds, Actor(id=t.actor_id, email=t.actor_email),
-                           **t.opciones)
+                           avisar=lambda n: anotar_avance(t.id, n), **t.opciones)
         sesion.commit()
         log.info("Carga de '%s' completa: %s filas en %s ms",
                  ds.nombre, r["filas"], r["ms"])
@@ -294,6 +301,29 @@ def esperar(segundos: float = 60) -> bool:
                 return True
         time.sleep(0.02)
     return False
+
+
+def anotar_avance(trabajo_id: int, traidas: int) -> None:
+    """Cuantas filas lleva. La llama el conector cada bloque; no puede fallar."""
+    with _reg.candado:
+        t = _reg.vivos.get(trabajo_id)
+        if t is not None:
+            t.traidas = traidas
+
+
+def avance_de(tipo: str, objeto_id: int) -> int | None:
+    """
+    Filas traidas por el trabajo vivo de ese objeto, o None si no hay ninguno.
+
+    Se consulta desde la pantalla mientras la carga corre. Vive en memoria y no en
+    la base a proposito: son veinte escrituras por carga que no le importan a
+    nadie manana, y la ejecucion en curso ya tiene su fila esperando el resultado.
+    """
+    with _reg.candado:
+        for t in _reg.vivos.values():
+            if t.tipo == tipo and t.objeto_id == objeto_id and t.estado == "corriendo":
+                return t.traidas
+    return None
 
 
 def cancelar(trabajo_id: int) -> str | None:

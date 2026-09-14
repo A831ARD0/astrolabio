@@ -134,6 +134,23 @@ dice, con el nombre de la columna. En un lote incremental pequeño se deja pasar
 tres filas traigan la fecha vacía es raro pero posible, y tumbar la carga por eso
 sería peor que el problema.
 
+### Mientras la carga corre
+
+Se ve **cuántas filas lleva traídas**, actualizándose cada dos segundos. No hay
+porcentaje ni barra: el origen no dice cuántas filas va a devolver sin contarlas
+antes —lo que costaría otra consulta entera— y una barra que se inventa el total
+miente justo cuando más se la mira.
+
+Y el orden importa, porque es lo que hace que una caída no cueste datos: **primero
+se trae todo, y sólo cuando están todas las filas se borra y se escribe.** Si la
+conexión con el origen se cae a mitad de la lectura —que es donde se cae— la carga
+falla y lo que había en disco sigue intacto. La ventana de riesgo es lo que tarda en
+escribir, ya en local y con los datos en la mano.
+
+Por eso mismo **una carga suelta que ya arrancó no se puede cancelar**: cortar a
+media escritura es lo único que sí deja el dataset a medias. Un flujo sí se para,
+pero entre pasos: la tabla en curso se termina.
+
 ### Cuando la fecha no es una fecha
 
 Debajo de «Partir por» hay un campo, **«Convertirla en fecha»**, donde se escribe una

@@ -1152,7 +1152,12 @@ def borrar_dataset(dataset_id: int, sesion: SesionDep,
 @router.get("/datasets/{dataset_id}/historial")
 def historial(dataset_id: int, sesion: SesionDep,
               _: Usuario = Depends(exigir_rol(Rol.editor))):
+    from app import trabajos
+
     ds = _dataset(sesion, dataset_id)
+    # Solo para la que esta corriendo: el avance vive en memoria y se pierde al
+    # terminar, que es justo cuando deja de importar porque ya hay resultado.
+    avance = trabajos.avance_de("carga", ds.id)
     return {"ejecuciones": [
         {"id": e.id, "estado": e.estado.value, "modo": e.modo,
          "disparo": e.origen, "filas": e.filas, "ms": e.ms,
@@ -1167,6 +1172,7 @@ def historial(dataset_id: int, sesion: SesionDep,
          "filas_sin_particion": (e.detalle or {}).get("filas_sin_particion"),
          "marca_maxima": (e.detalle or {}).get("marca_maxima"),
          "filas_totales": (e.detalle or {}).get("filas_totales"),
+         "traidas": avance if e.estado.value == "corriendo" else None,
          "cuando": iso(e.creado_en)}
         for e in ds.ejecuciones[:50]
     ]}

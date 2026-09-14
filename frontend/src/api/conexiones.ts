@@ -499,6 +499,8 @@ export interface EjecucionCarga {
   filas_sin_particion: number | null
   marca_maxima: string | null
   filas_totales: number | null
+  /** Filas traídas hasta ahora. Solo mientras corre. */
+  traidas: number | null
   cuando: string
 }
 

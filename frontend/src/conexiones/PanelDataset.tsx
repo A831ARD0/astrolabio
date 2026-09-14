@@ -446,8 +446,15 @@ export function PanelDataset({
 
           {corriendo && (
             <div className="aviso-caja">
-              Corriendo en segundo plano. Puedes cerrar esta ventana: el
-              resultado queda en el historial de abajo.
+              {/* El numero de filas y no un porcentaje: el origen no dice cuantas
+                  va a devolver sin contarlas antes, y una barra que se inventa el
+                  total miente justo cuando mas se la mira. */}
+              {ultima?.traidas
+                ? `${ultima.traidas.toLocaleString('es-MX')} filas traídas del origen…`
+                : 'Corriendo en segundo plano.'}{' '}
+              Puedes cerrar esta ventana: el resultado queda en el historial de
+              abajo. Nada se borra hasta que llegan todas las filas: si la conexión
+              se cae antes, lo que ya tenías sigue intacto.
             </div>
           )}
           {acc.cargar.data?.esperando_a && !corriendo && (
