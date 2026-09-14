@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { token } from './api/cliente'
-import { useYo } from './api/hooks'
+import { useToken, useYo } from './api/hooks'
 import { Avisos } from './paginas/Avisos'
 import { Conexiones } from './paginas/Conexiones'
 import { Etl } from './paginas/Etl'
@@ -16,10 +16,11 @@ import { Tableros } from './paginas/Tableros'
 import { Tareas } from './paginas/Tareas'
 
 export function App() {
+  const hayToken = useToken()
   const yo = useYo()
   const qc = useQueryClient()
 
-  if (!token.leer() || yo.isError) {
+  if (!hayToken || yo.isError) {
     return <Ingreso alEntrar={() => qc.invalidateQueries()} />
   }
   if (yo.isLoading) return <div className="vacio">Cargando…</div>

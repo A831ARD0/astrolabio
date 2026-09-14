@@ -7,8 +7,9 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSyncExternalStore } from 'react'
 
-import { api } from './cliente'
+import { api, token } from './cliente'
 import type {
   Borrador,
   CampoCatalogo,
@@ -51,6 +52,19 @@ export const clavesDash = {
   lista: ['dashboards'] as const,
   uno: (id: number) => ['dashboard', id] as const,
 }
+
+/**
+ * El token como estado: repinta cuando entra, cuando sale y cuando caduca.
+ *
+ * `useSyncExternalStore` y no `useState` porque la fuente de verdad es
+ * `localStorage`, que vive fuera de React y lo cambian sitios que no son un
+ * componente: el formulario de ingreso, el boton de salir y el propio cliente al
+ * recibir un 401.
+ */
+export function useToken(): string | null {
+  return useSyncExternalStore(token.suscribir, token.leer, () => null)
+}
+
 
 export function useYo() {
   return useQuery({

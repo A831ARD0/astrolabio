@@ -21,10 +21,46 @@ export class ErrorApi extends Error {
   }
 }
 
+/**
+ * El token, y quien quiera enterarse de que cambia.
+ *
+ * Los avisos no son un adorno: `localStorage` no es estado de React, asi que
+ * borrar el token no repintaba nada y la aplicacion se quedaba enseñando la
+ * pantalla de dentro despues de darle a «Salir». Lo mismo al caducar la sesion,
+ * que es peor porque nadie lo pidio: el cliente borraba el token en el 401 y la
+ * pantalla seguia como si nada.
+ *
+ * Tambien se escucha el evento `storage`, que el navegador lanza en las OTRAS
+ * pestañas: salir en una saca de todas, que es lo que espera quien cierra sesion
+ * en un equipo compartido.
+ */
+const oyentes = new Set<() => void>()
+
+function avisar() {
+  for (const o of oyentes) o()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === CLAVE_TOKEN || e.key === null) avisar()
+  })
+}
+
 export const token = {
   leer: () => localStorage.getItem(CLAVE_TOKEN),
-  guardar: (t: string) => localStorage.setItem(CLAVE_TOKEN, t),
-  borrar: () => localStorage.removeItem(CLAVE_TOKEN),
+  guardar: (t: string) => {
+    localStorage.setItem(CLAVE_TOKEN, t)
+    avisar()
+  },
+  borrar: () => {
+    localStorage.removeItem(CLAVE_TOKEN)
+    avisar()
+  },
+  /** Para `useSyncExternalStore`. Devuelve como desuscribirse. */
+  suscribir: (cb: () => void) => {
+    oyentes.add(cb)
+    return () => oyentes.delete(cb)
+  },
 }
 
 /** Convierte el `detail` de FastAPI en algo que se pueda mostrar. */
