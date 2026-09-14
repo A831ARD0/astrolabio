@@ -68,6 +68,52 @@ def test_formatos_raros_que_se_pueden_escribir(valor, expresion, esperado):
     assert r.isoformat() == esperado
 
 
+#: El numero de dia: dias transcurridos desde el 1 de enero del año 1, que es como
+#: guardan la fecha los Pervasive/Btrieve. 1970-01-01 es el dia 719163.
+#:
+#: El CASE no es adorno: sin el, un valor basura (un 0, un entero enorme) no da
+#: vacio sino que TUMBA la consulta —"Date and time not in timestamp range"— y el
+#: TRY_CAST de fuera no llega a tiempo, porque quien revienta es la suma.
+DIA_PERVASIVE = (
+    'CASE WHEN CAST("Dt Movim" AS BIGINT) BETWEEN 693596 AND 766645 '
+    "THEN DATE '1970-01-01' + to_days(CAST(\"Dt Movim\" AS INTEGER) - 719163) END"
+)
+
+
+@pytest.mark.parametrize("valor,esperado", [
+    (739873, "2026-09-14"),
+    (739798, "2026-07-01"),
+    (719163, "1970-01-01"),
+])
+def test_el_numero_de_dia_se_convierte(valor, esperado):
+    con = duckdb.connect()
+    con.execute('CREATE TABLE t AS SELECT ? AS "Dt Movim"', [valor])
+    r = con.execute(f"SELECT TRY_CAST(({DIA_PERVASIVE}) AS DATE) FROM t").fetchone()[0]
+    assert r.isoformat() == esperado
+
+
+@pytest.mark.parametrize("basura", [0, -5, 2147483647])
+def test_un_numero_de_dia_imposible_no_tumba_la_consulta(basura):
+    """
+    Lo que hace falta acotar. Una expresion puede REVENTAR, no solo dar vacio, y
+    entonces no se pierde una fila: se cae la carga entera. El TRY_CAST de fuera
+    no protege de esto porque el error ocurre antes, al sumar los dias.
+    """
+    con = duckdb.connect()
+    con.execute('CREATE TABLE t AS SELECT ? AS "Dt Movim"', [basura])
+    assert con.execute(
+        f"SELECT TRY_CAST(({DIA_PERVASIVE}) AS DATE) FROM t").fetchone()[0] is None
+
+
+def test_sin_el_case_el_valor_imposible_revienta():
+    """La prueba de que el CASE hace falta: sin el, esto es una excepcion."""
+    con = duckdb.connect()
+    con.execute("CREATE TABLE t AS SELECT 2147483647 AS c")
+    with pytest.raises(Exception, match="range"):
+        con.execute("SELECT TRY_CAST((DATE '1970-01-01' + "
+                    "to_days(CAST(c AS INTEGER) - 719163)) AS DATE) FROM t").fetchone()
+
+
 @necesita_mysql
 def test_partir_por_una_fecha_de_texto(cliente, cab_admin, conexion_mysql):
     """De punta a punta: columna de texto + expresion, y particiones de verdad."""

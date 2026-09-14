@@ -147,7 +147,15 @@ que no son un formato sino una cuenta.
 | `14/09/2026` (texto) | `try_strptime("fecha", '%d/%m/%Y')` |
 | `09/14/2026` (texto) | `try_strptime("fecha", '%m/%d/%Y')` |
 | `1260914` (siglo aparte) | `try_strptime(CAST("fecha" + 19000000 AS VARCHAR), '%Y%m%d')` |
+| `739873` (número de día) | `CASE WHEN CAST("Dt" AS BIGINT) BETWEEN 693596 AND 766645 THEN DATE '1970-01-01' + to_days(CAST("Dt" AS INTEGER) - 719163) END` |
 | fecha + hora en dos columnas | `try_strptime(CAST("Dt" AS VARCHAR) \|\| lpad(CAST("Hr" AS VARCHAR), 6, '0'), '%Y%m%d%H%M%S')` |
+
+El **número de día** es el más común en los orígenes antiguos: no es un formato,
+es la cuenta de días desde el 1 de enero del año 1 (el 1970-01-01 es el 719163). Ahí
+el `CASE` no es adorno — un valor imposible, un `0` o un entero enorme, no daría
+vacío sino que **tumbaría la carga entera** con «Date and time not in timestamp
+range», y el `try_` de fuera no llega a tiempo porque quien revienta es la suma. El
+`BETWEEN` acota a fechas creíbles (1900–2100) y lo que no encaje va a `sin_fecha`.
 
 Las columnas se nombran como en el origen, **entre comillas dobles**. La expresión es
 SQL de DuckDB y se evalúa sobre las filas ya traídas, así que puede usar varias
