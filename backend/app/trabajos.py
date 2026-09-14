@@ -152,8 +152,15 @@ def _correr(t: Trabajo) -> None:
                 _ejecutar_carga(sesion, t)
             else:
                 _ejecutar_flujo(sesion, t)
-    except Exception:
+    except Exception as e:
         log.exception("Trabajo %s (%s '%s') murio", t.id, t.tipo, t.nombre)
+        # El renglon se quedaria 'corriendo' para siempre. Ver `cerrar_a_medias`.
+        try:
+            cerrar_a_medias(
+                t.tipo, t.objeto_id,
+                f"Se corto por un fallo inesperado: {type(e).__name__}: {e}")
+        except Exception:
+            log.exception("Ademas fallo al cerrar el renglon del trabajo %s", t.id)
     finally:
         with _reg.candado:
             _reg.vivos.pop(t.id, None)
@@ -360,6 +367,44 @@ def cancelar(trabajo_id: int) -> str | None:
 def _esta_vivo(t: Trabajo) -> bool:
     with _reg.candado:
         return t.id in _reg.vivos
+
+
+#: Por que columna se encuentra la ejecucion de cada tipo de trabajo. Un flujo
+#: deja ademas ejecuciones de transformacion, que se cierran con el.
+_DONDE_MIRAR: dict[str, list[tuple[str, str]]] = {
+    "carga": [("CargaEjecucion", "dataset_id")],
+    "flujo": [("FlujoEjecucion", "flujo_id")],
+}
+
+
+def cerrar_a_medias(tipo: str, objeto_id: int, motivo: str) -> int:
+    """
+    Cierra las ejecuciones de ese objeto que se quedaron en 'corriendo'.
+
+    Hace falta porque el renglon se confirma ANTES de empezar —a proposito: con
+    la transaccion abierta durante toda la ingesta, SQLite deja fuera a cualquier
+    otro escritor— y entonces un `rollback` ya no se lo lleva. Si algo revienta
+    por un camino que no estaba previsto, el renglon se queda 'corriendo' para
+    siempre con el servicio vivo, y lo unico que lo arreglaba era reiniciar.
+
+    Sesion propia: la que venia esta en rollback y no se puede usar para escribir
+    la razon por la que se rompio.
+    """
+    from app import modelos_db
+    from app.modelos_db import EstadoCarga
+
+    total = 0
+    with CrearSesion() as sesion:
+        for nombre, columna in _DONDE_MIRAR.get(tipo, []):
+            modelo = getattr(modelos_db, nombre)
+            for e in sesion.query(modelo).filter(
+                    getattr(modelo, columna) == objeto_id,
+                    modelo.estado == EstadoCarga.corriendo):
+                e.estado = EstadoCarga.error
+                e.mensaje = motivo
+                total += 1
+        sesion.commit()
+    return total
 
 
 def limpiar_interrumpidos() -> int:

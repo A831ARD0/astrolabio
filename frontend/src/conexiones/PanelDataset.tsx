@@ -12,6 +12,7 @@ import { useState } from 'react'
 
 import {
   type Dataset,
+  type EjecucionCarga,
   useAccionesDataset,
   useDescribirTabla,
   useEditarDataset,
@@ -291,6 +292,48 @@ function EditorVentana({ ds }: { ds: Dataset }) {
   )
 }
 
+/**
+ * Como salio una ejecucion.
+ *
+ * Aqui habia `estado === 'exito' ? éxito : error`, y eso pintaba de ROJO todo lo
+ * que no fuera exito: una carga que seguia corriendo salia como un fallo, y ademas
+ * sin mensaje —porque todavia no hay ninguno que dar—. Un error en blanco no deja
+ * hacer nada: no dice que paso ni si hay que volver a intentarlo.
+ *
+ * `cancelado` tambien salia en rojo, justo lo que `EstadoCarga` dice por escrito
+ * que no debe pasar: pararla es una decision de quien opera, no una averia.
+ */
+function Resultado({ e }: { e: EjecucionCarga }) {
+  if (e.estado === 'exito') return <span className="etiqueta ok">éxito</span>
+  if (e.estado === 'corriendo') {
+    return (
+      <>
+        <span className="etiqueta dim">corriendo</span>{' '}
+        <span className="suave">
+          {e.traidas
+            ? `${e.traidas.toLocaleString('es-MX')} filas traídas…`
+            : 'empezando…'}
+        </span>
+      </>
+    )
+  }
+  if (e.estado === 'cancelado') {
+    return (
+      <>
+        <span className="etiqueta aviso">cancelada</span>{' '}
+        <span className="suave">{e.mensaje}</span>
+      </>
+    )
+  }
+  return (
+    <>
+      <span className="etiqueta critico">error</span>{' '}
+      <span className="suave">{e.mensaje}</span>
+    </>
+  )
+}
+
+
 export function PanelDataset({
   ds,
   alCerrar,
@@ -561,14 +604,7 @@ export function PanelDataset({
                     <td className="num">{e.filas.toLocaleString('es-MX')}</td>
                     <td className="num">{e.ms}</td>
                     <td className="chico" style={{ whiteSpace: 'normal' }}>
-                      {e.estado === 'exito' ? (
-                        <span className="etiqueta ok">éxito</span>
-                      ) : (
-                        <>
-                          <span className="etiqueta critico">error</span>{' '}
-                          <span className="suave">{e.mensaje}</span>
-                        </>
-                      )}
+                      <Resultado e={e} />
                     </td>
                   </tr>
                 ))}

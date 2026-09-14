@@ -134,6 +134,25 @@ dice, con el nombre de la columna. En un lote incremental pequeño se deja pasar
 tres filas traigan la fecha vacía es raro pero posible, y tumbar la carga por eso
 sería peor que el problema.
 
+### Qué dice el historial
+
+Cuatro resultados, y cada uno con su color, porque confundirlos cuesta tiempo:
+
+| resultado | qué significa |
+|---|---|
+| **éxito** | terminó y escribió |
+| **corriendo** | sigue trabajando, con las filas que lleva traídas |
+| **cancelada** | la paró alguien. No es una avería y no sale en rojo |
+| **error** | falló, con el motivo del origen |
+
+Una ejecución **no se queda en «corriendo» para siempre**. Su renglón se confirma
+antes de empezar —a propósito: con la transacción abierta durante toda la ingesta,
+SQLite deja fuera a cualquier otro escritor, y crear un flujo mientras corría una
+extracción daba Error 500— así que un fallo por un camino imprevisto ya no se lo
+lleva ningún `rollback`. Cuando eso pasa, el renglón se cierra con el motivo. Y si
+el servicio se reinicia a media carga, al arrancar se cierran las que quedaron
+abiertas diciendo «Interrumpida: el servicio se reinició mientras corría».
+
 ### Mientras la carga corre
 
 Se ve **cuántas filas lleva traídas**, actualizándose cada dos segundos. No hay
