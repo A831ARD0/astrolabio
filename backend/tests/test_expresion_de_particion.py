@@ -196,7 +196,11 @@ def test_cambiar_la_expresion_obliga_a_carga_completa(cliente, cab_admin,
                       json={"expresion_particion":
                             "try_strptime(SUBSTR(\"fecha_texto\", 1, 10), '%Y-%m-%d')"})
     assert r.status_code == 200, r.text
-    assert any("completa" in a for a in r.json()["avisos"]), r.json()
+    # El aviso tiene que PEDIR la recarga completa, no darla por hecha: con
+    # ventana movil la siguiente carga es una recarga de particiones, que no
+    # vacia el destino, y escribir el formato nuevo al lado del viejo rompe
+    # el dataset.
+    assert any("Recargar completo" in a for a in r.json()["avisos"]), r.json()
 
     lista = cliente.get("/api/conexiones/datasets/lista", headers=cab_admin).json()
     assert next(d for d in lista["datasets"]

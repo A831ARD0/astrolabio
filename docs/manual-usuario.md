@@ -238,12 +238,18 @@ nada que reemplazar y la sección no se dibuja.
 Se arregla en el panel del dataset, en «Columnas de carga»: eliges la columna de
 fecha, guardas, y la sección «Ventana móvil» aparece debajo.
 
-Al guardar te avisa de que **la siguiente carga será completa**. No es una
-precaución de más: partir cambia la forma de lo que se escribe —carpetas
-`anio=/mes=` y dos columnas añadidas— y un lote así conviviendo con los archivos
-planos que ya están en disco dejaría el dataset con dos esquemas distintos. Leerlo
-fallaría, o —peor— devolvería nulos donde antes había datos. Así que la marca máxima
-se borra y el dataset se reescribe entero una vez.
+Al guardar te dice que hay que **«Recargar completo» una vez**, y hay que hacerlo:
+partir cambia la forma de lo que se escribe —carpetas `anio=/mes=` en vez de un
+archivo suelto— y los dos formatos no pueden convivir en el mismo sitio. Si
+conviven, leer el dataset falla con «Hive partition mismatch» y deja de servir
+también para los tableros que lo usan.
+
+La carga completa es **la única que vacía el destino**, y por eso es la única que
+puede cambiar el formato. Mientras el disco esté en un formato y la configuración
+pida otro, las demás cargas se niegan y explican por qué. Antes no se negaban: el
+aviso decía «la siguiente carga será completa» y no lo era —si el dataset tiene
+ventana móvil, la ventana gana y esa recarga no vacía nada—, así que escribía el
+formato nuevo al lado del viejo y rompía el dataset.
 
 **Si cambias las columnas de un dataset que ya cargó, la siguiente carga será
 completa** y reescribirá todo. El archivo en disco tiene las columnas viejas, y

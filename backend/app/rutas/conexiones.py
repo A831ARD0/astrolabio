@@ -1038,9 +1038,17 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
         avisos.append(aviso_expresion)
     if cambio_particion:
         ds.marca_maxima = None
-        avisos.append("Cambió la columna de partición: la siguiente carga será "
-                      "completa y reescribirá el dataset. Lo que está en disco "
-                      "está partido de otra forma y no se puede mezclar.")
+        # Decir "la siguiente carga sera completa" era mentira y costo una
+        # tarde: si el dataset tiene ventana movil, la siguiente carga es una
+        # recarga de particiones —gana sobre el modo— y esa NO vacia el destino.
+        # Escribia el formato nuevo al lado del viejo y el dataset quedaba
+        # ilegible. Hay que pedir la carga completa, no darla por hecha.
+        avisos.append("Cambió la columna de partición, así que hay que "
+                      "reescribir el dataset entero: dale a «Recargar completo» "
+                      "una vez. Lo que está en disco está guardado de otra forma "
+                      "y los dos formatos no se pueden mezclar. Hasta entonces "
+                      "las cargas normales se van a negar, para no dejarlo "
+                      "ilegible.")
     if cambio_columnas:
         ds.marca_maxima = None
         avisos.append("Cambió el juego de columnas: la siguiente carga será "

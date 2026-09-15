@@ -218,6 +218,64 @@ def expresion_fecha(p: "PeticionIngesta") -> str:
     return f"TRY_CAST(({dentro}) AS DATE)"
 
 
+def _formato_del_destino(destino: Path) -> str | None:
+    """
+    Como esta guardado hoy lo que hay en el destino: 'partido', 'plano' o None.
+
+    Se mira lo que hay, no lo que la configuracion dice que deberia haber: la
+    configuracion se cambia en un segundo y los archivos siguen como estaban.
+    """
+    if not destino.is_dir():
+        return None
+    hay_particiones = any(h.is_dir() and h.name.startswith("anio=")
+                          for h in destino.iterdir())
+    hay_planos = any(h.is_file() and h.suffix == ".parquet"
+                     for h in destino.iterdir())
+    if hay_particiones and not hay_planos:
+        return "partido"
+    if hay_planos and not hay_particiones:
+        return "plano"
+    return "mezclado" if hay_particiones else None
+
+
+def revisar_formato(destino: Path, p: PeticionIngesta) -> None:
+    """
+    Que no se escriba en un formato distinto del que ya hay en el destino.
+
+    Es la trampa que se cobro una tarde: se puso columna de particion a un dataset
+    que ya estaba cargado plano, y la carga siguiente —que tenia ventana movil, y
+    por tanto era una recarga de particiones y no una completa— escribio carpetas
+    `anio=/mes=` AL LADO del archivo plano de antes. Escribir salio bien. Leerlo ya
+    no: "Hive partition mismatch between file ... and ...", y con eso el dataset
+    entero deja de servir, tambien para los tableros.
+
+    Solo la carga completa puede arreglarlo, porque es la unica que vacia el
+    destino, asi que es lo que se dice. Antes de escribir y no despues: un mensaje
+    claro vale poco si llega cuando el estropicio ya esta en disco.
+    """
+    if p.reemplazar_todo:
+        return                      # va a vaciar el destino: cualquier cosa vale
+    actual = _formato_del_destino(destino)
+    if actual is None:
+        return                      # vacio: lo que se escriba manda
+    quiere = "partido" if p.particionar_por else "plano"
+    if actual == quiere:
+        return
+    razon = ("El dataset esta guardado en carpetas por anio/mes y esta carga "
+             "escribiria un archivo suelto"
+             if actual == "partido" else
+             "El dataset esta guardado como archivos sueltos y esta carga "
+             "escribiria carpetas por anio/mes")
+    if actual == "mezclado":
+        razon = "El dataset tiene los dos formatos mezclados"
+    raise ErrorConector(
+        f"{razon}. Mezclarlos deja el dataset ilegible —«Hive partition "
+        f"mismatch»— y no solo aqui: tambien en los tableros que lo usan. "
+        f"Cambiar la columna de particion, o quitarla, obliga a reescribir todo "
+        f"una vez: usa «Recargar completo». Despues, la ventana y las recargas "
+        f"por rango vuelven a funcionar solas.")
+
+
 def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
                   tabla: str = "lote") -> ResultadoIngesta:
     """
@@ -235,6 +293,8 @@ def escribir_lote(con, destino: Path, p: PeticionIngesta, t0: float,
     # Borrar ANTES de escribir, y solo lo que el modo permite. Esto va antes del
     # retorno por lote vacio a proposito: una recarga de marzo que no trae filas
     # significa que en el origen ya no hay marzo, y el Parquet debe reflejarlo.
+    revisar_formato(destino, p)
+
     particiones: list[str] = []
     if p.rango_desde or p.rango_hasta:
         particiones = particiones_del_rango(p.rango_desde, p.rango_hasta)
