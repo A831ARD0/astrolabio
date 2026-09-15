@@ -158,7 +158,7 @@ def _correr(t: Trabajo) -> None:
         try:
             cerrar_a_medias(
                 t.tipo, t.objeto_id,
-                f"Se corto por un fallo inesperado: {type(e).__name__}: {e}")
+                f"Se cortó por un fallo inesperado: {type(e).__name__}: {e}")
         except Exception:
             log.exception("Ademas fallo al cerrar el renglon del trabajo %s", t.id)
     finally:
@@ -418,7 +418,7 @@ def limpiar_interrumpidos() -> int:
     from app.modelos_db import CargaEjecucion, EstadoCarga, FlujoEjecucion
     from app.modelos_db import TransformacionEjecucion
 
-    aviso = "Interrumpida: el servicio se reinicio mientras corria."
+    aviso = "Interrumpida: el servicio se reinició mientras corría."
     total = 0
     with CrearSesion() as sesion:
         for modelo in (FlujoEjecucion, CargaEjecucion, TransformacionEjecucion):

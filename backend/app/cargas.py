@@ -184,10 +184,10 @@ def ejecutar_carga(
         # tiene por donde empezar; con ella, sabe que mirar y como arreglarlo.
         if ds.expresion_particion:
             _fallar(sesion, ejec, ds, actor,
-                    f"La expresion de particion fallo al convertir alguna fila: "
+                    f"La expresión de partición falló al convertir alguna fila: "
                     f"{e}. Usa try_strptime en vez de strptime: strptime lanza "
-                    f"error con el primer valor vacio o ilegible, y try_strptime "
-                    f"devuelve vacio y manda esa fila a 'sin_fecha'.")
+                    f"error con el primer valor vacío o ilegible, y try_strptime "
+                    f"devuelve vacío y manda esa fila a 'sin_fecha'.")
         _fallar(sesion, ejec, ds, actor, _inesperado(e, f"al traer {ds.tabla_origen}"))
 
     # Ninguna fila se pudo fechar: la columna de particion no es una fecha.
@@ -209,8 +209,8 @@ def ejecutar_carga(
             and r.filas > 0 and r.filas_sin_particion == r.filas):
         _fallar(sesion, ejec, ds, actor,
                 f"Ninguna de las {r.filas:,} filas se pudo fechar por "
-                f"'{ds.particionar_por}', asi que todas habrian quedado en la "
-                f"particion 'sin_fecha' y la ventana movil no recargaria nada. "
+                f"'{ds.particionar_por}', así que todas habrían quedado en la "
+                f"partición 'sin_fecha' y la ventana móvil no recargaría nada. "
                 f"Esa columna no es una fecha que se pueda interpretar: si en el "
                 f"origen es un entero tipo 20260914 o texto, hay que convertirla "
                 f"antes, o partir por otra columna.".replace(",", " "))

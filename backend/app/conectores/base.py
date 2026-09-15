@@ -261,18 +261,18 @@ def revisar_formato(destino: Path, p: PeticionIngesta) -> None:
     quiere = "partido" if p.particionar_por else "plano"
     if actual == quiere:
         return
-    razon = ("El dataset esta guardado en carpetas por anio/mes y esta carga "
-             "escribiria un archivo suelto"
+    razon = ("El dataset está guardado en carpetas por año/mes y esta carga "
+             "escribiría un archivo suelto"
              if actual == "partido" else
-             "El dataset esta guardado como archivos sueltos y esta carga "
-             "escribiria carpetas por anio/mes")
+             "El dataset está guardado como archivos sueltos y esta carga "
+             "escribiría carpetas por año/mes")
     if actual == "mezclado":
         razon = "El dataset tiene los dos formatos mezclados"
     raise ErrorConector(
         f"{razon}. Mezclarlos deja el dataset ilegible —«Hive partition "
-        f"mismatch»— y no solo aqui: tambien en los tableros que lo usan. "
-        f"Cambiar la columna de particion, o quitarla, obliga a reescribir todo "
-        f"una vez: usa «Recargar completo». Despues, la ventana y las recargas "
+        f"mismatch»— y no solo aquí: también en los tableros que lo usan. "
+        f"Cambiar la columna de partición, o quitarla, obliga a reescribir todo "
+        f"una vez: usa «Recargar completo». Después, la ventana y las recargas "
         f"por rango vuelven a funcionar solas.")
 
 
