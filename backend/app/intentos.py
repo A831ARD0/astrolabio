@@ -69,6 +69,18 @@ def exito(email: str) -> None:
         _fallos.pop(email.lower(), None)
 
 
+def desbloquear(email: str) -> bool:
+    """
+    Borra el contador de ESA cuenta. Devuelve si habia algo que borrar.
+
+    Existe porque la unica salida que tenia un administrador era reiniciar el
+    servicio, y eso desbloquea a TODOS —tambien a la cuenta que alguien este
+    atacando de verdad en ese momento—. Aqui se suelta solo a quien se pidio.
+    """
+    with _candado:
+        return _fallos.pop(email.lower(), None) is not None
+
+
 def limpiar() -> None:
     """Solo para las pruebas: deja el contador como recien arrancado."""
     with _candado:

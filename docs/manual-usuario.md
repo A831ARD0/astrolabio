@@ -1966,6 +1966,27 @@ Dos cosas que conviene saber:
 **Usuarios.** Alta, rol y *atributos*. Un atributo es un dato de la persona —por
 ejemplo `region_id = 3`— que las políticas usan para filtrar.
 
+### «No puedo entrar»: desactivado o bloqueado
+
+Son dos cosas distintas, y se resuelven distinto.
+
+**Desactivado.** Lo decide un administrador. La fila sale atenuada con la etiqueta
+«desactivado»; se quita en **Editar → Activo**.
+
+**Bloqueado.** Es automático: tras **8 contraseñas equivocadas seguidas** la cuenta no
+acepta intentos durante **15 minutos** —ni siquiera con la contraseña buena, porque
+si la aceptara, quien estuviera probando sabría que acertó—. En la lista sale una
+etiqueta ámbar **«bloqueado · N min»** con su botón **Desbloquear**, que suelta sólo a
+esa cuenta. La lista se refresca sola cada 30 segundos.
+
+- **Restablecer la contraseña también desbloquea.** Si alguien llama porque no puede
+  entrar y le das una contraseña nueva, le sirve al momento.
+- **Desbloquear queda en Auditoría** (`usuario_desbloqueado`, con quién lo hizo y
+  cuánto faltaba). Los bloqueos quedan como `ingreso_bloqueado`.
+- **No reinicies el servicio para desbloquear a alguien.** También funciona, porque
+  el contador vive en memoria, pero suelta a **todas** las cuentas a la vez —incluida
+  la que alguien pudiera estar atacando en ese momento—.
+
 **Seguridad por fila.** Una política es una condición que se añade a **todas** las
 consultas de quien le aplica:
 

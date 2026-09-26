@@ -21,6 +21,8 @@ export interface UsuarioCompleto {
   atributos: Record<string, string>
   ultimo_ingreso: string | null
   creado_en: string | null
+  /** Segundos que le faltan de bloqueo por intentos fallidos. 0 = no lo está. */
+  bloqueado_segundos: number
 }
 
 const clave = {
@@ -34,6 +36,10 @@ export function useUsuarios() {
   return useQuery({
     queryKey: clave.usuarios,
     queryFn: () => api.get<UsuarioCompleto[]>('/auth/usuarios'),
+    // El bloqueo por intentos empieza y termina solo, sin que nadie toque la
+    // lista: sin refrescar, alguien bloqueado mientras la pantalla esta abierta no
+    // apareceria, y los minutos que le faltan se quedarian congelados.
+    refetchInterval: 30_000,
   })
 }
 
@@ -74,9 +80,21 @@ export function useEditarUsuario() {
 }
 
 export function useRestablecerContrasena() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, nueva }: { id: number; nueva: string }) =>
       api.post<void>(`/auth/usuarios/${id}/contrasena`, { nueva }),
+    // Restablecer tambien desbloquea: la lista tiene que dejar de decirlo.
+    onSuccess: () => qc.invalidateQueries({ queryKey: clave.usuarios }),
+  })
+}
+
+export function useDesbloquearUsuario() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.post<UsuarioCompleto>(`/auth/usuarios/${id}/desbloquear`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: clave.usuarios }),
   })
 }
 

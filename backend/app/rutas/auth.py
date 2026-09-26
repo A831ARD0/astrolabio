@@ -34,6 +34,10 @@ class UsuarioSalida(BaseModel):
     atributos: dict[str, str] = {}
     ultimo_ingreso: str | None = None
     creado_en: str | None = None
+    #: Segundos que le faltan para poder volver a intentar entrar. 0 = no esta
+    #: bloqueado. Lo calcula el freno de intentos, que vive en memoria: por eso
+    #: no esta en la tabla de usuarios y hasta ahora no se veia en ningun sitio.
+    bloqueado_segundos: int = 0
 
 
 class CrearUsuario(BaseModel):
@@ -101,6 +105,7 @@ def _salida(u: Usuario) -> UsuarioSalida:
         activo=u.activo, atributos=u.dict_atributos,
         ultimo_ingreso=iso(u.ultimo_ingreso),
         creado_en=iso(u.creado_en),
+        bloqueado_segundos=intentos.bloqueado(u.email),
     )
 
 
@@ -267,9 +272,36 @@ def restablecer_contrasena(usuario_id: int, cuerpo: RestablecerContrasena,
     if usuario is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
     usuario.hash_contrasena = hashear(cuerpo.nueva)
+    # Tambien lo desbloquea. Es lo que cualquiera espera al darle una contraseña
+    # nueva a alguien que llamo porque no podia entrar: si siguiera bloqueado,
+    # la nueva no le serviria hasta pasados los quince minutos, y la llamada se
+    # repetiria.
+    estaba_bloqueado = intentos.desbloquear(usuario.email)
     registrar(sesion, accion="contrasena_restablecida", usuario_id=actor.id,
               email=actor.email, objeto_tipo="usuario", objeto_id=usuario.id,
-              detalle={"objetivo": usuario.email})
+              detalle={"objetivo": usuario.email,
+                       "desbloqueado": estaba_bloqueado})
+
+
+@router.post("/usuarios/{usuario_id}/desbloquear", response_model=UsuarioSalida)
+def desbloquear_usuario(usuario_id: int, sesion: SesionDep,
+                        actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Quita el bloqueo por intentos fallidos de UNA cuenta.
+
+    Antes la unica salida era esperar o reiniciar el servicio, y reiniciar suelta
+    a todas las cuentas a la vez —tambien a la que alguien este atacando—. Queda
+    en auditoria: desbloquear anula una defensa, y tiene que saberse quien lo hizo.
+    """
+    usuario = sesion.get(Usuario, usuario_id)
+    if usuario is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+    faltaban = intentos.bloqueado(usuario.email)
+    intentos.desbloquear(usuario.email)
+    registrar(sesion, accion="usuario_desbloqueado", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="usuario", objeto_id=usuario.id,
+              detalle={"objetivo": usuario.email, "segundos_que_faltaban": faltaban})
+    return _salida(usuario)
 
 
 @router.post("/cambiar-contrasena", status_code=204)

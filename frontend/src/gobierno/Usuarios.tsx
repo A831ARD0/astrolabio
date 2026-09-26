@@ -12,6 +12,7 @@ import {
   type RolUsuario,
   type UsuarioCompleto,
   useCrearUsuario,
+  useDesbloquearUsuario,
   useEditarUsuario,
   useRestablecerContrasena,
   useUsuarios,
@@ -35,6 +36,33 @@ function fecha(iso: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+/**
+ * El bloqueo por intentos fallidos, con su botón para quitarlo.
+ *
+ * Hasta ahora no se veía en ningún sitio: el contador vive en la memoria del
+ * servicio, no en la tabla de usuarios, y la única salida era esperar o reiniciar
+ * —que suelta a todas las cuentas a la vez, también a la que alguien esté
+ * atacando—.
+ */
+function Bloqueo({ u }: { u: UsuarioCompleto }) {
+  const desbloquear = useDesbloquearUsuario()
+  if (!u.bloqueado_segundos) return null
+  const minutos = Math.max(1, Math.ceil(u.bloqueado_segundos / 60))
+  return (
+    <>
+      {' '}
+      <span className="etiqueta aviso"
+            title="Demasiadas contraseñas equivocadas seguidas. Se quita solo al pasar el tiempo.">
+        bloqueado · {minutos} min
+      </span>{' '}
+      <button className="btn chico" disabled={desbloquear.isPending}
+              onClick={() => desbloquear.mutate(u.id)}>
+        {desbloquear.isPending ? 'Desbloqueando…' : 'Desbloquear'}
+      </button>
+    </>
+  )
 }
 
 /** Editor de pares clave/valor. Las claves son las que usan las políticas. */
@@ -374,6 +402,7 @@ export function Usuarios() {
                     {u.rol}
                   </span>
                   {!u.activo && <span className="etiqueta"> desactivado</span>}
+                  <Bloqueo u={u} />
                 </td>
                 <td className="mono chico">
                   {Object.entries(u.atributos)
