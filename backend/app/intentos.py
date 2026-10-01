@@ -53,7 +53,8 @@ def bloqueado(email: str) -> int:
     return max(0, int(faltan))
 
 
-def fallo(email: str) -> None:
+def fallo(email: str) -> int:
+    """Anota un fallo y devuelve cuantos lleva seguidos, este incluido."""
     clave = email.lower()
     with _candado:
         cuenta, cuando = _fallos.get(clave, (0, 0.0))
@@ -62,6 +63,7 @@ def fallo(email: str) -> None:
         if cuenta and (_ahora() - cuando) > config().minutos_bloqueo * 60:
             cuenta = 0
         _fallos[clave] = (cuenta + 1, _ahora())
+        return cuenta + 1
 
 
 def exito(email: str) -> None:

@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from app.auditoria import registrar
 from app import intentos
+from app.config import config
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
 from app.modelos_db import AtributoUsuario, Rol, Usuario, iso
 from app.seguridad import crear_token, hashear, verificar
@@ -156,8 +157,24 @@ def iniciar_sesion(
     # Mismo mensaje para usuario inexistente y contraseña mala: no revelar cuales
     # correos existen.
     if not usuario or not verificar(datos.password, usuario.hash_contrasena):
-        intentos.fallo(datos.username)
-        registrar(sesion, accion="ingreso_fallido", email=datos.username)
+        llevan = intentos.fallo(datos.username)
+        # El motivo SI se guarda, aunque a quien intenta entrar se le diga lo mismo
+        # en los dos casos. Lo de no revelar si el correo existe protege frente a
+        # quien prueba correos desde fuera; la auditoria solo la lee un
+        # administrador, y para el es justo lo que hace falta: "no existe ese
+        # correo" se arregla diciendole a la persona cual es el suyo, y "contrasena
+        # incorrecta" de otra forma. Sin el motivo, la columna salia en blanco.
+        #
+        # La contrasena tecleada no se guarda nunca, ni recortada: suele ser la
+        # buena con una letra cambiada, o la de otro sitio.
+        maximo = config().intentos_maximos
+        registrar(sesion, accion="ingreso_fallido", email=datos.username,
+                  detalle={
+                      "motivo": ("no existe ninguna cuenta con ese correo"
+                                 if not usuario else "contraseña incorrecta"),
+                      "intento": llevan,
+                      "bloqueo_tras": maximo,
+                  })
         # Se confirma antes de lanzar: la dependencia de sesion hace rollback
         # cuando la ruta falla, y sin este commit los intentos fallidos —lo
         # primero que se mira cuando se sospecha de algo— no quedaban en ninguna
@@ -169,7 +186,14 @@ def iniciar_sesion(
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not usuario.activo:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "La cuenta esta desactivada")
+        # Antes no dejaba rastro: una persona desactivada podia intentar entrar
+        # toda la mañana y la auditoria no lo mostraba. Commit antes de lanzar, por
+        # lo mismo que arriba.
+        registrar(sesion, accion="ingreso_fallido", usuario_id=usuario.id,
+                  email=usuario.email,
+                  detalle={"motivo": "la cuenta está desactivada"})
+        sesion.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "La cuenta está desactivada")
 
     intentos.exito(datos.username)
     usuario.ultimo_ingreso = datetime.now(timezone.utc)

@@ -1978,8 +1978,20 @@ Junto al campo hay tres botones: **Generar**, **Ver/Ocultar** y **Copiar**.
 - Al restablecer, **la contraseña se queda en el campo** después de guardar, para
   copiarla. Antes se borraba justo en ese momento.
 
+**Guardar** también la guarda: si has escrito o generado una, el botón dice
+«Guardar, con la contraseña nueva», la pone y **deja el panel abierto** para que la
+copies. Antes Guardar la ignoraba y cerraba, así que la persona se quedaba con la
+anterior y la que le dabas no funcionaba. Si intentas cerrar con una contraseña sin
+guardar, avisa en vez de tirarla.
+
 Lo que no se puede es **verla después**: sólo se guarda su hash, así que al cerrar
 el panel ya no hay forma de recuperarla. Si alguien la pierde, se le genera otra.
+
+En **Auditoría**, cada ingreso fallido dice por qué: «contraseña incorrecta ·
+intento 3 de 8», «no existe ninguna cuenta con ese correo» —el de quien escribe su
+usuario sin el `@dominio`— o «la cuenta está desactivada». A la persona que intenta
+entrar se le sigue diciendo lo mismo en todos los casos, para no revelar qué correos
+existen. La contraseña que tecleó no se guarda nunca, ni un trozo.
 
 ### «No puedo entrar»: desactivado o bloqueado
 

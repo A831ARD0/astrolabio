@@ -42,6 +42,20 @@ function hora(iso: string): string {
 function resumen(e: Evento): string {
   const d = e.detalle ?? {}
   const trozos: string[] = []
+  // Ingresos: por qué falló, cuántos lleva y cuándo se bloquea. Sin esto la fila
+  // de un ingreso fallido salía vacía, y era la que más se mira.
+  if (typeof d.motivo === 'string') trozos.push(d.motivo)
+  if (typeof d.intento === 'number')
+    trozos.push(
+      typeof d.bloqueo_tras === 'number'
+        ? `intento ${d.intento} de ${d.bloqueo_tras}`
+        : `intento ${d.intento}`,
+    )
+  if (typeof d.faltan_segundos === 'number')
+    trozos.push(`bloqueada, faltan ${Math.max(1, Math.ceil(d.faltan_segundos / 60))} min`)
+  if (typeof d.segundos_que_faltaban === 'number')
+    trozos.push(`le faltaban ${Math.max(1, Math.ceil(d.segundos_que_faltaban / 60))} min`)
+  if (d.desbloqueado === true) trozos.push('también la desbloqueó')
   const como = d.como as { email?: string; rol?: string } | undefined
   if (como) trozos.push(`como ${como.email ?? como.rol}`)
   if (typeof d.objetivo === 'string') trozos.push(d.objetivo)
@@ -52,8 +66,10 @@ function resumen(e: Evento): string {
   if (Array.isArray(d.politicas) && d.politicas.length)
     trozos.push(`políticas: ${(d.politicas as string[]).join(', ')}`)
   if (typeof d.version === 'number') trozos.push(`v${d.version}`)
-  if (d.cambios && typeof d.cambios === 'object')
-    trozos.push(Object.keys(d.cambios as object).join(', '))
+  if (d.cambios && typeof d.cambios === 'object') {
+    const cuales = Object.keys(d.cambios as object)
+    trozos.push(cuales.length ? cuales.join(', ') : 'sin cambios')
+  }
   if (typeof d.ms === 'number') trozos.push(`${d.ms} ms`)
   return trozos.join(' · ')
 }
@@ -205,9 +221,13 @@ export function Auditoria() {
                 </td>
                 <td className="chico suave" style={{ whiteSpace: 'normal' }}>
                   {abierto === e.id ? (
-                    <pre className="mono detalle-json">
-                      {JSON.stringify(e.detalle, null, 2)}
-                    </pre>
+                    e.detalle && Object.keys(e.detalle).length ? (
+                      <pre className="mono detalle-json">
+                        {JSON.stringify(e.detalle, null, 2)}
+                      </pre>
+                    ) : (
+                      <span className="tenue">sin más detalle</span>
+                    )
                   ) : (
                     resumen(e)
                   )}

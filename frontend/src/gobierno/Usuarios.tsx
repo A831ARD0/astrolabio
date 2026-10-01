@@ -154,8 +154,34 @@ function PanelUsuario({
   const editar = useEditarUsuario()
   const restablecer = useRestablecerContrasena()
 
+  // Una contraseña escrita o generada que todavía no se ha guardado. Antes el
+  // Guardar de abajo la ignoraba —solo mandaba nombre, rol, activo y atributos— y
+  // cerraba el panel: la contraseña no cambiaba y la generada se perdía, así que
+  // el administrador le daba a la persona una contraseña que no funcionaba.
+  const pendiente = nueva !== '' && nueva !== guardada
+  const [avisarDescarte, setAvisarDescarte] = useState(false)
+
+  /** Cerrar sin perder en silencio una contraseña que no se guardó. */
+  const intentarCerrar = () => {
+    if (pendiente && !avisarDescarte) return setAvisarDescarte(true)
+    alCerrar()
+  }
+
+  const guardar = async () => {
+    const conContrasena = pendiente
+    if (conContrasena) {
+      await restablecer.mutateAsync({ id: usuario.id, nueva })
+      setGuardada(nueva)
+      setAvisarDescarte(false)
+    }
+    await editar.mutateAsync({ id: usuario.id, nombre, rol, activo, atributos })
+    // Si se acaba de poner una contraseña, el panel se queda abierto: es el único
+    // momento en que se puede copiar, y cerrarlo ahora la haría desaparecer.
+    if (!conContrasena) alCerrar()
+  }
+
   return (
-    <Velo alCerrar={alCerrar}>
+    <Velo alCerrar={intentarCerrar}>
       <div className="modal">
         <header>{usuario.email}</header>
         <div className="cont">
@@ -223,8 +249,8 @@ function PanelUsuario({
             </div>
             <span className="chico tenue">
               {guardada && guardada === nueva
-                ? 'Hecha. Cópiala ahora y dásela por un canal aparte: al cerrar ' +
-                  'este panel no se vuelve a poder ver.'
+                ? 'Guardada. Cópiala ahora y dásela por un canal aparte: al ' +
+                  'cerrar este panel no se vuelve a poder ver.'
                 : 'La anterior no se puede consultar: solo se guarda su hash. ' +
                   'Restablecerla también quita el bloqueo por intentos fallidos.'}
             </span>
@@ -235,21 +261,37 @@ function PanelUsuario({
             )}
           </div>
         </div>
+        {avisarDescarte && pendiente && (
+          <div className="aviso-caja" style={{ margin: '0 16px 12px' }}>
+            La contraseña nueva <strong>no se ha guardado</strong>. Pulsa
+            «Guardar» para ponérsela, o «Cerrar» otra vez para descartarla.
+          </div>
+        )}
+        {(editar.isError || restablecer.isError) && (
+          <div className="error-caja" style={{ margin: '0 16px 12px' }}>
+            {((editar.error ?? restablecer.error) as Error).message}
+          </div>
+        )}
         <footer>
-          <button className="btn" onClick={alCerrar}>
+          <button className="btn" onClick={intentarCerrar}>
             Cerrar
           </button>
           <button
             className="btn primario"
-            disabled={editar.isPending}
-            onClick={() =>
-              editar.mutate(
-                { id: usuario.id, nombre, rol, activo, atributos },
-                { onSuccess: alCerrar },
-              )
+            disabled={
+              editar.isPending ||
+              restablecer.isPending ||
+              (pendiente && nueva.length < 10)
             }
+            title={pendiente && nueva.length < 10
+              ? 'La contraseña nueva necesita al menos 10 caracteres' : undefined}
+            onClick={() => {
+              guardar().catch(() => {})
+            }}
           >
-            Guardar
+            {editar.isPending || restablecer.isPending
+              ? 'Guardando…'
+              : pendiente ? 'Guardar, con la contraseña nueva' : 'Guardar'}
           </button>
         </footer>
       </div>
