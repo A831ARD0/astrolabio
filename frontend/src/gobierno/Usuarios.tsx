@@ -20,6 +20,7 @@ import {
 import { useOrden } from '../comunes/orden'
 import { Th } from '../comunes/Th'
 import { Velo } from '../comunes/Velo'
+import { CampoContrasena } from './CampoContrasena'
 
 const ROLES: { valor: RolUsuario; que_puede: string }[] = [
   { valor: 'administrador', que_puede: 'todo, y las políticas no le aplican' },
@@ -147,6 +148,8 @@ function PanelUsuario({
   const [activo, setActivo] = useState(usuario.activo)
   const [atributos, setAtributos] = useState(usuario.atributos)
   const [nueva, setNueva] = useState('')
+  /** La última que se guardó, para decir «hecha» mientras siga en el campo. */
+  const [guardada, setGuardada] = useState('')
 
   const editar = useEditarUsuario()
   const restablecer = useRestablecerContrasena()
@@ -198,30 +201,32 @@ function PanelUsuario({
 
           <div className="campo">
             <label>Restablecer contraseña</label>
-            <div className="fila-condicion">
-              <input
-                type="password"
-                placeholder="mínimo 10 caracteres"
-                value={nueva}
-                onChange={(e) => setNueva(e.target.value)}
-              />
+            {/* La nueva se queda en el campo al guardar. Antes se vaciaba en el
+                acto, que es justo cuando hace falta copiarla para dársela. */}
+            <CampoContrasena valor={nueva} alCambiar={(v) => {
+              setNueva(v)
+              setGuardada('')
+            }} />
+            <div className="fila-condicion" style={{ marginTop: 6 }}>
               <button
-                className="btn chico"
-                disabled={nueva.length < 10 || restablecer.isPending}
+                className="btn chico primario"
+                disabled={nueva.length < 10 || nueva === guardada || restablecer.isPending}
                 onClick={() =>
                   restablecer.mutate(
                     { id: usuario.id, nueva },
-                    { onSuccess: () => setNueva('') },
+                    { onSuccess: () => setGuardada(nueva) },
                   )
                 }
               >
-                Restablecer
+                {restablecer.isPending ? 'Restableciendo…' : 'Restablecer'}
               </button>
             </div>
             <span className="chico tenue">
-              {restablecer.isSuccess && !nueva
-                ? 'Hecho. Dísela por un canal aparte; aquí no se vuelve a mostrar.'
-                : 'La anterior no se puede consultar: solo se guarda su hash.'}
+              {guardada && guardada === nueva
+                ? 'Hecha. Cópiala ahora y dásela por un canal aparte: al cerrar ' +
+                  'este panel no se vuelve a poder ver.'
+                : 'La anterior no se puede consultar: solo se guarda su hash. ' +
+                  'Restablecerla también quita el bloqueo por intentos fallidos.'}
             </span>
             {restablecer.isError && (
               <div className="error-caja">
@@ -288,12 +293,11 @@ function DialogoNuevo({ alCerrar }: { alCerrar: () => void }) {
           </div>
           <div className="campo">
             <label>Contraseña temporal</label>
-            <input
-              type="password"
-              value={contrasena}
-              placeholder="mínimo 10 caracteres"
-              onChange={(e) => setContrasena(e.target.value)}
-            />
+            <CampoContrasena valor={contrasena} alCambiar={setContrasena} />
+            <span className="chico tenue">
+              Cópiala antes de crear la cuenta: después solo se guarda su hash y no
+              se puede volver a ver.
+            </span>
           </div>
           <div className="campo">
             <label>Rol</label>

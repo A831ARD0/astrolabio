@@ -1966,6 +1966,21 @@ Dos cosas que conviene saber:
 **Usuarios.** Alta, rol y *atributos*. Un atributo es un dato de la persona —por
 ejemplo `region_id = 3`— que las políticas usan para filtrar.
 
+### Contraseñas al crear y al restablecer
+
+Junto al campo hay tres botones: **Generar**, **Ver/Ocultar** y **Copiar**.
+
+- **Generar** crea una del tipo `Kp7m-Qx3r-Tz9w` y la deja a la vista. Sin caracteres
+  que se confunden al dictarlos (ni `0`/`O` ni `1`/`l`/`I`): una contraseña temporal
+  que falla por una O que era un cero acaba en otra llamada, y a veces en un bloqueo.
+- **Copiar** funciona también si se entra por `http://` con la IP del servidor, donde
+  el navegador no deja usar el portapapeles moderno.
+- Al restablecer, **la contraseña se queda en el campo** después de guardar, para
+  copiarla. Antes se borraba justo en ese momento.
+
+Lo que no se puede es **verla después**: sólo se guarda su hash, así que al cerrar
+el panel ya no hay forma de recuperarla. Si alguien la pierde, se le genera otra.
+
 ### «No puedo entrar»: desactivado o bloqueado
 
 Son dos cosas distintas, y se resuelven distinto.
