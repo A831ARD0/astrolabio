@@ -456,6 +456,10 @@ input[type='checkbox']:disabled:checked { accent-color: var(--texto-suave); }
 .punto { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 7px; }
 .punto.hecho { background: var(--hecho); }
 .punto.dimension { background: var(--acento); }
+/* Lo que está corriendo ahora parpadea: es lo único de la lista que cambia solo. */
+.punto.corriendo { animation: latido 1.2s ease-in-out infinite; }
+@keyframes latido { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .punto.corriendo { animation: none; } }
 
 .barra-editor {
   display: flex;

@@ -156,6 +156,16 @@ export function PanelProyectos({
                       {desplegado ? '▾' : '▸'}
                     </span>
                     <span className="nom">{p.nombre}</span>
+                    {/* Con el proyecto plegado también se tiene que ver que algo
+                        de adentro está corriendo: si no, hay que abrirlos uno por
+                        uno para encontrarlo. */}
+                    {p.secciones.some((s) => s.ultimo_estado === 'corriendo') && (
+                      <span className="punto corriendo"
+                            style={{ background: 'var(--aviso)' }}
+                            title={'Corriendo: ' + p.secciones
+                              .filter((s) => s.ultimo_estado === 'corriendo')
+                              .map((s) => s.nombre).join(', ')} />
+                    )}
                     <span className="dcha">
                       {p.secciones.length}
                       {p.programacion_activa ? ' · ⏱' : ''}
@@ -181,7 +191,8 @@ export function PanelProyectos({
                       <div className="chico" style={{ padding: '4px 0 2px 10px' }}>
                         <span className={`etiqueta ${
                           p.ultimo_estado === 'exito' ? 'ok'
-                            : p.ultimo_estado === 'cancelado' ? '' : 'critico'
+                            : p.ultimo_estado === 'cancelado' ? ''
+                              : p.ultimo_estado === 'corriendo' ? 'aviso' : 'critico'
                         }`}>
                           {p.ultimo_estado === 'cancelado' ? 'detenido'
                             : p.ultimo_estado}
@@ -231,17 +242,22 @@ export function PanelProyectos({
                                 sola o dentro del proyecto. Es lo que permite ver de
                                 un golpe cuál de las dieciocho es la que rompe. */}
                             <span
-                              className="punto"
+                              className={s.ultimo_estado === 'corriendo'
+                                ? 'punto corriendo' : 'punto'}
                               style={{
                                 background: s.ultimo_estado === 'error'
                                   ? 'var(--critico)'
                                   : s.ultimo_estado === 'exito'
                                     ? 'var(--ok)'
-                                    : 'var(--borde-fuerte)',
+                                    : s.ultimo_estado === 'corriendo'
+                                      ? 'var(--aviso)'
+                                      : 'var(--borde-fuerte)',
                               }}
-                              title={s.ultimo_estado
-                                ? `Última vez: ${s.ultimo_estado}`
-                                : 'Nunca ha corrido'}
+                              title={s.ultimo_estado === 'corriendo'
+                                ? 'Corriendo ahora'
+                                : s.ultimo_estado
+                                  ? `Última vez: ${s.ultimo_estado}`
+                                  : 'Nunca ha corrido'}
                             />
                             <span className="nom">{s.nombre}</span>
                             {s.intermedia && (

@@ -59,6 +59,12 @@ export function useProyectos() {
   return useQuery({
     queryKey: clave.lista,
     queryFn: () => api.get<Proyecto[]>('/proyectos'),
+    // Mientras algo corre, la lista se refresca sola para que el punto cambie de
+    // amarillo a verde (o rojo) sin recargar la página.
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((p) => p.ultimo_estado === 'corriendo'
+        || p.secciones.some((s) => s.ultimo_estado === 'corriendo'))
+        ? 10_000 : false,
   })
 }
 
