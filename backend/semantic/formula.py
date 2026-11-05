@@ -57,6 +57,7 @@ y sin funciones del catalogo es SQL, se parsea como SQL y sale igual que entro.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import re
 from dataclasses import dataclass, field
 
@@ -1213,8 +1214,12 @@ def _reescribir_ventanas(nodo: exp.Expression,
     # dentro de esta ventana no valdria — `SUM(SUM(x) OVER (…)) OVER (…)` no es
     # SQL— y ensanchar el marco tampoco, porque el ancho dependeria del mes.
     if args and args[0].find(exp.Window) is not None:
-        marca = MARCA_CAPA.format(len(intermedias))
-        intermedias[marca] = args[0].sql(dialect=DIALECTO)
+        # El nombre sale del contenido y no de cuantas lleva: cada metrica de una
+        # compuesta se compila por separado y todas contarian desde cero, asi que
+        # tres acumulados distintos se llamaban igual y solo quedaba uno.
+        sql_i = args[0].sql(dialect=DIALECTO)
+        marca = MARCA_CAPA.format(hashlib.md5(sql_i.encode()).hexdigest()[:12])
+        intermedias[marca] = sql_i
         args = [exp.column(marca, quoted=True), *args[1:]]
 
     desde = v.desde

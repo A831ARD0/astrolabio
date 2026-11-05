@@ -590,3 +590,37 @@ def test_dentro_de_la_ventana_sigue_sin_poder_sumarse(cliente, cab_editor,
     r = consultar(cliente, cab_editor, modelo, ["obj_uti2_3m"], [MES])
     assert r.status_code == 422, r.text
     assert "no se puede sumar" in r.text
+
+
+def test_dos_acumulados_del_anio_pasado_en_la_misma_formula(cliente, cab_editor,
+                                                           modelo):
+    """
+    Cada función de tiempo anidada baja a la capa previa con su propio nombre.
+
+    Se numeraban desde cero en cada métrica que se compilaba, así que dos
+    acumulados distintos dentro de una compuesta se llamaban igual y sólo quedaba
+    uno: la suma de tres salía como tres veces el mismo, o cero.
+    """
+    d = con_tiempo(cliente, cab_editor, modelo)
+    d["metricas"] += [
+        {"nombre": "doble", "etiqueta": "Doble", "formato": "entero",
+         "expresion": "[unidades_vendidas] * 2"},
+        {"nombre": "pasado_doble", "etiqueta": "Pasado doble", "formato": "entero",
+         "expresion": "MISMOMESANIOANTERIOR(ACUMANIO([doble]))"},
+        {"nombre": "pasado_simple", "etiqueta": "Pasado simple", "formato": "entero",
+         "expresion": "MISMOMESANIOANTERIOR(ACUMANIO([unidades_vendidas]))"},
+        {"nombre": "dos_acumulados", "etiqueta": "Dos acumulados",
+         "formato": "entero", "expresion": "[pasado_doble] - [pasado_simple]"}]
+    assert guardar(cliente, cab_editor, modelo, d).status_code == 201
+
+    r = consultar(cliente, cab_editor, modelo,
+                  ["mes_anterior", "acum_anio", "dos_acumulados"], [MES])
+    assert r.status_code == 200, r.text
+    filas = sorted(r.json()["filas"], key=lambda f: f[MES])
+    acum = por_mes(filas, "acum_anio")
+    comparadas = 0
+    for f in filas:
+        if f[MES] - 100 in acum:
+            assert f["dos_acumulados"] == acum[f[MES] - 100]
+            comparadas += 1
+    assert comparadas > 10
