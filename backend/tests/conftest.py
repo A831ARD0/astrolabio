@@ -84,6 +84,18 @@ def sin_bloqueos():
     yield
 
 
+@pytest.fixture(autouse=True)
+def cache_vacia():
+    """
+    La cache de consultas tambien vive en el proceso. Muchas pruebas cambian los
+    datos por debajo —otra conexion, otra base— sin pasar por una recarga, que es
+    lo unico que la invalida; sin esto se servirian las respuestas de la anterior.
+    """
+    from app.cache_consultas import cache
+    cache().limpiar()
+    yield
+
+
 @pytest.fixture
 def cliente():
     with TestClient(app) as c:

@@ -42,6 +42,21 @@ class Config(BaseSettings):
     ruta_duckdb: str = str(RAIZ / "datos" / "analitico.duckdb")
     duckdb_solo_lectura: bool = True
 
+    # --- caché de consultas ---
+    # Memoria para guardar respuestas de consultas mientras no cambien los datos.
+    # 0 la apaga. Ver app/cache_consultas.py.
+    cache_mb: int = 256
+    # Al terminar una recarga, repetir las consultas que más se usan para que la
+    # primera persona que abra el tablero no espere. Ver app/precalentar.py.
+    precalentar: bool = True
+    # Cuántos segundos sin recargas hay que esperar antes de precalentar: durante un
+    # flujo los datos cambian a cada paso, y calentar a medias es trabajo tirado.
+    precalentar_espera_seg: int = 300
+    # Cuántas consultas distintas se recuerdan y se repiten, las más usadas primero.
+    precalentar_max: int = 300
+    # Las que no se han usado en este número de días se olvidan.
+    precalentar_dias: int = 14
+
     # --- seguridad ---
     # OBLIGATORIO cambiar en produccion. El arranque falla si sigue en el valor
     # por defecto y el entorno es produccion.

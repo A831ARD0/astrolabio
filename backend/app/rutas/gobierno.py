@@ -185,3 +185,44 @@ def resumen_auditoria(sesion: SesionDep,
             .where(Auditoria.accion == "ingreso_fallido",
                    Auditoria.creado_en >= desde)) or 0,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Caché de consultas
+# --------------------------------------------------------------------------- #
+
+@router.get("/cache")
+def estado_cache(_: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """Cuánto guarda la caché, cuánto acierta y cómo fue el último precalentado."""
+    from app import precalentar
+    from app.cache_consultas import cache
+
+    return {"cache": cache().estado(), "precalentado": precalentar.estado()}
+
+
+@router.delete("/cache")
+def vaciar_cache(sesion: SesionDep,
+                 actor: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Vacía la caché. No hace falta para ver datos nuevos —se invalida sola cuando se
+    recarga una tabla—, pero sirve para medir un tablero en frío.
+    """
+    from app.cache_consultas import cache
+
+    n = cache().limpiar()
+    registrar(sesion, accion="cache_vaciada", usuario_id=actor.id,
+              email=actor.email, objeto_tipo="cache", objeto_id=None,
+              detalle={"entradas": n})
+    return {"entradas_borradas": n}
+
+
+@router.post("/cache/precalentar")
+def precalentar_ahora(maximo: int | None = Query(default=None, ge=1, le=5000),
+                      _: Usuario = Depends(exigir_rol(Rol.administrador))):
+    """
+    Repite ya las consultas más usadas, sin esperar a una recarga. Corre en la
+    petición: con muchas consultas tarda, y la respuesta dice cuánto.
+    """
+    from app import precalentar
+
+    return precalentar.tanda(maximo=maximo)

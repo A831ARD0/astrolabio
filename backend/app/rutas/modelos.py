@@ -7,7 +7,10 @@ el modelo nunca reescribe lo que un dashboard publicado esta usando.
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +22,7 @@ from sqlalchemy import func, select
 
 from app.analitico import (comprobar_grano, ejecutar_consulta, ejecutar_muestra,
                           estados_asociativos)
+from app import precalentar
 from app.auditoria import registrar
 from app.errores_motor import en_castellano
 from app.exportar import (
@@ -250,7 +254,39 @@ class PeticionAsociativa(BaseModel):
 # Utilidades
 # --------------------------------------------------------------------------- #
 
+#: Modelos ya leidos, por la huella de su YAML. Leer uno grande (cientos de
+#: metricas) cuesta un cuarto de segundo y se hacia en CADA consulta: un tablero de
+#: cuarenta widgets lo pagaba cuarenta veces. La clave es el contenido, asi que un
+#: cambio en el modelo es otra entrada y nunca se sirve uno viejo.
+_modelos_leidos: "OrderedDict[str, ModeloSemantico]" = OrderedDict()
+_candado_modelos = threading.Lock()
+_MODELOS_EN_MEMORIA = 32
+
+
 def _cargar_semantico(yaml_texto: str) -> ModeloSemantico:
+    """
+    El modelo semantico de ese YAML, leido una sola vez por proceso.
+
+    El motor no modifica el modelo al consultar, asi que el mismo objeto sirve a
+    todas las peticiones. Lleva `huella`, que usa la cache de consultas para los
+    estados de los filtros.
+    """
+    huella = hashlib.sha256(yaml_texto.encode("utf-8")).hexdigest()
+    with _candado_modelos:
+        m = _modelos_leidos.get(huella)
+        if m is not None:
+            _modelos_leidos.move_to_end(huella)
+            return m
+    m = _leer_semantico(yaml_texto)
+    m.huella = huella
+    with _candado_modelos:
+        _modelos_leidos[huella] = m
+        while len(_modelos_leidos) > _MODELOS_EN_MEMORIA:
+            _modelos_leidos.popitem(last=False)
+    return m
+
+
+def _leer_semantico(yaml_texto: str) -> ModeloSemantico:
     """
     El motor semantico lee de archivo. Se escribe a un temporal en vez de
     cambiar su firma, para que el mismo motor sirva igual desde la API y desde
@@ -1012,7 +1048,9 @@ def probar_metrica(modelo_id: int, cuerpo: ProbarMetrica, sesion: SesionDep,
     antes de guardar es lo que evita publicar una metrica plausible y equivocada.
     """
     v = _version_vigente(sesion, modelo_id)
-    m = _cargar_semantico(v.yaml)
+    # Copia propia y no la compartida: aqui se le agrega una metrica de prueba, y
+    # el modelo en memoria lo leen a la vez las consultas de todos los tableros.
+    m = _leer_semantico(v.yaml)
     if cuerpo.entidad is not None and cuerpo.entidad not in m.entidades:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"La entidad '{cuerpo.entidad}' no esta en el modelo")
@@ -1274,14 +1312,15 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
     v = (_version_exacta(sesion, modelo_id, version) if version
          else _version_vigente(sesion, modelo_id))
     m = _cargar_semantico(v.yaml)
+    pedido = dict(
+        dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
+        filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
+        limite=cuerpo.limite, filas_sin_cifras=cuerpo.filas_sin_cifras,
+        orden=cuerpo.orden, descendente=cuerpo.descendente,
+    )
 
     try:
-        res = ejecutar_consulta(m, Consulta(
-            dimensiones=cuerpo.dimensiones, metricas=cuerpo.metricas,
-            filtros=cuerpo.filtros, rutas_elegidas=cuerpo.rutas_elegidas,
-            limite=cuerpo.limite, filas_sin_cifras=cuerpo.filas_sin_cifras,
-            orden=cuerpo.orden, descendente=cuerpo.descendente,
-        ), ctx)
+        res = ejecutar_consulta(m, Consulta(**pedido), ctx)
     except ErrorModelo as e:
         # Ambiguedad de ruta, metrica no desglosable, metrica inexistente: son
         # decisiones del usuario, no fallos del servidor. 422 con el detalle.
@@ -1310,6 +1349,9 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
                        "truncado": res.truncado,
                        "politicas": res.politicas_aplicadas})
 
+    # Para repetirla despues de la proxima recarga. Ver `app.precalentar`.
+    precalentar.registrar_uso("consulta", modelo_id, version, pedido, usuario.id)
+
     return {
         "columnas": res.columnas, "filas": res.filas, "ms": res.ms,
         # Que el limite dejo filas fuera. Va en la respuesta y no solo en el log:
@@ -1324,6 +1366,8 @@ def consultar(modelo_id: int, cuerpo: PeticionConsulta, sesion: SesionDep,
         "politicas_aplicadas": res.politicas_aplicadas,
         # El SQL se devuelve solo a quien puede leerlo con provecho.
         "sql": res.sql if usuario.rol in (Rol.administrador, Rol.editor) else None,
+        # Si salio de la cache: entonces `ms` es lo que tardo cuando se calculo.
+        "desde_cache": res.desde_cache,
     }
 
 
@@ -1415,13 +1459,19 @@ def exportar(modelo_id: int, cuerpo: PeticionExportar, sesion: SesionDep,
 
 @router.post("/{modelo_id}/asociativo")
 def asociativo(modelo_id: int, cuerpo: PeticionAsociativa, sesion: SesionDep,
-               _: UsuarioDep, ctx: ContextoDep, version: int | None = None):
+               usuario: UsuarioDep, ctx: ContextoDep, version: int | None = None):
     v = (_version_exacta(sesion, modelo_id, version) if version
          else _version_vigente(sesion, modelo_id))
     m = _cargar_semantico(v.yaml)
     try:
-        return estados_asociativos(m, cuerpo.entidad, cuerpo.campo,
-                                   cuerpo.selecciones, ctx, cuerpo.ordenar_por)
+        estados = estados_asociativos(m, cuerpo.entidad, cuerpo.campo,
+                                      cuerpo.selecciones, ctx, cuerpo.ordenar_por)
+        precalentar.registrar_uso(
+            "asociativo", modelo_id, version,
+            {"entidad": cuerpo.entidad, "campo": cuerpo.campo,
+             "selecciones": cuerpo.selecciones, "ordenar_por": cuerpo.ordenar_por},
+            usuario.id)
+        return estados
     except ErrorModelo as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
     except PoliticaInvalida as e:

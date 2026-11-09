@@ -7,6 +7,21 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Caché de consultas: abrir un tablero por segunda vez es instantáneo.** Mientras no
+  se recargue ninguna de sus tablas, la respuesta de cada widget y de cada filtro se
+  guarda y la siguiente persona la recibe de memoria. La clave es el SQL ya compilado,
+  que incluye las políticas de seguridad de quien pregunta: nadie recibe lo que guardó
+  alguien con más permisos. Se invalida sola cuando una carga o una transformación
+  reescribe una tabla. `ASTROLABIO_CACHE_MB` (256 por omisión, 0 la apaga).
+
+- **Precalentado después de cada recarga.** Las consultas que la gente hace quedan
+  anotadas, y cuando termina una recarga se repiten las más usadas, con el usuario que
+  las hizo. La primera apertura de la mañana ya no espera a que se calcule todo.
+  Estado, vaciado y precalentado manual en `/api/gobierno/cache`.
+
+- **El modelo semántico se lee una vez por proceso**, no en cada consulta. Con un
+  modelo de cientos de métricas eran un cuarto de segundo o más por widget.
+
 - **Se declara cómo guarda la fecha el origen, y la ventana filtra allá.** Al partir un
   dataset por una columna que no es fecha, ya no hace falta escribir SQL: se elige
   «Texto con formato» (`%Y%m%d`, `%d/%m/%Y`…), «Número con formato» (`%Y%m%d`,

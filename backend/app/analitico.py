@@ -82,6 +82,11 @@ def conexion() -> duckdb.DuckDBPyConnection:
 _sellos: dict[str, int] = {}
 
 
+def sello(nombre: str) -> int:
+    """Cuántas veces se han reescrito los datos de ese nombre en este proceso."""
+    return _sellos.get(nombre, 0)
+
+
 def invalidar_vistas(*nombres: str) -> None:
     """
     Avisar de que un nombre tiene datos nuevos en disco.
@@ -92,6 +97,12 @@ def invalidar_vistas(*nombres: str) -> None:
     """
     for n in nombres:
         _sellos[n] = _sellos.get(n, 0) + 1
+    if nombres:
+        # Hay datos nuevos: la caché de esas tablas ya no vale (se ve sola por el
+        # sello) y conviene recalentarla cuando termine la recarga.
+        from app import precalentar
+
+        precalentar.pedir()
 
 
 def tablas_del_motor(con: duckdb.DuckDBPyConnection | None = None) -> set[str]:
@@ -191,6 +202,9 @@ class Resultado:
     #: —tabla sin cargar, union que no casa, politica, filtros— y cada causa se
     #: arregla en otro sitio: sin decirlo, «Sin datos» manda a buscar a ciegas.
     vacio_porque: str | None = None
+    #: Si la respuesta salio de la cache (ver `app.cache_consultas`). `ms` es
+    #: entonces lo que tardo la consulta cuando se hizo de verdad.
+    desde_cache: bool = False
 
 
 def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
@@ -212,6 +226,25 @@ def ejecutar_consulta(modelo: Modelo, consulta: Consulta,
     compilada = Compilador(modelo).compilar(
         replace(consulta, limite=tope + 1), predicados)
 
+    # La clave es el SQL ya compilado: lleva las metricas, los filtros y las
+    # politicas de este usuario. Ver `app.cache_consultas`.
+    from app.cache_consultas import cache, clave, sellos_de
+
+    k = clave("consulta", compilada.sql, compilada.parametros, tope,
+              consulta.filtros)
+    sellos = sellos_de(e.tabla for e in modelo.entidades.values())
+    guardado = cache().obtener(k, sellos)
+    if guardado is not None:
+        guardado.desde_cache = True
+        return guardado
+
+    resultado = _ejecutar_compilada(modelo, consulta, compilada, predicados, tope)
+    cache().guardar(k, sellos, resultado)
+    return resultado
+
+
+def _ejecutar_compilada(modelo: Modelo, consulta: Consulta, compilada,
+                        predicados: list, tope: int) -> "Resultado":
     t0 = time.perf_counter()
     cur = conexion().execute(compilada.sql, compilada.parametros)
     columnas = [d[0] for d in cur.description]
@@ -361,6 +394,31 @@ def estados_asociativos(modelo: Modelo, entidad: str, campo: str,
     capa = CapaPoliticas(modelo, modelo.politicas)
     predicados = capa.resolver(ctx)
 
+    # Aqui no hay un SQL unico que sirva de clave: se usa la huella del modelo
+    # (sus relaciones deciden que valores se alcanzan), lo pedido y los predicados
+    # de seguridad de este usuario. Sin huella no se guarda.
+    from app.cache_consultas import cache, clave, sellos_de
+
+    huella = getattr(modelo, "huella", None)
+    k = (clave("asociativo", huella, entidad, campo, selecciones, ordenar_por,
+               [(p.entidad, p.sql, p.parametros) for p in predicados])
+         if huella else None)
+    sellos = sellos_de(e.tabla for e in modelo.entidades.values())
+    if k:
+        guardado = cache().obtener(k, sellos)
+        if guardado is not None:
+            return guardado
+
+    estados = _estados_sin_cache(modelo, entidad, campo, selecciones,
+                                 ordenar_por, predicados)
+    if k:
+        cache().guardar(k, sellos, estados)
+    return estados
+
+
+def _estados_sin_cache(modelo: Modelo, entidad: str, campo: str,
+                       selecciones: dict[str, list], ordenar_por: str | None,
+                       predicados: list) -> dict[str, list]:
     motor = MotorAsociativo(modelo, conexion())
     estados = motor.estados(entidad, campo, selecciones, ordenar_por)
 

@@ -128,6 +128,11 @@ importan.
 | `WEBHOOKS_A_RED_INTERNA` | `false` | Permitir webhooks a direcciones privadas |
 | `URL_PUBLICA` | `http://localhost:5173` | **Obligatoria en el servidor.** Ver abajo |
 | `PDF_SEGUNDOS` | `90` | Tope por informe |
+| `CACHE_MB` | `256` | Memoria para la caché de consultas. `0` la apaga. Ver §11 |
+| `PRECALENTAR` | `true` | Repetir las consultas más usadas después de cada recarga |
+| `PRECALENTAR_ESPERA_SEG` | `300` | Segundos sin recargas antes de precalentar |
+| `PRECALENTAR_MAX` | `300` | Cuántas consultas distintas se recuerdan y se repiten |
+| `PRECALENTAR_DIAS` | `14` | Las que nadie usa en estos días se olvidan |
 
 **`URL_PUBLICA` es por dónde el SERVIDOR abre la aplicación**, no por dónde la abren
 las personas. La usa el Chromium sin ventana que genera los PDF: entra a la aplicación
@@ -849,3 +854,35 @@ palanca que de verdad importa ahí.
 
 Si algo va lento, en este orden: ¿el dataset está partido por fecha?, ¿la carga es
 incremental o trae todo cada vez?, ¿la transformación agrupa antes de unir?
+
+### Caché de consultas y precalentado
+
+Abrir un tablero hace una consulta por widget y otra por filtro, y casi siempre son
+las mismas que hizo la persona anterior. **Mientras no se recargue nada, la respuesta
+se guarda** y la siguiente sale de memoria.
+
+- **La clave es el SQL ya compilado.** Ahí van las métricas, los filtros y las
+  políticas de seguridad de quien pregunta, así que dos personas con permisos
+  distintos nunca comparten una respuesta.
+- **Se invalida por los datos, no por el reloj.** Cuando una carga o una
+  transformación reescribe una tabla, lo guardado que la leía deja de valer. Un cambio
+  en el archivo del motor analítico también la invalida.
+- **Precalentado.** Cada consulta que llega queda anotada (cuántas veces, cuándo) en
+  `datos/consultas_frecuentes.json`. Cuando termina una recarga —pasan
+  `PRECALENTAR_ESPERA_SEG` sin cambios y no hay trabajos en la cola—, se repiten las
+  más usadas, de una en una y con el usuario que las hizo. Así la primera persona de
+  la mañana encuentra la caché llena aunque los datos se hayan recargado de madrugada.
+- **El modelo semántico también se guarda ya leído**, por la huella de su YAML. Uno
+  grande (cientos de métricas) cuesta un cuarto de segundo leerlo, y antes se pagaba
+  en cada consulta.
+
+La respuesta de `/consultar` dice `desde_cache`. Para administrarla:
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/gobierno/cache` | Entradas, memoria, tasa de aciertos y la última tanda de precalentado |
+| `DELETE /api/gobierno/cache` | La vacía (para medir un tablero en frío) |
+| `POST /api/gobierno/cache/precalentar` | Precalienta ya, sin esperar una recarga |
+
+Vive en la memoria del proceso: un reinicio la vacía, pero el registro de consultas
+frecuentes sigue en disco y la siguiente recarga la vuelve a llenar.
