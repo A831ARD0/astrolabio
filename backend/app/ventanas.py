@@ -48,6 +48,9 @@ CALENDARIO: dict[str, str] = {
 
 #: Parametrizada: 'ultimos_dias:45'.
 _PARAM = re.compile(r"^ultimos_dias:(\d{1,4})$")
+#: Parametrizada por meses completos: 'ultimos_meses:5' es el mes en curso y los
+#: cuatro anteriores. Es lo que hacen los extractores de Qlik (vMesesAnt).
+_MESES = re.compile(r"^ultimos_meses:(\d{1,3})$")
 
 
 class VentanaInvalida(ValueError):
@@ -60,6 +63,8 @@ def claves() -> list[dict]:
     salida += [{"clave": k, "etiqueta": e} for k, e in CALENDARIO.items()]
     salida.append({"clave": "ultimos_dias:N",
                    "etiqueta": "Los últimos N días (se escribe el número)"})
+    salida.append({"clave": "ultimos_meses:N",
+                   "etiqueta": "Los últimos N meses, contando el mes en curso"})
     return salida
 
 
@@ -99,6 +104,12 @@ def resolver(clave: str, zona: str = "America/Mexico_City",
             raise VentanaInvalida("La ventana en dias tiene que ser de al menos 1.")
         return (dia - timedelta(days=dias)).isoformat(), dia.isoformat()
 
+    if m := _MESES.match(clave):
+        meses = int(m.group(1))
+        if meses < 1:
+            raise VentanaInvalida("La ventana en meses tiene que ser de al menos 1.")
+        return _primero_del_mes(dia, meses - 1).isoformat(), dia.isoformat()
+
     if clave == "mes_actual":
         return _primero_del_mes(dia).isoformat(), dia.isoformat()
     if clave == "mes_actual_y_anterior":
@@ -110,7 +121,7 @@ def resolver(clave: str, zona: str = "America/Mexico_City",
 
     raise VentanaInvalida(
         f"Ventana desconocida: '{clave}'. Validas: "
-        + ", ".join([*FIJAS, *CALENDARIO, "ultimos_dias:N"])
+        + ", ".join([*FIJAS, *CALENDARIO, "ultimos_dias:N", "ultimos_meses:N"])
     )
 
 
@@ -126,4 +137,6 @@ def describir(clave: str, zona: str = "America/Mexico_City",
     etiqueta = (FIJAS.get(clave, (None,))[0] or CALENDARIO.get(clave))
     if etiqueta is None and (m := _PARAM.match(clave)):
         etiqueta = f"Los últimos {m.group(1)} días"
+    if etiqueta is None and (m := _MESES.match(clave)):
+        etiqueta = f"Los últimos {m.group(1)} meses"
     return f"{etiqueta or clave}: del {desde} al {hasta}"

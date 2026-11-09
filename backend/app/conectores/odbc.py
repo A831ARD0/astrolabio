@@ -59,6 +59,7 @@ from app.conectores import perfiles_odbc as perfiles
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
     ResultadoPrueba, TablaOrigen, avisar_avance, cita_origen, escribir_lote,
+    limites_en_origen,
 )
 
 # Esquemas/catalogos que son del motor y no de nadie.
@@ -504,6 +505,16 @@ class ConectorODBC(Conector):
             # lo rechaza: "Error converting to numeric type". Llega la tabla
             # entera y el recorte al rango se hace al escribir, ya con la
             # expresion aplicada. Se lee de mas, pero se lee bien.
+            # Salvo las formas conocidas (texto AAAAMMDD, días de Pervasive), que sí
+            # se escriben como literal del origen: ver `limites_en_origen`.
+            limites = (limites_en_origen(p.expresion_particion, p.rango_desde,
+                                         p.rango_hasta)
+                       if p.expresion_particion and p.rango_desde and p.rango_hasta
+                       else None)
+            if limites:
+                col, lim0, lim1 = limites
+                donde.append(f"{self._cita(col, cita)} >= {lim0}")
+                donde.append(f"{self._cita(col, cita)} < {lim1}")
             if p.rango_desde and not p.expresion_particion:
                 donde.append(f"{self._cita(p.particionar_por, cita)} >= ?")
                 params.append(p.rango_desde)

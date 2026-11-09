@@ -218,6 +218,44 @@ def expresion_fecha(p: "PeticionIngesta") -> str:
     return f"TRY_CAST(({dentro}) AS DATE)"
 
 
+#: Formas de fecha del origen que sí se pueden filtrar allá. Son las que escribe la
+#: migración de Qlik para Pervasive: texto 'AAAAMMDD' y días contados desde
+#: 1800-12-28 (719163 es el 1970-01-01).
+_TEXTO_AAAAMMDD = re.compile(
+    r"""^\s*(?:try_)?strptime\(\s*(?:CAST\(\s*)?"([^"]+)"(?:\s+AS\s+VARCHAR\s*\))?\s*,\s*'%Y%m%d'\s*\)\s*$""",
+    re.I)
+_DIAS_PERVASIVE = re.compile(
+    r"""^\s*CASE\s+WHEN\s+CAST\(\s*"([^"]+)"\s+AS\s+BIGINT\s*\).*to_days\(\s*CAST\(\s*"\1"\s+AS\s+INTEGER\s*\)\s*-\s*719163\s*\)\s*END\s*$""",
+    re.I | re.S)
+
+
+def limites_en_origen(expresion: str | None, desde: str,
+                      hasta: str) -> tuple[str, str, str] | None:
+    """
+    El rango (desde, hasta inclusive) escrito como el origen guarda la fecha.
+
+    Sin esto, una carga por ventana sobre una fecha que no es fecha trae la tabla
+    entera y recorta al escribir: dos meses de facturas cuestan lo mismo que diez
+    años. Qlik filtra en el origen (`"Dt Emissao" >= 20260701`), y así se hace aquí
+    cuando la expresión es una de las formas conocidas.
+
+    Devuelve (columna, límite inferior, límite superior exclusivo) como literales
+    SQL, o None si la expresión no se reconoce: entonces se sigue recortando al
+    escribir, que es lento pero correcto.
+    """
+    if not expresion:
+        return None
+    d0 = date.fromisoformat(desde[:10])
+    d1 = date.fromisoformat(hasta[:10]) + timedelta(days=1)
+    if m := _TEXTO_AAAAMMDD.match(expresion):
+        return m.group(1), f"'{d0:%Y%m%d}'", f"'{d1:%Y%m%d}'"
+    if m := _DIAS_PERVASIVE.match(expresion):
+        base = date(1970, 1, 1)
+        return (m.group(1), str((d0 - base).days + 719163),
+                str((d1 - base).days + 719163))
+    return None
+
+
 def _formato_del_destino(destino: Path) -> str | None:
     """
     Como esta guardado hoy lo que hay en el destino: 'partido', 'plano' o None.
