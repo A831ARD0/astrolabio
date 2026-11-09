@@ -1908,8 +1908,11 @@ class Compilador:
         sel_arriba = ([f"d.{_cita(cd)}" for cd in cols_vistas]
                       + [f"d.{col_mes} AS {_cita(COL_MES_USADO)}"]
                       + [f"d.{_cita(n)}" for n in c.metricas])
+        # MATERIALIZED: `detalle` se lee dos veces —para elegir el mes y para
+        # devolver las filas— y sin esto DuckDB lo calcula dos veces, con todas sus
+        # ventanas de tiempo. Medido en un tablero real: de 23 s a la mitad.
         sql = (
-            f"{cuerpo_final},\ndetalle AS (\n  SELECT\n    "
+            f"{cuerpo_final},\ndetalle AS MATERIALIZED (\n  SELECT\n    "
             + ",\n    ".join(sel) + f"\n  FROM {fuente}\n),\n"
             f"mes_que_manda AS (\n  SELECT {cual_mes} AS mes FROM detalle AS d"
             + elegibles + "\n)\n"

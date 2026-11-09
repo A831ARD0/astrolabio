@@ -108,6 +108,9 @@ export function Tablero() {
 
   const [borrador, setBorrador] = useState<DefinicionDashboard | null>(null)
   const [selecciones, setSelecciones] = useState<Record<string, unknown[]>>({})
+  // Lo que ya se aplicó, en un tablero que consulta al pulsar «Aplicar filtros».
+  // `null` = todavía nada: no se pide ningún dato hasta que se aplique.
+  const [aplicadas, setAplicadas] = useState<Record<string, unknown[]> | null>(null)
   const [editando, setEditando] = useState(false)
   const [elegido, setElegido] = useState<string | null>(null)
   const [hojaId, setHojaId] = useState<string | null>(null)
@@ -121,6 +124,7 @@ export function Tablero() {
     if (!cargado.data) return
     setBorrador(cargado.data.definicion)
     setSelecciones(cargado.data.definicion.selecciones ?? {})
+    setAplicadas(null)
   }, [cargado.data])
 
   // El informe que se lleva el servidor: cuando la URL lo pide, la hoja se pone como
@@ -135,6 +139,8 @@ export function Tablero() {
     // terminen, asi que las de estos filtros entran en esa espera.
     const puestas = seleccionesDelInforme()
     if (puestas) setSelecciones(puestas)
+    // Un informe (PDF, correo) no tiene a nadie que pulse «Aplicar»: se aplica solo.
+    if (hojaDeLaUrl()) setAplicadas(puestas ?? borrador.selecciones ?? {})
     void informeSiLoPideLaUrl()
   }, [borrador])
 
@@ -392,6 +398,12 @@ export function Tablero() {
     })
 
   const activos = filtrosDeSelecciones(selecciones)
+  // Consultar al aplicar: los datos se piden con lo aplicado y no con lo que se va
+  // marcando. Al editar no aplica: quien arma la hoja necesita ver las cifras.
+  const alAplicar = Boolean(borrador?.consultar_al_aplicar) && !editando
+  const consultadas = alAplicar ? aplicadas : selecciones
+  const porAplicar = alAplicar &&
+    (aplicadas === null || JSON.stringify(selecciones) !== JSON.stringify(aplicadas))
 
   return (
     <div className="editor">
@@ -471,12 +483,22 @@ export function Tablero() {
                 Quitar {activos.length} filtro(s)
               </button>
             )}
+            {alAplicar && (
+              <button
+                className={porAplicar ? 'btn primario' : 'btn'}
+                disabled={!porAplicar}
+                title="Consulta los datos con los filtros elegidos"
+                onClick={() => setAplicadas(selecciones)}
+              >
+                {aplicadas === null ? 'Consultar' : 'Aplicar filtros'}
+              </button>
+            )}
             {/* No se esconde al editar: quien acaba de armar la hoja es justo quien
                 quiere ver como queda en papel antes de mandarla. */}
             <Imprimir
               hoja={activa.nombre || 'la hoja'}
               dashboardId={id}
-              selecciones={selecciones}
+              selecciones={consultadas ?? {}}
               alProgramar={puedeEditar ? () => setCorreoAbierto(true) : undefined}
             />
             {/* Solo a quien puede guardar. Un lector puede elegir un camino para
@@ -679,7 +701,7 @@ export function Tablero() {
                         widget={w}
                         modeloId={d.modelo_id}
                         version={d.version_modelo}
-                        selecciones={selecciones}
+                        selecciones={consultadas ?? {}}
                         rutasElegidas={
                           (borrador.rutas_elegidas as Record<string, string>) ?? {}
                         }
@@ -687,11 +709,20 @@ export function Tablero() {
                     )}
                   </header>
                   <div className="cuerpo-widget">
+                    {alAplicar && consultadas === null && w.tipo !== 'filtro' &&
+                     PIDE_DATOS.includes(w.tipo) ? (
+                      <div className="vacio chico tenue">
+                        Elige los filtros y pulsa «Consultar».
+                      </div>
+                    ) : (
                     <WidgetVista
                       widget={w}
                       modeloId={d.modelo_id}
                       version={d.version_modelo}
-                      selecciones={selecciones}
+                      selecciones={w.tipo === 'filtro' ? selecciones : (consultadas ?? {})}
+                      seleccionesConsulta={
+                        alAplicar && w.tipo === 'filtro' ? (aplicadas ?? {}) : undefined
+                      }
                       rutasElegidas={
                         (borrador.rutas_elegidas as Record<string, string>) ?? {}
                       }
@@ -715,6 +746,7 @@ export function Tablero() {
                       }
                       editando={editando}
                     />
+                    )}
                   </div>
                 </div>
               ))}
@@ -784,6 +816,10 @@ export function Tablero() {
               esAdmin={yo.data?.rol === 'administrador'}
               versiones={versiones.data?.versiones.map((v) => v.version) ?? []}
               versionActual={d.version_modelo}
+              consultarAlAplicar={Boolean(borrador.consultar_al_aplicar)}
+              alCambiarConsultarAlAplicar={(v) =>
+                setBorrador({ ...borrador, consultar_al_aplicar: v })
+              }
               alRenombrar={(nombre) => guardar.mutate({ nombre })}
               alMoverDeCarpeta={(carpeta) => guardar.mutate({ carpeta })}
               alPublicar={(v) => acciones.publicar.mutate(v)}
@@ -926,6 +962,8 @@ function PanelTablero({
   esAdmin,
   versiones,
   versionActual,
+  consultarAlAplicar,
+  alCambiarConsultarAlAplicar,
   alRenombrar,
   alMoverDeCarpeta,
   alPublicar,
@@ -940,6 +978,8 @@ function PanelTablero({
   esAdmin: boolean
   versiones: number[]
   versionActual: number
+  consultarAlAplicar: boolean
+  alCambiarConsultarAlAplicar: (v: boolean) => void
   alRenombrar: (n: string) => void
   alMoverDeCarpeta: (c: string) => void
   alPublicar: (v: boolean) => void
@@ -1001,6 +1041,23 @@ function PanelTablero({
         </select>
         <span className="chico tenue">
           Cambiarla puede cambiar las cifras, y quita la certificación.
+        </span>
+      </div>
+
+      <div className="campo">
+        <label className="fila" style={{ gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={consultarAlAplicar}
+            onChange={(e) => alCambiarConsultarAlAplicar(e.target.checked)}
+          />
+          Consultar datos solo al pulsar «Aplicar filtros»
+        </label>
+        <span className="chico tenue">
+          Al abrir el tablero se cargan solo los filtros. Se eligen los valores —sin
+          esperar a cada clic— y los datos se piden al pulsar el botón. Conviene en
+          tableros grandes o cuando siempre se mira un recorte (una marca, un mes).
+          Se guarda con «Guardar».
         </span>
       </div>
 

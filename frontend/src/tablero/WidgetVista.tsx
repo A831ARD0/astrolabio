@@ -51,6 +51,8 @@ export interface PropsWidget {
   modeloId: number
   version: number
   selecciones: Record<string, unknown[]>
+  /** Ver `PanelFiltros`: solo lo usan los filtros. */
+  seleccionesConsulta?: Record<string, unknown[]>
   /** Caminos ya elegidos para las ambigüedades del modelo, a nivel de tablero. */
   rutasElegidas: Record<string, string>
   alAlternar: (campo: string, valor: unknown) => void
@@ -122,6 +124,7 @@ function WidgetFiltro({
   modeloId,
   version,
   selecciones,
+  seleccionesConsulta,
   alAlternar,
   alLimpiar,
 }: PropsWidget) {
@@ -135,6 +138,7 @@ function WidgetFiltro({
       modeloId={modeloId}
       version={version}
       selecciones={selecciones}
+      seleccionesConsulta={seleccionesConsulta}
       alAlternar={alAlternar}
       alLimpiar={alLimpiar}
     />

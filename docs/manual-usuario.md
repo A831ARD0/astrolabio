@@ -1771,6 +1771,25 @@ Solo se ofrecen columnas de la misma entidad: un orden que viniera de otra tabla
 necesitaría una unión, y entonces el orden de un filtro dependería de por dónde se
 une, que es exactamente lo que no puede pasar.
 
+### Consultar al pulsar «Aplicar filtros»
+
+En un tablero grande, cada clic en un filtro vuelve a pedir todos los widgets, y casi
+siempre se mira un recorte: una marca, un mes, una sucursal. En el panel **Tablero**
+(al editar) está **«Consultar datos solo al pulsar Aplicar filtros»**. Con eso:
+
+- Al abrir el tablero **solo se cargan los filtros**. Los widgets dicen «Elige los
+  filtros y pulsa Consultar».
+- Elegir valores es inmediato: no se consulta nada mientras se marcan.
+- **«Consultar»** (la primera vez) o **«Aplicar filtros»** pide los datos con lo
+  elegido. El botón se apaga mientras no haya cambios por aplicar.
+
+Mientras se marcan, los demás filtros muestran lo que dejan fuera los filtros **ya
+aplicados**, no los que se acaban de marcar: recalcularlo en cada clic es justo la
+espera que este modo evita. Se pone al día al aplicar.
+
+Al editar el tablero los datos se piden como siempre, porque quien arma la hoja
+necesita ver las cifras. Los informes en PDF y por correo aplican solos sus filtros.
+
 ### El formato de una columna
 
 En el inspector, al abrir una columna de cifras, está **Formato de la columna**:

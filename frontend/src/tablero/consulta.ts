@@ -358,3 +358,33 @@ export const TIPOS_GRAFICO: Widget['tipo'][] = [
   'area',
   'pastel',
 ]
+
+/**
+ * Los estados de un campo con la selección propia que todavía no se aplica.
+ *
+ * En un tablero que consulta al pulsar «Aplicar», los estados se piden con lo ya
+ * aplicado —si no, cada clic en un filtro volvería a preguntar al servidor, que es
+ * justo lo que se quiere evitar— y aquí se les pone encima lo que el usuario va
+ * marcando. Lo excluido sigue excluido: es lo que dejan fuera los filtros ya
+ * aplicados.
+ */
+export function conSeleccionPropia(
+  estados: Estados | undefined,
+  elegidos: unknown[],
+): Estados | undefined {
+  if (!estados) return estados
+  const todos = [
+    ...estados.seleccionado, ...estados.posible, ...estados.alternativo,
+    ...estados.excluido,
+  ]
+  const excluidos = new Set(estados.excluido)
+  const propios = new Set(elegidos)
+  const res: Estados = { seleccionado: [], posible: [], alternativo: [], excluido: [] }
+  for (const v of todos) {
+    if (propios.has(v)) res.seleccionado.push(v)
+    else if (excluidos.has(v)) res.excluido.push(v)
+    else if (propios.size > 0) res.alternativo.push(v)
+    else res.posible.push(v)
+  }
+  return res
+}

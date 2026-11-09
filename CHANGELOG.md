@@ -7,6 +7,15 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Tableros que consultan al pulsar «Aplicar filtros».** Un ajuste del tablero: al
+  abrirlo solo se cargan los filtros, elegir valores es inmediato y los datos se piden
+  al pulsar el botón. Para tableros grandes donde siempre se mira un recorte.
+
+- **Las métricas de tiempo cuestan la mitad.** El paso que calcula las ventanas de
+  tiempo (acumulados, meses anteriores) se leía dos veces —para elegir el mes y para
+  devolver las filas— y se calculaba dos veces. Ahora se materializa una sola: en un
+  tablero real, de 23 s a 11 s.
+
 - **Caché de consultas: abrir un tablero por segunda vez es instantáneo.** Mientras no
   se recargue ninguna de sus tablas, la respuesta de cada widget y de cada filtro se
   guarda y la siguiente persona la recibe de memoria. La clave es el SQL ya compilado,

@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useCampos } from '../api/hooks'
 import { FiltroCampo } from './FiltroCampo'
 import { FiltroColapsado } from './FiltroColapsado'
-import { useEstados } from './consulta'
+import { conSeleccionPropia, useEstados } from './consulta'
 
 /**
  * Alto mínimo, por campo, para que una lista abierta valga la pena.
@@ -38,6 +38,7 @@ function CampoAbierto({
   alAlternar,
   alLimpiar,
   ordenarPor,
+  seleccionesConsulta,
 }: {
   campo: string
   etiqueta: string
@@ -47,13 +48,17 @@ function CampoAbierto({
   alAlternar: (campo: string, valor: unknown) => void
   alLimpiar: (campo: string) => void
   ordenarPor?: string | null
+  seleccionesConsulta?: Record<string, unknown[]>
 }) {
-  const estados = useEstados(modeloId, version, campo, selecciones, true, ordenarPor)
+  const estados = useEstados(modeloId, version, campo,
+                             seleccionesConsulta ?? selecciones, true, ordenarPor)
   return (
     <FiltroCampo
       campo={campo}
       etiqueta={etiqueta}
-      estados={estados.data}
+      estados={seleccionesConsulta
+        ? conSeleccionPropia(estados.data, selecciones[campo] ?? [])
+        : estados.data}
       cargando={estados.isLoading}
       error={estados.error as Error | null}
       alAlternar={(v) => alAlternar(campo, v)}
@@ -74,12 +79,14 @@ function CampoCerrado({
   alAlternar,
   alLimpiar,
   ordenarPor,
+  seleccionesConsulta,
 }: {
   campo: string
   etiqueta: string
   modeloId: number
   version: number
   selecciones: Record<string, unknown[]>
+  seleccionesConsulta?: Record<string, unknown[]>
   abierto: boolean
   alAbrir: () => void
   alCerrar: () => void
@@ -89,14 +96,16 @@ function CampoCerrado({
 }) {
   // `activo`: los estados se piden solo cuando se abre. El resumen del botón sale
   // de las selecciones, que ya están aquí.
-  const estados = useEstados(modeloId, version, campo, selecciones, abierto,
-                             ordenarPor)
+  const estados = useEstados(modeloId, version, campo,
+                             seleccionesConsulta ?? selecciones, abierto, ordenarPor)
   return (
     <FiltroColapsado
       campo={campo}
       etiqueta={etiqueta}
       elegidos={selecciones[campo] ?? []}
-      estados={estados.data}
+      estados={seleccionesConsulta
+        ? conSeleccionPropia(estados.data, selecciones[campo] ?? [])
+        : estados.data}
       cargando={estados.isLoading}
       error={estados.error as Error | null}
       abierto={abierto}
@@ -115,6 +124,7 @@ export function PanelFiltros({
   modeloId,
   version,
   selecciones,
+  seleccionesConsulta,
   alAlternar,
   alLimpiar,
 }: {
@@ -130,6 +140,11 @@ export function PanelFiltros({
   modeloId: number
   version: number
   selecciones: Record<string, unknown[]>
+  /**
+   * Con qué selecciones se piden los estados, cuando no son las que se ven marcadas:
+   * en un tablero que consulta al pulsar «Aplicar», las ya aplicadas.
+   */
+  seleccionesConsulta?: Record<string, unknown[]>
   alAlternar: (campo: string, valor: unknown) => void
   alLimpiar: (campo: string) => void
 }) {
@@ -180,6 +195,7 @@ export function PanelFiltros({
             modeloId={modeloId}
             version={version}
             selecciones={selecciones}
+            seleccionesConsulta={seleccionesConsulta}
             ordenarPor={ordenPor?.[campo]}
             abierto={abierto === campo}
             alAbrir={() => setAbierto(campo)}
@@ -195,6 +211,7 @@ export function PanelFiltros({
             modeloId={modeloId}
             version={version}
             selecciones={selecciones}
+            seleccionesConsulta={seleccionesConsulta}
             ordenarPor={ordenPor?.[campo]}
             alAlternar={alAlternar}
             alLimpiar={alLimpiar}
