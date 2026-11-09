@@ -5,6 +5,14 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Corregido
+
+- **Una fila sin dato en el mes elegido ya no desaparece cuando tiene mes anterior o
+  acumulado.** Con el mes puesto por filtro y, por ejemplo, la sucursal en el desglose,
+  una sucursal que no vendió nada ese mes pero sí antes en el año se omitía: su fila de
+  ese mes no salía de ningún dato. Ahora sale con el mes vacío y su acumulado. Las que
+  quedan en cero en todo se siguen ocultando.
+
 ### Agregado
 
 - **Tableros que consultan al pulsar «Aplicar filtros».** Un ajuste del tablero: al

@@ -624,3 +624,85 @@ def test_dos_acumulados_del_anio_pasado_en_la_misma_formula(cliente, cab_editor,
             assert f["dos_acumulados"] == acum[f[MES] - 100]
             comparadas += 1
     assert comparadas > 10
+
+
+
+# --------------------------------------------------------------------------- #
+# Una sucursal sin ventas en el mes elegido. En la base de demostracion todas
+# venden todos los meses, asi que se arma una a mano.
+# --------------------------------------------------------------------------- #
+
+MINIMO_TIEMPO = """
+modelo: minimo_tiempo
+version: 1
+entidades:
+  - nombre: suc
+    tipo: dimension
+    origen: {tabla: suc}
+    clave_primaria: suc_id
+    campos:
+      - {nombre: suc_id, tipo: entero, rol: clave}
+      - {nombre: nombre, tipo: texto, rol: dimension}
+  - nombre: cal
+    tipo: dimension
+    origen: {tabla: cal}
+    clave_primaria: fecha_id
+    campos:
+      - {nombre: fecha_id, tipo: entero, rol: clave}
+      - {nombre: anio_mes, tipo: entero, rol: dimension, grano_tiempo: mes}
+  - nombre: ventas
+    tipo: hecho
+    origen: {tabla: ventas}
+    campos:
+      - {nombre: suc_id, tipo: entero, rol: clave_externa}
+      - {nombre: fecha_id, tipo: entero, rol: clave_externa}
+      - {nombre: unidades, tipo: entero, rol: medida_base}
+relaciones:
+  - {desde: [ventas, suc_id], hasta: [suc, suc_id], cardinalidad: muchos_a_uno}
+  - {desde: [ventas, fecha_id], hasta: [cal, fecha_id], cardinalidad: muchos_a_uno}
+metricas:
+  - {nombre: unidades, etiqueta: Unidades, entidad: ventas, expresion: SUM(unidades),
+     formato: entero}
+  - {nombre: acum, etiqueta: Acumulado, expresion: "ACUMANIO([unidades])",
+     formato: entero}
+"""
+
+
+def test_una_sucursal_sin_ventas_en_el_mes_sale_con_su_acumulado(monkeypatch,
+                                                                 tmp_path):
+    """
+    El mes elegido por filtro, la sucursal en el desglose. «Sur» vendió en enero
+    y febrero y nada en marzo: en el informe de marzo tiene que salir, sin venta
+    del mes y con su acumulado. Antes desaparecía —su fila de marzo no venía en
+    ningún dato— y el informe la omitía donde Qlik la muestra.
+
+    Y la que no vendió nada en todo el año no aparece: una fila de puros ceros no
+    es información.
+    """
+    import duckdb
+
+    import app.analitico as analitico
+    from app.politicas import ContextoUsuario
+    from semantic.engine import Consulta, Modelo
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE suc AS SELECT * FROM (VALUES (1,'Norte'),(2,'Sur'),"
+                "(3,'Cerrada')) t(suc_id, nombre)")
+    con.execute("CREATE TABLE cal AS SELECT * FROM (VALUES (1,202601),(2,202602),"
+                "(3,202603)) t(fecha_id, anio_mes)")
+    con.execute("CREATE TABLE ventas AS SELECT * FROM (VALUES (1,1,5),(1,2,5),(1,3,5),"
+                "(2,1,3),(2,2,4)) t(suc_id, fecha_id, unidades)")
+    monkeypatch.setattr(analitico, "conexion", lambda: con)
+    ruta = tmp_path / "minimo.yaml"
+    ruta.write_text(MINIMO_TIEMPO, encoding="utf-8")
+
+    res = analitico.ejecutar_consulta(
+        Modelo(ruta),
+        Consulta(dimensiones=["suc.nombre"], metricas=["unidades", "acum"],
+                 filtros=[{"campo": "cal.anio_mes", "op": "IN", "valor": [202603]}]),
+        ContextoUsuario(usuario_id=1, email="a@b.c", rol="administrador"))
+    filas = {f["suc.nombre"]: f for f in res.filas}
+    assert set(filas) == {"Norte", "Sur"}, res.filas
+    assert filas["Norte"]["unidades"] == 5 and filas["Norte"]["acum"] == 15
+    assert not filas["Sur"]["unidades"]
+    assert filas["Sur"]["acum"] == 7

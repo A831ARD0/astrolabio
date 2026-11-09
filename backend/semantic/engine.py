@@ -43,6 +43,8 @@ COL_MES_USADO = "__mes_usado"
 #: ELLAS. Ver `Compilador.compilar`. Nunca salen del compilador: se leen dentro del
 #: propio SQL y no aparecen en el SELECT de arriba.
 COL_BASE = "__base_"
+#: Si una fila de la espina venia en los datos o se agrego al completar los meses.
+COL_REAL = "__real"
 from semantic.formula import Contexto, ContextoCompuesta, ErrorFormula
 from semantic.formula import compilar as compilar_formula
 from semantic.formula import Compuesta, MARCA_CAPA, compilar_compuesta
@@ -1804,6 +1806,30 @@ class Compilador:
 
         espina = "\n  UNION\n  ".join(partes_espina)
 
+        # Con el mes escondido, la espina se completa: cada combinacion del desglose
+        # en cada mes. Sin esto, una sucursal sin ventas en el mes elegido perdia su
+        # fila aunque tuviera mes anterior o acumulado del año —su fila de ese mes
+        # no salia de ningun CTE—, y el informe la omitia donde Qlik la muestra con
+        # cero en el mes y su acumulado. `__real` dice si la combinacion venia en los
+        # datos; las que se agregan aqui solo se quedan si alguna cifra no es cero.
+        nombre_mes = f"{mes_oculto[0]}.{mes_oculto[1]}" if mes_oculto else None
+        otras = [cd for cd in cols_dim if cd != nombre_mes]
+        completar = bool(mes_oculto) and nombre_mes in cols_dim and bool(otras)
+        if completar:
+            lista = ", ".join(_cita(cd) for cd in cols_dim)
+            densa = ", ".join(
+                (f"p.{_cita(cd)}" if cd == nombre_mes else f"o.{_cita(cd)}")
+                for cd in cols_dim)
+            espina = (
+                f"SELECT {lista}, BOOL_OR(r) AS {_cita(COL_REAL)} FROM (\n"
+                f"    SELECT {lista}, TRUE AS r FROM ({espina}) AS b\n"
+                f"    UNION ALL\n"
+                f"    SELECT {densa}, FALSE AS r FROM "
+                f"(SELECT DISTINCT {', '.join(_cita(cd) for cd in otras)} "
+                f"FROM ({espina}) AS b1) AS o CROSS JOIN "
+                f"(SELECT DISTINCT {_cita(nombre_mes)} FROM ({espina}) AS b2) AS p\n"
+                f"  ) AS t GROUP BY {lista}")
+
         joins = []
         for n, _, _ms, cols_n in ctes:
             # Se une por las columnas que ESE CTE tiene. La foto no tiene mes, asi
@@ -1829,6 +1855,7 @@ class Compilador:
             # dependeria del mes de cada fila.
             sel_capa = (
                 [f"e.{_cita(cd)} AS {_cita(cd)}" for cd in cols_dim]
+                + ([f"e.{_cita(COL_REAL)} AS {_cita(COL_REAL)}"] if completar else [])
                 + [f"{n}.{_cita(m)} AS {_cita(m)}" for n, _, ms, _c in ctes for m in ms]
                 + [f"{self._con_tiempo(duena, _calificar_metricas(sql_i, donde), deps, dims)}"
                    f" AS {_cita(k)}"
@@ -1842,11 +1869,13 @@ class Compilador:
                 f"\n  FROM espina AS e\n  " + "\n  ".join(joins) + "\n)"
             )
             sel = ([f"b.{_cita(cd)}" for cd in cols_dim]
+                   + ([f"b.{_cita(COL_REAL)}"] if completar else [])
                    + columnas_pedidas(arriba, "b."))
             fuente, alias_f, sitio_final = "capa1 AS b", "b", arriba
         else:
             cuerpo_final = f"WITH {partes},\nespina AS (\n  {espina}\n)"
             sel = ([f"e.{_cita(cd)}" for cd in cols_dim]
+                   + ([f"e.{_cita(COL_REAL)}"] if completar else [])
                    + columnas_pedidas(donde, "e."))
             fuente = "espina AS e\n" + "\n".join(joins)
             alias_f, sitio_final = "e", donde
@@ -1919,6 +1948,10 @@ class Compilador:
             f"SELECT\n  " + ",\n  ".join(sel_arriba) +
             f"\nFROM detalle AS d"
             f"\nJOIN mes_que_manda AS x ON d.{col_mes} IS NOT DISTINCT FROM x.mes"
+            + (f"\nWHERE d.{_cita(COL_REAL)} OR " + " OR ".join(
+                f"COALESCE(TRY_CAST(d.{_cita(n)} AS DOUBLE), 0) <> 0"
+                for n in c.metricas)
+               if completar and c.metricas and not c.filas_sin_cifras else "")
             + ("\nORDER BY " + self._order_by(
                 self._posicion_del_orden(
                     c, cols_vistas + [COL_MES_USADO] + list(c.metricas)),
