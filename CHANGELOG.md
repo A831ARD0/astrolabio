@@ -7,6 +7,21 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Se declara cómo guarda la fecha el origen, y la ventana filtra allá.** Al partir un
+  dataset por una columna que no es fecha, ya no hace falta escribir SQL: se elige
+  «Texto con formato» (`%Y%m%d`, `%d/%m/%Y`…), «Número con formato» (`%Y%m%d`,
+  `%Y%m`) o «Días contados desde una fecha» (Excel, Pervasive/Btrieve, Unix…). De esa
+  forma salen la conversión y **el filtro que se manda al origen**: una recarga por
+  ventana pide solo los meses que reemplaza, en vez de traer la tabla entera y recortar
+  después. En un DMS Pervasive, cinco meses de facturas pasaron de 517 s a 17 s. Con
+  formatos que no se ordenan como fechas (`%d/%m/%Y`) o con una expresión propia se
+  sigue recortando al escribir, que es correcto aunque lento. Los datasets con una
+  expresión de las formas comunes se pasan solos al formato (migración 0016), sin
+  recargar: dan las mismas fechas.
+
+- **Ventana «los últimos N meses»** (`ultimos_meses:N`): el mes en curso y los N−1
+  anteriores, en meses completos.
+
 - **Las métricas compuestas se agrupan por su tabla de medidas.** Una compuesta no
   sale de ningún hecho, así que caían todas en un montón llamado «compuesta» — con
   cincuenta y ocho, eso dice de qué NO son y no de qué son. Ahora las ordena la tabla

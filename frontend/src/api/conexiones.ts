@@ -50,6 +50,11 @@ export interface Dataset {
   particionado: string | null
   /** Cómo convertir la columna de partición en fecha. null = ya lo es. */
   expresion_particion: string | null
+  /**
+   * Forma de la fecha en el origen: 'texto:%Y%m%d', 'numero:%Y%m',
+   * 'dias:1899-12-30=0'. Gana sobre la expresión y deja filtrar en el origen.
+   */
+  formato_fecha: string | null
   /** null = todas las columnas del origen. */
   columnas: string[] | null
   ventana: string | null
@@ -81,6 +86,7 @@ export const clavesCon = {
   muestra: (id: number, esquema: string | null, tabla: string) =>
     ['conexiones', id, 'muestra', esquema ?? '', tabla] as const,
   ventanas: ['conexiones', 'ventanas'] as const,
+  formatosFecha: ['conexiones', 'formatos-fecha'] as const,
   odbc: ['conexiones', 'odbc'] as const,
   odbcPerfiles: ['conexiones', 'odbc', 'perfiles'] as const,
   datasets: ['datasets'] as const,
@@ -269,6 +275,22 @@ export function useMuestra(
   })
 }
 
+export interface FormatoFecha {
+  clave: 'texto' | 'numero' | 'dias'
+  etiqueta: string
+  ejemplos: string[]
+}
+
+/** Las formas de fecha que se pueden declarar, con ejemplos. */
+export function useFormatosFecha() {
+  return useQuery({
+    queryKey: clavesCon.formatosFecha,
+    queryFn: () =>
+      api.get<{ formatos: FormatoFecha[] }>('/conexiones/formatos-fecha'),
+    staleTime: Infinity,
+  })
+}
+
 export function useVentanas() {
   return useQuery({
     queryKey: clavesCon.ventanas,
@@ -341,6 +363,8 @@ export interface CambioDataset {
   particionar_por?: string
   /** `''` la quita. */
   expresion_particion?: string
+  /** `''` lo quita. */
+  formato_fecha?: string
 }
 
 export function useEditarDataset(datasetId: number) {

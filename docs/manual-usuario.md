@@ -172,8 +172,33 @@ pero entre pasos: la tabla en curso se termina.
 
 ### Cuando la fecha no es una fecha
 
-Debajo de «Partir por» hay un campo, **«Convertirla en fecha»**, donde se escribe una
-expresión que convierte esa columna. Existe porque la lista de formatos raros no
+Debajo de «Partir por» se elige **«Cómo guarda la fecha el origen»**:
+
+| lo que trae el origen | qué elegir |
+|---|---|
+| una fecha de verdad (DATE, DATETIME) | Es una fecha |
+| `20260914`, `2026-09-14`, `14/09/2026` (texto) | Texto con formato: `%Y%m%d`, `%Y-%m-%d`, `%d/%m/%Y`… |
+| `20260914`, `202609` (número) | Número con formato: `%Y%m%d`, `%Y%m` |
+| `46279` (serial de Excel) | Días contados desde una fecha: el número `0` corresponde al `1899-12-30` |
+| `739873` (Pervasive, Btrieve, ordinal) | Días contados desde una fecha: el número `719163` corresponde al `1970-01-01` |
+| cualquier otra cosa | Expresión propia (avanzado), ver abajo |
+
+**Elegir la forma, en vez de escribir una expresión, hace rápidas las ventanas.**
+Con la forma, Astrolabio sabe escribir el rango como lo entiende el origen
+(`"Dt Emissao" >= '20260701'`) y le pide solo los meses que va a reemplazar. Con una
+expresión propia no puede: trae la tabla entera y recorta después. El resultado es el
+mismo, pero dos meses de facturas cuestan lo que diez años. Medido sobre un DMS
+Pervasive: la recarga de 5 meses de una tabla de facturas pasó de 517 s a 17 s.
+
+El filtro en el origen funciona cuando comparar los valores equivale a comparar las
+fechas: texto o número en orden año-mes-día, y días. Con `%d/%m/%Y` no
+(`'01/08/2026'` es menor que `'31/07/2026'` como texto), así que ahí se trae la tabla
+y se recorta, igual que con una expresión.
+
+#### Expresión propia
+
+Si la fecha no tiene ninguna de esas formas, se elige «Expresión propia» y se escribe
+una expresión que convierte esa columna. Existe porque la lista de formatos raros no
 acaba nunca: el mismo `03/04` es marzo o abril según el país, y hay codificaciones
 que no son un formato sino una cuenta.
 

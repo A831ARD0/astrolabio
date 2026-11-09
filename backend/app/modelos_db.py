@@ -136,6 +136,11 @@ class Dataset(Base):
     # el formato de su pais, y cada uno el suyo: codificar los formatos uno a uno
     # seria una lista que nunca acaba.
     expresion_particion: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # La forma de esa fecha en el origen, cuando es una de las comunes:
+    # 'texto:%Y%m%d', 'numero:%Y%m', 'dias:1899-12-30=0'… Gana sobre la
+    # expresion: de ella salen la expresion Y el filtro que se manda al origen,
+    # que es lo que hace rapida una recarga por ventana. Ver `app.formato_fecha`.
+    formato_fecha: Mapped[str | None] = mapped_column(String(60), nullable=True)
     # Columnas a traer. NULL = todas, y es lo que hay que guardar cuando se
     # quieren todas: una lista congelada dejaria fuera para siempre las columnas
     # que el origen agregue despues, sin avisar.

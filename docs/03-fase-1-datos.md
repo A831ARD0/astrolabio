@@ -506,7 +506,7 @@ Una ventana móvil dice «reemplaza siempre estas particiones»:
 | | |
 |---|---|
 | `dia_anterior`, `ultimos_7_dias`, `ultimos_30_dias`, `ultimos_dias:N` | por días |
-| `mes_actual`, `mes_actual_y_anterior` | por calendario |
+| `mes_actual`, `mes_actual_y_anterior`, `ultimos_meses:N` | por calendario (`ultimos_meses:5` = el mes en curso y los 4 anteriores) |
 | `anio_actual`, `ultimos_2_anios` | por calendario |
 
 Tres decisiones:

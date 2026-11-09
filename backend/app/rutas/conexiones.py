@@ -15,10 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app import programador, trabajos, ventanas
+from app import formato_fecha, programador, trabajos, ventanas
 from app.auditoria import registrar
 from app.cargas import Actor, ErrorCarga, ejecutar_carga, ruta_dataset
 from app.conectores import OPCIONALES, REQUERIDOS, ErrorConector, TIPOS, crear
+from app.conectores.base import cita_origen
 from app.config import config
 from app.dependencias import SesionDep, UsuarioDep, exigir_rol
 from app.modelos_db import Conexion, Dataset, Rol, Usuario, iso
@@ -98,6 +99,8 @@ class CrearDataset(BaseModel):
     columna_incremental: str | None = None
     particionar_por: str | None = None
     expresion_particion: str | None = None
+    #: 'texto:%Y%m%d', 'numero:%Y%m', 'dias:1899-12-30=0'… Ver app.formato_fecha.
+    formato_fecha: str | None = None
     limite: int | None = None
     #: None = todas. Ver la nota en `Dataset.columnas`.
     columnas: list[str] | None = None
@@ -115,6 +118,7 @@ class EditarDataset(BaseModel):
     columna_incremental: str | None = None
     particionar_por: str | None = None
     expresion_particion: str | None = None
+    formato_fecha: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -251,6 +255,34 @@ def _revisar_expresion(conector, tabla: str, esquema: str | None,
         aviso += (f". Las otras {total - ok} quedarían en la partición "
                   f"'sin_fecha'.")
     return aviso
+
+
+def _revisar_formato(formato: str | None, expresion: str | None,
+                     particion: str | None) -> str | None:
+    """Normaliza el formato de fecha, o revienta con el motivo."""
+    try:
+        formato = formato_fecha.validar(formato)
+    except formato_fecha.FormatoInvalido as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+    if formato and expresion:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Elige una sola forma de convertir la fecha: el formato o la "
+            "expresión. El formato además deja filtrar en el origen.")
+    if formato and not particion:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El formato de fecha describe la columna de partición, así que primero "
+            "hay que elegir 'Partir por'.")
+    return formato
+
+
+def _expresion_efectiva(particion: str | None, expresion: str | None,
+                        formato: str | None) -> str | None:
+    """Lo que de verdad se va a evaluar, para probarlo contra la muestra."""
+    if formato and particion:
+        return formato_fecha.expresion(formato, cita_origen(particion))
+    return expresion
 
 
 def _revisar_ventana(ventana: str | None, particion: str | None,
@@ -884,9 +916,13 @@ def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
                       cuerpo.columnas, cuerpo.columna_incremental,
                       cuerpo.particionar_por)
     zona = "America/Mexico_City"
+    formato = _revisar_formato(cuerpo.formato_fecha, cuerpo.expresion_particion,
+                               cuerpo.particionar_por)
     aviso_expresion = _revisar_expresion(
         _conector(fila), cuerpo.tabla, cuerpo.esquema,
-        cuerpo.particionar_por, cuerpo.expresion_particion)
+        cuerpo.particionar_por,
+        _expresion_efectiva(cuerpo.particionar_por, cuerpo.expresion_particion,
+                            formato))
     ventana_dicha = _revisar_ventana(cuerpo.ventana, cuerpo.particionar_por, zona)
 
     ds = Dataset(
@@ -895,6 +931,7 @@ def crear_dataset(conexion_id: int, cuerpo: CrearDataset, sesion: SesionDep,
         columna_incremental=cuerpo.columna_incremental,
         particionar_por=cuerpo.particionar_por, creado_por=actor.id,
         expresion_particion=cuerpo.expresion_particion or None,
+        formato_fecha=formato,
         columnas=cuerpo.columnas or None, ventana=cuerpo.ventana or None,
         zona_horaria=zona,
     )
@@ -920,6 +957,12 @@ def _describir_sin_reventar(ds: Dataset) -> str | None:
         return f"Ventana inválida: {e}"
 
 
+@router.get("/formatos-fecha")
+def formatos_fecha(_: Usuario = Depends(exigir_rol(Rol.editor))):
+    """Las formas de fecha que se pueden declarar, con ejemplos."""
+    return {"formatos": formato_fecha.catalogo()}
+
+
 @router.get("/ventanas")
 def ventanas_disponibles(_: UsuarioDep):
     """Las ventanas móviles que se pueden elegir, con su etiqueta."""
@@ -941,6 +984,7 @@ def listar_datasets(sesion: SesionDep, _: Usuario = Depends(exigir_rol(Rol.edito
             "filas": ds.filas, "mb": round(ds.bytes_parquet / 1024 / 1024, 1),
             "incremental": ds.columna_incremental,
             "expresion_particion": ds.expresion_particion,
+            "formato_fecha": ds.formato_fecha,
             "particionado": ds.particionar_por,
             "columnas": ds.columnas,          # null = todas
             "ventana": ds.ventana,
@@ -981,7 +1025,8 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
     antes = {"columnas": ds.columnas, "ventana": ds.ventana,
              "columna_incremental": ds.columna_incremental,
              "particionar_por": ds.particionar_por,
-             "expresion_particion": ds.expresion_particion}
+             "expresion_particion": ds.expresion_particion,
+             "formato_fecha": ds.formato_fecha}
 
     if cuerpo.columna_incremental is not None:
         ds.columna_incremental = cuerpo.columna_incremental or None
@@ -1005,6 +1050,22 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
     if cuerpo.expresion_particion is not None:
         ds.expresion_particion = cuerpo.expresion_particion or None
 
+    # El formato hace lo mismo que la expresion: cambiarlo mueve las filas de mes.
+    if cuerpo.formato_fecha is not None:
+        nuevo = _revisar_formato(cuerpo.formato_fecha, None, ds.particionar_por)
+        cambio_particion = cambio_particion or nuevo != ds.formato_fecha
+        ds.formato_fecha = nuevo
+    if ds.formato_fecha and ds.expresion_particion:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Elige una sola forma de convertir la fecha: el formato o la "
+            "expresión. Para cambiar de una a otra, manda la que no quieres vacía.")
+    if ds.formato_fecha and not ds.particionar_por:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Este dataset tiene formato de fecha, así que no se le puede quitar la "
+            "columna de partición. Quita primero el formato.")
+
     cambio_columnas = False
     if cuerpo.columnas is not None:
         nuevas = cuerpo.columnas or None
@@ -1015,10 +1076,13 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
         ds.columnas = nuevas
 
     aviso_expresion = None
-    if cuerpo.expresion_particion is not None or cambio_particion:
+    if (cuerpo.expresion_particion is not None or cuerpo.formato_fecha is not None
+            or cambio_particion):
         aviso_expresion = _revisar_expresion(
             _conector(_obtener(sesion, ds.conexion_id)), ds.tabla_origen,
-            ds.esquema_origen, ds.particionar_por, ds.expresion_particion)
+            ds.esquema_origen, ds.particionar_por,
+            _expresion_efectiva(ds.particionar_por, ds.expresion_particion,
+                                ds.formato_fecha))
 
     ventana_dicha = None
     if cuerpo.ventana is not None:
@@ -1058,7 +1122,8 @@ def editar_dataset(dataset_id: int, cuerpo: EditarDataset, sesion: SesionDep,
     despues = {"columnas": ds.columnas, "ventana": ds.ventana,
                "columna_incremental": ds.columna_incremental,
                "particionar_por": ds.particionar_por,
-               "expresion_particion": ds.expresion_particion}
+               "expresion_particion": ds.expresion_particion,
+               "formato_fecha": ds.formato_fecha}
     registrar(sesion, accion="dataset_editado", usuario_id=actor.id,
               email=actor.email, objeto_tipo="dataset", objeto_id=ds.id,
               detalle={"nombre": ds.nombre,

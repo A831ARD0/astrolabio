@@ -285,15 +285,3 @@ def test_ultimos_meses_cuenta_el_mes_en_curso():
     assert resolver("ultimos_meses:1", hoy=date(2026, 1, 20)) == ("2026-01-01", "2026-01-20")
     assert resolver("ultimos_meses:3", hoy=date(2026, 2, 3)) == ("2025-12-01", "2026-02-03")
     assert describir("ultimos_meses:2", hoy=date(2026, 11, 9)).startswith("Los últimos 2 meses")
-
-
-def test_limites_en_origen_para_fechas_de_pervasive():
-    from app.conectores.base import limites_en_origen
-    texto = 'try_strptime("Dt Emissao", \'%Y%m%d\')'
-    assert limites_en_origen(texto, "2026-07-01", "2026-11-09") == ("Dt Emissao", "'20260701'", "'20261110'")
-    dias = ('CASE WHEN CAST("Dt Emissao" AS BIGINT) BETWEEN 693596 AND 766645 THEN '
-            'DATE \'1970-01-01\' + to_days(CAST("Dt Emissao" AS INTEGER) - 719163) END')
-    col, a, b = limites_en_origen(dias, "1970-01-01", "1970-01-01")
-    assert (col, a, b) == ("Dt Emissao", "719163", "719164")
-    assert limites_en_origen("year(x)", "2026-01-01", "2026-01-31") is None
-    assert limites_en_origen(None, "2026-01-01", "2026-01-31") is None

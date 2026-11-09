@@ -59,8 +59,8 @@ from app.conectores import perfiles_odbc as perfiles
 from app.conectores.base import (
     ColumnaOrigen, Conector, ErrorConector, PeticionIngesta, ResultadoIngesta,
     ResultadoPrueba, TablaOrigen, avisar_avance, cita_origen, escribir_lote,
-    limites_en_origen,
 )
+from app import formato_fecha
 
 # Esquemas/catalogos que son del motor y no de nadie.
 SISTEMA = {
@@ -505,20 +505,22 @@ class ConectorODBC(Conector):
             # lo rechaza: "Error converting to numeric type". Llega la tabla
             # entera y el recorte al rango se hace al escribir, ya con la
             # expresion aplicada. Se lee de mas, pero se lee bien.
-            # Salvo las formas conocidas (texto AAAAMMDD, días de Pervasive), que sí
-            # se escriben como literal del origen: ver `limites_en_origen`.
-            limites = (limites_en_origen(p.expresion_particion, p.rango_desde,
-                                         p.rango_hasta)
-                       if p.expresion_particion and p.rango_desde and p.rango_hasta
+            # Salvo cuando el dataset dice qué forma tiene la fecha
+            # (`formato_fecha`): entonces el rango se escribe como lo guarda el
+            # origen y se filtra allá, que es lo que hace rápida una ventana.
+            convertida = bool(p.expresion_particion or p.formato_fecha)
+            limites = (formato_fecha.limites(p.formato_fecha, p.rango_desde,
+                                             p.rango_hasta)
+                       if p.formato_fecha and p.rango_desde and p.rango_hasta
                        else None)
             if limites:
-                col, lim0, lim1 = limites
-                donde.append(f"{self._cita(col, cita)} >= {lim0}")
-                donde.append(f"{self._cita(col, cita)} < {lim1}")
-            if p.rango_desde and not p.expresion_particion:
+                col = self._cita(p.particionar_por, cita)
+                donde.append(f"{col} >= {limites[0]}")
+                donde.append(f"{col} < {limites[1]}")
+            if p.rango_desde and not convertida:
                 donde.append(f"{self._cita(p.particionar_por, cita)} >= ?")
                 params.append(p.rango_desde)
-            if p.rango_hasta and not p.expresion_particion:
+            if p.rango_hasta and not convertida:
                 # Hasta el final del dia: si la columna es DATETIME, comparar con
                 # '2026-03-31' se dejaria fuera todo lo de ese dia despues de las
                 # 00:00. Es el error clasico de una recarga por rango.

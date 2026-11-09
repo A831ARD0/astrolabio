@@ -17,6 +17,7 @@ import {
   useDescribirTabla,
   useEditarDataset,
   useHistorialDataset,
+  useFormatosFecha,
   useVentanas,
 } from '../api/conexiones'
 import { Horario } from '../comunes/Horario'
@@ -161,13 +162,25 @@ function EditorClaves({ ds }: { ds: Dataset }) {
   const editar = useEditarDataset(ds.id)
   const [particion, setParticion] = useState(ds.particionado ?? '')
   const [incremental, setIncremental] = useState(ds.incremental ?? '')
+  const formatos = useFormatosFecha()
+  // La fecha se describe de una de dos maneras: con una forma conocida
+  // (formato_fecha, que además deja filtrar en el origen) o con una expresión libre.
+  const inicial = leerFormato(ds.formato_fecha, ds.expresion_particion)
+  const [modo, setModo] = useState<ModoFecha>(inicial.modo)
+  const [patron, setPatron] = useState(inicial.patron)
+  const [diaRef, setDiaRef] = useState(inicial.dia)
+  const [numRef, setNumRef] = useState(inicial.numero)
   const [expresion, setExpresion] = useState(ds.expresion_particion ?? '')
 
+  const formato = armarFormato(modo, patron, diaRef, numRef)
+  const exprAGuardar = modo === 'expresion' ? expresion : ''
   const columnas = detalle.data?.columnas ?? []
   const cambio =
     particion !== (ds.particionado ?? '') ||
     incremental !== (ds.incremental ?? '') ||
-    expresion !== (ds.expresion_particion ?? '')
+    exprAGuardar !== (ds.expresion_particion ?? '') ||
+    formato !== (ds.formato_fecha ?? '')
+  const ejemplos = formatos.data?.formatos.find((f) => f.clave === modo)?.ejemplos ?? []
 
   if (detalle.isLoading) return <div className="chico tenue">Leyendo el origen…</div>
   if (detalle.isError) {
@@ -203,30 +216,67 @@ function EditorClaves({ ds }: { ds: Dataset }) {
         <button className="btn primario" disabled={!cambio || editar.isPending}
                 onClick={() => editar.mutate({ particionar_por: particion,
                                                columna_incremental: incremental,
-                                               expresion_particion: expresion })}>
+                                               expresion_particion: exprAGuardar,
+                                               formato_fecha: formato })}>
           {editar.isPending ? 'Guardando…' : 'Guardar columnas de carga'}
         </button>
       </div>
       {particion && (
         <div className="fila-condicion" style={{ alignItems: 'flex-start' }}>
-          <label className="chico suave" style={{ flex: 1 }}>
-            Convertirla en fecha (opcional){' '}
-            <input type="text" value={expresion} style={{ width: '100%' }}
-                   placeholder={`la columna ya es una fecha`}
-                   onChange={(e) => setExpresion(e.target.value)} />
+          <label className="chico suave">
+            Cómo guarda la fecha el origen{' '}
+            <select value={modo} onChange={(e) => setModo(e.target.value as ModoFecha)}>
+              <option value="">Es una fecha</option>
+              {formatos.data?.formatos.map((f) => (
+                <option key={f.clave} value={f.clave}>{f.etiqueta}</option>
+              ))}
+              <option value="expresion">Expresión propia (avanzado)</option>
+            </select>
           </label>
+          {(modo === 'texto' || modo === 'numero') && (
+            <label className="chico suave">
+              Formato{' '}
+              <input type="text" value={patron} list="ejemplos-formato"
+                     placeholder="%Y%m%d" style={{ maxWidth: 180 }}
+                     onChange={(e) => setPatron(e.target.value)} />
+              <datalist id="ejemplos-formato">
+                {ejemplos.map((x) => <option key={x} value={x} />)}
+              </datalist>
+            </label>
+          )}
+          {modo === 'dias' && (
+            <label className="chico suave">
+              El número{' '}
+              <input type="number" value={numRef} style={{ maxWidth: 120 }}
+                     onChange={(e) => setNumRef(e.target.value)} />{' '}
+              corresponde al{' '}
+              <input type="date" value={diaRef}
+                     onChange={(e) => setDiaRef(e.target.value)} />
+            </label>
+          )}
+          {modo === 'expresion' && (
+            <label className="chico suave" style={{ flex: 1 }}>
+              Expresión de DuckDB{' '}
+              <input type="text" value={expresion} style={{ width: '100%' }}
+                     placeholder={`try_strptime(CAST("${particion}" AS VARCHAR), '%Y%m%d')`}
+                     onChange={(e) => setExpresion(e.target.value)} />
+            </label>
+          )}
         </div>
       )}
-      {particion && (
+      {particion && modo !== '' && (
         <span className="chico tenue">
-          Si «{particion}» no es una fecha —en muchos orígenes viene como el entero{' '}
-          <span className="mono">20260914</span> o como texto— aquí se escribe cómo
-          convertirla, y se comprueba con 50 filas de verdad al guardar. Por ejemplo:{' '}
-          <span className="mono">
-            try_strptime(CAST("{particion}" AS VARCHAR), '%Y%m%d')
-          </span>
-          . Con expresión, la ventana y el rango no filtran en el origen: se lee la
-          tabla entera y el recorte se hace aquí.
+          {modo === 'expresion'
+            ? 'Con una expresión propia, la ventana y el rango no se pueden filtrar en el ' +
+              'origen: se lee la tabla entera y se recorta aquí. Si la fecha tiene una de ' +
+              'las formas de la lista, elígela: la carga por ventana será mucho más rápida.'
+            : modo === 'dias'
+              ? 'Para orígenes que cuentan días: Excel (0 = 1899-12-30), Clarion, ' +
+                'Pervasive/Btrieve (719163 = 1970-01-01), días Unix (0 = 1970-01-01)…'
+              : 'Formato de strptime: %Y año, %m mes, %d día, %H hora. Si va en orden ' +
+                'año-mes-día (%Y%m%d, %Y-%m-%d…), la ventana filtra en el origen y solo ' +
+                'se traen los meses que se recargan.'}{' '}
+          Se comprueba con 50 filas de verdad al guardar.
         </span>
       )}
       <span className="chico tenue">
@@ -252,12 +302,13 @@ function EditorVentana({ ds }: { ds: Dataset }) {
   // 'ultimos_dias:45' no es una opción de la lista: la opción es 'ultimos_dias:N' y
   // el número va aparte. Sin descomponerlo, un dataset con ventana en días se abría
   // mostrando «(sin ventana)» y parecía no tener ninguna.
-  const enDias = /^ultimos_dias:(\d+)$/.exec(ds.ventana ?? '')
-  const [clave, setClave] = useState(enDias ? 'ultimos_dias:N' : (ds.ventana ?? ''))
-  const [dias, setDias] = useState(enDias?.[1] ?? '45')
+  // Igual con 'ultimos_meses:5'.
+  const conN = /^(ultimos_dias|ultimos_meses):(\d+)$/.exec(ds.ventana ?? '')
+  const [clave, setClave] = useState(conN ? `${conN[1]}:N` : (ds.ventana ?? ''))
+  const [dias, setDias] = useState(conN?.[2] ?? (clave.startsWith('ultimos_meses') ? '3' : '45'))
 
-  const esN = clave === 'ultimos_dias:N'
-  const aGuardar = esN ? `ultimos_dias:${dias}` : clave
+  const esN = clave.endsWith(':N')
+  const aGuardar = esN ? clave.replace(':N', `:${dias}`) : clave
 
   return (
     <>
@@ -656,4 +707,26 @@ export function PanelDataset({
       </div>
     </Velo>
   )
+}
+
+type ModoFecha = '' | 'texto' | 'numero' | 'dias' | 'expresion'
+
+/** Descompone 'texto:%Y%m%d' o 'dias:1899-12-30=0' en lo que muestra el formulario. */
+function leerFormato(formato: string | null, expresion: string | null) {
+  const vacio = { modo: '' as ModoFecha, patron: '%Y%m%d', dia: '1899-12-30', numero: '0' }
+  if (!formato) return expresion ? { ...vacio, modo: 'expresion' as ModoFecha } : vacio
+  const [tipo, ...resto] = formato.split(':')
+  const valor = resto.join(':')
+  if (tipo === 'dias') {
+    const [dia, numero] = valor.split('=')
+    return { ...vacio, modo: 'dias' as ModoFecha, dia: dia ?? vacio.dia, numero: numero ?? vacio.numero }
+  }
+  return { ...vacio, modo: tipo as ModoFecha, patron: valor }
+}
+
+/** Lo contrario: lo que se guarda. '' = sin formato. */
+function armarFormato(modo: ModoFecha, patron: string, dia: string, numero: string) {
+  if (modo === 'texto' || modo === 'numero') return patron ? `${modo}:${patron}` : ''
+  if (modo === 'dias') return dia && numero !== '' ? `dias:${dia}=${numero}` : ''
+  return ''
 }

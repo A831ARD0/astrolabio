@@ -87,3 +87,45 @@ def test_la_migracion_es_idempotente_sobre_un_esquema_ya_completo(base_vacia):
     with motor.connect() as con:
         ctx = MigrationContext.configure(con)
         assert ctx.get_current_revision() == cabeza
+
+
+def test_la_0016_pasa_las_expresiones_comunes_a_formato_y_vuelve(base_vacia):
+    """
+    Los datasets con una expresión de las formas comunes pasan a formato_fecha (y
+    con eso a filtrar en el origen) sin que nadie los toque. Las demás expresiones
+    se quedan. Y al bajar de versión, el formato vuelve a quedar como expresión.
+    """
+    from sqlalchemy import text
+
+    cfg = _config(base_vacia)
+    command.upgrade(cfg, "0015")
+    motor = create_engine(base_vacia)
+    texto = "try_strptime(\"Dt Emissao\", '%Y%m%d')"
+    rara = "try_strptime(CAST(c + 19000000 AS VARCHAR), '%Y%m%d')"
+    with motor.begin() as con:
+        con.execute(text("INSERT INTO conexion (id, nombre, tipo, config_cifrada, "
+                         "etiquetas, creado_en) VALUES (1, 'c', 'odbc', '', '{}', "
+                         "CURRENT_TIMESTAMP)"))
+        for i, (col, expr) in enumerate([("Dt Emissao", texto), ("c", rara)], 1):
+            con.execute(text(
+                "INSERT INTO dataset (id, nombre, conexion_id, tabla_origen, "
+                "particionar_por, expresion_particion, filas, bytes_parquet, "
+                "zona_horaria, programacion_activa, creado_en) "
+                "VALUES (:i, :n, 1, 't', :c, :e, 0, 0, 'UTC', 0, CURRENT_TIMESTAMP)"),
+                {"i": i, "n": f"d{i}", "c": col, "e": expr})
+
+    command.upgrade(cfg, "head")
+    with motor.connect() as con:
+        filas = dict(con.execute(text(
+            "SELECT id, formato_fecha || '|' || COALESCE(expresion_particion, '') "
+            "FROM dataset WHERE formato_fecha IS NOT NULL")).fetchall())
+        quedan = con.execute(text(
+            "SELECT expresion_particion FROM dataset WHERE id = 2")).scalar()
+    assert filas == {1: "texto:%Y%m%d|"}
+    assert quedan == rara
+
+    command.downgrade(cfg, "0015")
+    with motor.connect() as con:
+        vuelta = con.execute(text(
+            "SELECT expresion_particion FROM dataset WHERE id = 1")).scalar()
+    assert "Dt Emissao" in vuelta and "%Y%m%d" in vuelta
