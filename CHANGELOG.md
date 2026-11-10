@@ -7,6 +7,12 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **Cada carga ODBC abre una sola conexión y ya no cuenta la tabla antes de traerla.**
+  Antes abría dos —una para revisar las columnas y otra para traer las filas— y hacía
+  un `SELECT COUNT(*)` que nadie usaba. Contra un origen lento de abrir (Pervasive por
+  la red, segundos cada vez), una extracción de quinientas tablas perdía horas en eso
+  sin que se viera: ese tiempo no entra en la duración que se registra de cada carga.
+
 - **Una fila sin dato en el mes elegido ya no desaparece cuando tiene mes anterior o
   acumulado.** Con el mes puesto por filtro y, por ejemplo, la sucursal en el desglose,
   una sucursal que no vendió nada ese mes pero sí antes en el año se omitía: su fila de

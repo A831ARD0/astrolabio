@@ -200,3 +200,48 @@ def test_el_endpoint_dice_que_hay_instalado(cliente, cab_admin):
     cuerpo = r.json()
     assert cuerpo["disponible"] is True          # pyodbc esta en requirements
     assert isinstance(cuerpo["drivers"], list)
+
+
+@necesita_odbc
+def test_una_carga_abre_una_sola_conexion_y_no_cuenta(tmp_path, monkeypatch):
+    """
+    Abrir cuesta: contra un Pervasive por la red son segundos cada vez. Una
+    extraccion de quinientas tablas que abria dos conexiones por tabla y contaba
+    cada una entera antes de traerla se iba horas solo en eso.
+    """
+    from app.conectores.odbc import ConectorODBC
+
+    conector = _odbc()
+    abiertas, sentencias = [], []
+    abrir = ConectorODBC._abrir
+
+    def contar_aperturas(self):
+        con = abrir(self)
+        abiertas.append(con)
+        cursor = con.cursor
+
+        class Espia:
+            def __init__(self, cur):
+                self._cur = cur
+
+            def execute(self, sql, *a):
+                sentencias.append(sql)
+                return self._cur.execute(sql, *a)
+
+            def __getattr__(self, n):
+                return getattr(self._cur, n)
+
+        class ConEspia:
+            def cursor(self):
+                return Espia(cursor())
+
+            def __getattr__(self, n):
+                return getattr(con, n)
+
+        return ConEspia()
+
+    monkeypatch.setattr(ConectorODBC, "_abrir", contar_aperturas)
+    r = conector.ingestar(_pet(reemplazar_todo=True, limite=200), str(tmp_path / "d"))
+    assert r.filas == 200
+    assert len(abiertas) == 1
+    assert not [s for s in sentencias if "COUNT(" in s.upper()]

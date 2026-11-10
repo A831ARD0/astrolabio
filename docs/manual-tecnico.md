@@ -588,6 +588,7 @@ Qué esperar:
 | **Coste** | 12% más lento que ODBC directo, medido sobre 200,000 filas. Se pierde en el ruido de una carga nocturna. |
 | **Qué NO cambia** | Los tipos. Un DECIMAL sigue siendo DECIMAL y una fecha una fecha: los valores viajan por columnas y con su tipo, nunca convertidos a texto ni a float. Hay una prueba que trae la misma tabla por los dos caminos y los compara fila a fila. |
 | **Qué vigilar** | Si el puente se cae, las conexiones que lo usan fallan con un mensaje que lo dice por su nombre. Las demás siguen igual. |
+| **Abrir cuesta** | Lo caro de un origen remoto suele ser abrir la conexión, no traer las filas: contra Pervasive por la red son de medio segundo a varios segundos cada vez, y de madrugada, con otros procesos leyendo, más. Cada carga abre una sola. La duración registrada de una carga empieza cuando ya está abierta, así que si un flujo tarda mucho más que la suma de sus cargas, la diferencia está ahí. |
 
 Comprobar qué ve el puente desde su lado:
 

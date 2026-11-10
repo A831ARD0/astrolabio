@@ -375,53 +375,73 @@ class ConectorODBC(Conector):
     def describir_tabla(self, tabla: str, esquema: str | None = None) -> TablaOrigen:
         con = self._abrir()
         try:
-            cur = con.cursor()
-            donde = self._donde(esquema, con)
-            try:
-                filas = list(cur.columns(table=tabla, **donde))
-            except pyodbc.Error as e:
-                raise ErrorConector(_limpio(e)) from e
-            if not filas:
-                destino = esquema or self.config.get("database")
-                raise ErrorConector(f"La tabla '{destino}.{tabla}' no existe")
+            return self._describir(con, tabla, esquema, contar=True)
+        finally:
+            con.close()
 
-            claves: set[str] = set()
-            try:
-                claves = {f.column_name
-                          for f in cur.primaryKeys(table=tabla, **donde)}
-            except pyodbc.Error:
-                pass          # muchos drivers no lo implementan; no es un fallo
+    def _describir(self, con, tabla: str, esquema: str | None,
+                   contar: bool) -> TablaOrigen:
+        """
+        Columnas, llave y tipo de objeto de una tabla, sobre una conexion ya abierta.
 
-            columnas = [
-                ColumnaOrigen(
-                    nombre=f.column_name,
-                    tipo_origen=_tipo_texto(f),
-                    nulable=bool(f.nullable),
-                    es_clave=f.column_name in claves,
-                )
-                for f in filas
-            ]
+        `contar=False` se salta el `SELECT COUNT(*)`: al cargar no hace falta, y en
+        un origen lento (Pervasive por la red) es un recorrido completo de la tabla
+        antes de empezar a traerla.
+        """
+        cur = con.cursor()
+        donde = self._donde(esquema, con)
+        try:
+            filas = list(cur.columns(table=tabla, **donde))
+        except pyodbc.Error as e:
+            raise ErrorConector(_limpio(e)) from e
+        if not filas:
+            destino = esquema or self.config.get("database")
+            raise ErrorConector(f"La tabla '{destino}.{tabla}' no existe")
 
-            es_vista = False
-            try:
-                es_vista = any((t.table_type or "").upper() == "VIEW"
-                               for t in cur.tables(table=tabla, **donde))
-            except pyodbc.Error:
-                pass
+        claves: set[str] = set()
+        try:
+            claves = {f.column_name
+                      for f in cur.primaryKeys(table=tabla, **donde)}
+        except pyodbc.Error:
+            pass          # muchos drivers no lo implementan; no es un fallo
 
+        columnas = [
+            ColumnaOrigen(
+                nombre=f.column_name,
+                tipo_origen=_tipo_texto(f),
+                nulable=bool(f.nullable),
+                es_clave=f.column_name in claves,
+            )
+            for f in filas
+        ]
+
+        es_vista = False
+        try:
+            es_vista = any((t.table_type or "").upper() == "VIEW"
+                           for t in cur.tables(table=tabla, **donde))
+        except pyodbc.Error:
+            pass
+
+        total = None
+        if contar:
             nombre = self._nombre_tabla(tabla, esquema, con)
             try:
                 total = cur.execute(f"SELECT COUNT(*) FROM {nombre}").fetchone()[0]
             except pyodbc.Error as e:
                 raise ErrorConector(_limpio(e)) from e
+        # La misma conexion sigue para traer los datos: el cursor del catalogo se
+        # cierra antes, porque hay drivers (Pervasive) que no admiten dos
+        # sentencias abiertas a la vez.
+        try:
+            cur.close()
+        except pyodbc.Error:
+            pass
 
-            return TablaOrigen(
-                esquema=esquema or self.config.get("database"), nombre=tabla,
-                filas_estimadas=int(total or 0), es_vista=es_vista,
-                columnas=columnas,
-            )
-        finally:
-            con.close()
+        return TablaOrigen(
+            esquema=esquema or self.config.get("database"), nombre=tabla,
+            filas_estimadas=int(total or 0) if contar else None,
+            es_vista=es_vista, columnas=columnas,
+        )
 
     def muestra(self, tabla: str, esquema: str | None = None,
                 limite: int = 50,
@@ -447,10 +467,21 @@ class ConectorODBC(Conector):
     # -- ingesta ------------------------------------------------------------ #
 
     def ingestar(self, p: PeticionIngesta, ruta_destino: str) -> ResultadoIngesta:
+        # Una sola conexion para validar y para traer. Abrir cuesta: contra un
+        # Pervasive por la red son segundos cada vez, y una extraccion de cientos
+        # de tablas abriendo dos veces cada una se iba horas solo en eso.
+        origen = self._abrir()
+        try:
+            return self._ingestar(origen, p, ruta_destino)
+        finally:
+            origen.close()
+
+    def _ingestar(self, origen, p: PeticionIngesta,
+                  ruta_destino: str) -> ResultadoIngesta:
         # Las columnas se validan ANTES de mover datos: un error a media copia es
         # incomprensible, y en las bases reales abundan los nombres que parecen
         # existir y no existen.
-        tabla = self.describir_tabla(p.tabla, p.esquema)
+        tabla = self._describir(origen, p.tabla, p.esquema, contar=False)
         disponibles = {c.nombre for c in tabla.columnas}
         for etiqueta, col in (("particionar_por", p.particionar_por),
                               ("columna_incremental", p.columna_incremental)):
@@ -483,7 +514,6 @@ class ConectorODBC(Conector):
         destino = Path(ruta_destino)
         destino.mkdir(parents=True, exist_ok=True)
 
-        origen = self._abrir()
         duck = duckdb.connect()
         t0 = time.perf_counter()
         try:
@@ -566,7 +596,6 @@ class ConectorODBC(Conector):
             return escribir_lote(duck, destino, p, t0)
         finally:
             duck.close()
-            origen.close()
 
 
 # --------------------------------------------------------------------------- #
