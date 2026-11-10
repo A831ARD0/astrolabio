@@ -1226,9 +1226,38 @@ class Compilador:
         """
         predicados = predicados or []
 
+        # Una columna de OTRO hecho que este hecho tambien tiene (mismo nombre y
+        # tipo) se lee de aqui. Es la misma columna repetida en cada hecho —el
+        # segmento, el modelo, la serie—: desglosar las ventas y el trafico por
+        # segmento es desglosar cada uno por SU segmento. Ir a buscarla al otro hecho
+        # obligaria a unir hecho con hecho, que nunca da una cifra correcta (cada
+        # venta repetida por cada visita) y casi siempre ni siquiera tiene un solo
+        # camino. Asi lo hace Qlik, donde un campo es el mismo en toda tabla que lo
+        # tenga. La columna de salida conserva su nombre: es por la que se alinean
+        # despues las cifras de los distintos hechos.
+        propios = self.m.entidades[ent_metrica].campos
+
+        def de_donde(e: str, c: str) -> str:
+            otro = self.m.entidades.get(e)
+            if (e != ent_metrica and otro is not None and otro.tipo == "hecho"
+                    and c in propios and c in otro.campos
+                    and propios[c].tipo == otro.campos[c].tipo):
+                return ent_metrica
+            return e
+
+        lee = [(de_donde(e, c), c, e) for e, c in dims]
+        filtros = [dict(f, campo="{}.{}".format(
+                       de_donde(*str(f["campo"]).split(".", 1)),
+                       str(f["campo"]).split(".", 1)[1]))
+                   if "." in str(f["campo"]) else f
+                   for f in filtros]
+
         # Entidades a alcanzar: las de las dimensiones pedidas, MAS las de los
         # filtros, MAS las protegidas por una politica que aplique a este usuario.
-        objetivos = [e for e, _ in dims]
+        objetivos = []
+        for e, _c, _o in lee:
+            if e not in objetivos:
+                objetivos.append(e)
         for f in filtros:
             ent_filtro = str(f["campo"]).split(".")[0]
             if ent_filtro not in objetivos:
@@ -1260,7 +1289,7 @@ class Compilador:
                                           grafo, opcionales)
 
         sel_dims = [
-            f"{alias[e]}.{_cita(c)} AS {_cita(f'{e}.{c}')}" for e, c in dims
+            f"{alias[e]}.{_cita(c)} AS {_cita(f'{o}.{c}')}" for e, c, o in lee
         ]
         campos_ent = set(self.m.entidades[ent_metrica].campos)
 
@@ -1301,7 +1330,7 @@ class Compilador:
             where.append(_calificar(p.sql, alias[p.entidad], campos_prot))
             params.extend(p.parametros)
 
-        grupo = [f"{alias[e]}.{_cita(c)}" for e, c in dims]
+        grupo = [f"{alias[e]}.{_cita(c)}" for e, c, _o in lee]
         sql = (
             f"SELECT\n    " + ",\n    ".join(sel_dims + sel_mets) +
             f"\n  FROM {_cita(self.m.entidades[ent_metrica].tabla)} AS {alias[ent_metrica]}"

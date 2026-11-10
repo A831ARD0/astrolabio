@@ -7,6 +7,13 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Una columna que tienen varios hechos se lee de cada uno.** Si el desglose o un
+  filtro usa la columna de otro hecho (`Ventas.segmento`) y el hecho de la métrica
+  tiene una con el mismo nombre y tipo, se usa la suya: el tráfico por segmento es el
+  tráfico por SU segmento. Antes había que unir hecho con hecho, lo que repetía cifras
+  o fallaba con «hay varios caminos». Es como trata Qlik un campo que está en varias
+  tablas.
+
 - **Métricas que no ven el filtro de un campo (`ignora_filtros`).** Para una cifra que
   tiene que quedarse fija aunque en el tablero se filtre por ese campo: el objetivo, el
   divisor de una participación. Es el `{$<Campo=>}` de Qlik y el `REMOVEFILTERS` de DAX.

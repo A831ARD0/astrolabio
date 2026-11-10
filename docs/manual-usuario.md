@@ -1121,6 +1121,15 @@ de divisor sigue comparando contra él. Es el `{$<Segmento=>}` de Qlik y el
   también queda limitada.
 - Igual que la foto, solo en una métrica de un hecho.
 
+#### Una columna que está en varios hechos
+
+Si las ventas y el tráfico traen los dos la columna `segmento`, desglosar una tabla
+con cifras de los dos por «Ventas → segmento» desglosa **cada cifra por su propio
+segmento**: las ventas por el de la venta y el tráfico por el de la visita. No se une
+una tabla de hechos con otra (eso repetiría cada venta por cada visita). Vale igual
+para un filtro. Solo cuando la columna tiene el mismo nombre y el mismo tipo en los
+dos hechos; si no, se busca el camino como siempre.
+
 #### Una foto dentro de una tabla dinámica
 
 Una tabla dinámica repite cada métrica **debajo de cada columna**: si abres los meses,
