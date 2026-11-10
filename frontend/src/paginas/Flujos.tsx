@@ -477,6 +477,26 @@ export function Flujos() {
                           : p.tipo === 'flujo' ? 'flujo' : 'transformar'}
                       </span>
                       <span className="nom mono">{p.nombre}</span>
+                      {p.tipo === 'carga' && (
+                        <label
+                          className="chico"
+                          title="Trae la tabla entera, sin la ventana ni lo incremental del dataset. Para un flujo aparte, por ejemplo mensual, que recoja lo que cambió fuera de la ventana."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!p.completa}
+                            onChange={(e) =>
+                              setF({
+                                ...f,
+                                pasos: f.pasos.map((x, j) =>
+                                  j === i ? { ...x, completa: e.target.checked || undefined } : x,
+                                ),
+                              })
+                            }
+                          />{' '}
+                          traer todo
+                        </label>
+                      )}
 
                       {r && (
                         <span

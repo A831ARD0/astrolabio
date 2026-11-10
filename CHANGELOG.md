@@ -5,6 +5,13 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Agregado
+
+- **«Traer todo» en un paso de carga de un flujo.** El paso trae la tabla entera, sin
+  la ventana ni lo incremental del dataset. Sirve para un flujo aparte, programado por
+  ejemplo el último día de cada mes, que recoja lo que cambió en el origen fuera de la
+  ventana (una factura vieja que se cancela) sin hacer lenta la carga de cada noche.
+
 ### Corregido
 
 - **Cada carga ODBC abre una sola conexión y ya no cuenta la tabla antes de traerla.**

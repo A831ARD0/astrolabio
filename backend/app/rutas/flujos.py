@@ -35,6 +35,20 @@ class PasoFlujo(BaseModel):
     tipo: str
     id: int
     nombre: str | None = None
+    # Solo en una carga: traer la tabla entera, sin ventana ni incremental. Es lo
+    # que se programa aparte (p. ej. una vez al mes) para recoger lo que cambio en
+    # el origen fuera de la ventana: una factura vieja que se cancela.
+    completa: bool = False
+
+
+def _paso(p: PasoFlujo) -> dict:
+    if p.completa and p.tipo != "carga":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "«Traer todo» es solo para un paso de carga")
+    d = p.model_dump(mode="json")
+    if not d.get("completa"):
+        d.pop("completa", None)      # lo normal no se anota: los pasos de siempre quedan igual
+    return d
 
 
 class Guardar(BaseModel):
@@ -144,7 +158,7 @@ def _validar(sesion: SesionDep, cuerpo: Guardar,
     if cuerpo.al_fallar not in ("detener", "continuar"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             "al_fallar debe ser 'detener' o 'continuar'")
-    pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
+    pasos = [_paso(p) for p in cuerpo.pasos]
     errores = revisar_pasos(sesion, pasos, flujo_id, es_proyecto=es_proyecto)
     if errores:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -209,7 +223,7 @@ def sugerir(cuerpo: Guardar, sesion: SesionDep,
     falta. Es una propuesta que se revisa, no un cambio: puede haber razones para
     el orden que tenía.
     """
-    pasos = [p.model_dump(mode="json") for p in cuerpo.pasos]
+    pasos = [_paso(p) for p in cuerpo.pasos]
     propuesta = sugerir_orden(sesion, pasos)
     avisos = revisar_orden(sesion, propuesta)
     if any(p.get("tipo") == "flujo" for p in pasos):

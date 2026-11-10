@@ -11,6 +11,11 @@ export interface PasoFlujo {
   tipo: 'carga' | 'transformacion' | 'flujo'
   id: number
   nombre?: string | null
+  /**
+   * Solo en una carga: traer la tabla entera, sin ventana ni incremental. Para un
+   * flujo aparte (p. ej. mensual) que recoja lo que cambió fuera de la ventana.
+   */
+  completa?: boolean
 }
 
 export interface Flujo {

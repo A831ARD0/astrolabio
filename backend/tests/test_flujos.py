@@ -341,3 +341,44 @@ def test_borrar_el_flujo_quita_su_programacion(cliente, cab_admin,
 
 def test_el_lector_no_toca_los_flujos(cliente, cab_lector):
     assert cliente.get("/api/flujos", headers=cab_lector).status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Un paso de carga que trae todo
+# --------------------------------------------------------------------------- #
+
+@necesita_mysql
+def test_un_paso_con_traer_todo_se_salta_la_ventana(cliente, cab_admin, conexion_mysql):
+    """
+    La ventana trae solo los últimos meses; lo que cambia en el origen fuera de ella
+    (una factura vieja que se cancela) no vuelve a llegar. Para eso se programa
+    aparte, p. ej. el último día de cada mes, un flujo con el paso marcado
+    «completa»: ese paso trae la tabla entera y el de todos los días sigue igual.
+    """
+    r = cliente.post(f"/api/conexiones/{conexion_mysql}/datasets", headers=cab_admin,
+                     json={"nombre": "flujo_ventana_completa", "tabla": "ventas",
+                           "particionar_por": "fecha_emision", "ventana": "mes_actual"})
+    if r.status_code == 409:
+        ds = next(x["id"] for x in cliente.get("/api/conexiones/datasets/lista",
+                                                headers=cab_admin).json()["datasets"]
+                  if x["nombre"] == "flujo_ventana_completa")
+    else:
+        assert r.status_code == 201, r.text
+        ds = r.json()["id"]
+
+    diario = crear_flujo(cliente, cab_admin, {
+        "nombre": "diario_con_ventana", "pasos": [{"tipo": "carga", "id": ds}]})
+    mensual = crear_flujo(cliente, cab_admin, {
+        "nombre": "mensual_todo", "pasos": [{"tipo": "carga", "id": ds, "completa": True}]})
+    assert "completa" not in diario["pasos"][0], "lo normal no se anota"
+    assert mensual["pasos"][0]["completa"] is True
+
+    assert correr(cliente, cab_admin, diario["id"])["pasos"][0]["modo"] == "particion"
+    assert correr(cliente, cab_admin, mensual["id"])["pasos"][0]["modo"] == "completo"
+
+
+def test_traer_todo_solo_va_en_una_carga(cliente, cab_admin, transformacion_flujo):
+    r = cliente.post("/api/flujos", headers=cab_admin, json={
+        "nombre": "todo_mal_puesto",
+        "pasos": [{"tipo": "transformacion", "id": transformacion_flujo, "completa": True}]})
+    assert r.status_code == 422

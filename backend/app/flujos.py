@@ -641,7 +641,10 @@ def ejecutar(sesion: Session, flujo: Flujo, actor: Actor,
                     ds = sesion.get(Dataset, int(paso["id"]))
                     if ds is None:
                         raise ErrorFlujo(f"el dataset {paso['id']} ya no existe")
-                    r = ejecutar_carga(sesion, ds, actor)
+                    completa = bool(paso.get("completa"))
+                    r = ejecutar_carga(sesion, ds, actor,
+                                       incremental=not completa,
+                                       usar_ventana=not completa)
                     salio = {"paso": i, **_sena(paso), "nombre": nombre,
                              "estado": "exito", "filas": r["filas"],
                              "modo": r["modo"], "ms": r["ms"]}

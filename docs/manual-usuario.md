@@ -482,6 +482,19 @@ Un éxito al tercer intento **no es lo mismo** que un éxito: el historial dice
 cuántos intentos hicieron falta. Si un paso empieza a necesitar tres cada noche,
 el problema no es el reintento.
 
+#### Traer todo (una recarga completa programada)
+
+Una carga con **ventana** trae solo los últimos meses: es lo que la hace rápida.
+Lo que cambia en el origen fuera de esa ventana —una factura de hace un año que se
+cancela— ya no vuelve a llegar. Para eso, en un paso de carga marca **traer todo**:
+ese paso trae la tabla entera, sin ventana ni incremental.
+
+Lo normal es ponerlo en **un flujo aparte** con sus propias cargas marcadas y
+programarlo poco: por ejemplo el último día de cada mes por la tarde
+(en el horario, `0 18 last * *`). El flujo de
+todos los días sigue con su ventana, y a la mañana siguiente el mes cerrado ya
+trae todo corregido.
+
 ### Tareas
 
 **Tareas** es la pantalla de la mañana: todo lo que corre solo, en una sola tabla.
