@@ -553,6 +553,38 @@ export function PanelMetrica({
               </label>
             )}
 
+            {/* Igual que el periodo: solo en una métrica de un hecho. */}
+            {!compuesta && (
+              <label className="chico" style={{ display: 'block', marginTop: 2 }}>
+                No la afectan los filtros de{' '}
+                <input
+                  className="mono"
+                  style={{ width: '16em' }}
+                  placeholder="campo, Tabla.campo"
+                  // Se lee al salir del campo: rearmarlo en cada tecla se comería
+                  // la coma recién escrita.
+                  key={borrador.nombre}
+                  defaultValue={(borrador.ignora_filtros ?? []).join(', ')}
+                  onBlur={(e) => {
+                    const campos = e.target.value
+                      .split(',')
+                      .map((x) => x.trim())
+                      .filter(Boolean)
+                    setBorrador({
+                      ...borrador,
+                      ignora_filtros: campos.length ? campos : undefined,
+                    })
+                  }}
+                />
+                <span className="tenue">
+                  {' '}
+                  — su cifra se queda igual aunque en el tablero se filtre por esos
+                  campos (el objetivo, el divisor de una participación). Los permisos
+                  se siguen aplicando
+                </span>
+              </label>
+            )}
+
             {/*
               Sin `min-height: 0`, a propósito. Un elemento flex no se encoge por
               debajo de su contenido salvo que se le diga, y aquí ese permiso

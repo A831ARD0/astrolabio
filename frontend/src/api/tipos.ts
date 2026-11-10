@@ -131,6 +131,13 @@ export interface Metrica {
    * falso, da nulo, y la rama se va al «si no» sin que nadie lo pida.
    */
   sin_dato_cero?: boolean
+  /**
+   * Campos cuyos filtros no la tocan: `"Tabla.campo"` o solo `"campo"`. Para una
+   * cifra que tiene que quedarse fija aunque se filtre por ese campo (el objetivo,
+   * el divisor de una participación). Es el `{$<Campo=>}` de Qlik. Las políticas
+   * de seguridad se siguen aplicando.
+   */
+  ignora_filtros?: string[]
   [clave: string]: unknown
 }
 

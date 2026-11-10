@@ -234,6 +234,21 @@ class MetricaDef(_Base):
     #: No cambia cual es «el ultimo mes con datos»: eso se sigue decidiendo con la
     #: cifra cruda, o el mes que manda seria siempre el ultimo del calendario.
     sin_dato_cero: bool = False
+    #: Campos cuyos filtros del tablero NO la tocan, como `"Ventas.forma_pago"` o
+    #: solo `"forma_pago"` (entonces el de cualquier tabla con ese nombre).
+    #:
+    #: Para una cifra que tiene que quedarse fija aunque alguien filtre por ese
+    #: campo: el objetivo del mes no cambia porque se mire solo una forma de pago, y
+    #: el «% de cumplimiento» que lo usa de divisor tampoco debe. Es el
+    #: `{$<Campo=>}` del set analysis de Qlik y el `REMOVEFILTERS(Campo)` de DAX.
+    #:
+    #: Solo los filtros que se eligen en el tablero o en la consulta. Las politicas
+    #: de seguridad se siguen aplicando: quitarle un filtro a una metrica no puede
+    #: ser una forma de ver lo que el usuario no tiene permitido. Y si el campo es
+    #: del desglose, se sigue desglosando por el: lo que se ignora es el filtro.
+    #:
+    #: Solo en una metrica de un hecho, igual que `ignora_periodo`.
+    ignora_filtros: list[str] = []
     #: Relaciones que esta metrica usa en vez de la activa, como
     #: `"entidad.campo -> entidad.campo"`.
     #:
@@ -370,6 +385,20 @@ class Definicion(_Base):
                     f"La metrica compuesta '{m.nombre}' no puede ignorar el "
                     f"periodo: no lee ninguna tabla, asi que no hay filtro que "
                     f"quitarle. Marca asi las metricas que combina.")
+            if m.entidad is None and getattr(m, "ignora_filtros", None):
+                errores.append(
+                    f"La metrica compuesta '{m.nombre}' no puede ignorar "
+                    f"filtros: no lee ninguna tabla. Marca asi las metricas que "
+                    f"combina.")
+            for f in getattr(m, "ignora_filtros", None) or []:
+                ent, _, campo = f.rpartition(".")
+                existe = any((not ent or e.nombre == ent)
+                             and any(c.nombre == campo for c in e.campos)
+                             for e in self.entidades)
+                if not existe:
+                    errores.append(
+                        f"La metrica '{m.nombre}' dice ignorar los filtros de "
+                        f"'{f}', que no es ningun campo del modelo.")
             if m.entidad is None and m.uniones:
                 errores.append(
                     f"La metrica compuesta '{m.nombre}' no puede elegir "

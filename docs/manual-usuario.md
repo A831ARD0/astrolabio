@@ -1100,6 +1100,27 @@ Tres cosas que conviene saber:
   combina —«meses de inventario» sale bien sin marcarla ella—. Una dimensión tampoco
   puede: de ahí no sale ninguna cifra. Las dos cosas se dicen al guardar.
 
+#### Una cifra que no cambia con el filtro de un campo
+
+Lo mismo, pero con un campo cualquiera en vez del calendario. En el editor de la
+métrica:
+
+```
+No la afectan los filtros de  [ segmento, Ventas.forma_pago ]
+```
+
+Si alguien filtra el tablero por segmento, las demás cifras se recortan y esta no: el
+objetivo del mes sigue siendo el del mes entero, y el «% de cumplimiento» que lo usa
+de divisor sigue comparando contra él. Es el `{$<Segmento=>}` de Qlik y el
+`REMOVEFILTERS(Segmento)` de DAX.
+
+- `campo` solo vale para ese campo en cualquier tabla; `Tabla.campo`, solo en esa.
+- Lo que se ignora es **el filtro**, no la columna: si el campo está en el desglose,
+  la tabla sigue partida por él.
+- **Los permisos no se ignoran.** Si una política limita lo que alguien ve, esta cifra
+  también queda limitada.
+- Igual que la foto, solo en una métrica de un hecho.
+
 #### Una foto dentro de una tabla dinámica
 
 Una tabla dinámica repite cada métrica **debajo de cada columna**: si abres los meses,

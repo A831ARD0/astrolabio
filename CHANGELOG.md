@@ -7,6 +7,12 @@ versionado es [semántico](https://semver.org/lang/es/).
 
 ### Agregado
 
+- **Métricas que no ven el filtro de un campo (`ignora_filtros`).** Para una cifra que
+  tiene que quedarse fija aunque en el tablero se filtre por ese campo: el objetivo, el
+  divisor de una participación. Es el `{$<Campo=>}` de Qlik y el `REMOVEFILTERS` de DAX.
+  Las políticas de seguridad se siguen aplicando, y si el campo es del desglose se
+  sigue desglosando por él. Se edita en el panel de la métrica.
+
 - **«Traer todo» en un paso de carga de un flujo.** El paso trae la tabla entera, sin
   la ventana ni lo incremental del dataset. Sirve para un flujo aparte, programado por
   ejemplo el último día de cada mes, que recoja lo que cambió en el origen fuera de la

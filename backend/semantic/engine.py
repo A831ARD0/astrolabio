@@ -159,6 +159,15 @@ class Metrica:
     #: compilador no la mira: es para agrupar en la interfaz. Una compuesta no sale
     #: de ningun hecho, asi que es lo unico que la ordena.
     tabla_medidas: str | None = None
+    #: Campos cuyos filtros no la tocan. Ver `MetricaDef.ignora_filtros`.
+    ignora_filtros: tuple[str, ...] = ()
+
+    def ignora_filtro(self, campo: str) -> bool:
+        """Si el filtro sobre `campo` ("Entidad.campo") no aplica a esta metrica."""
+        if not self.ignora_filtros:
+            return False
+        solo = campo.split(".", 1)[-1]
+        return campo in self.ignora_filtros or solo in self.ignora_filtros
 
     @property
     def compuesta(self) -> bool:
@@ -205,7 +214,8 @@ class Modelo:
                                  tuple(m.get("uniones", []) or ()),
                                  bool(m.get("ignora_periodo", False)),
                                  bool(m.get("sin_dato_cero", False)),
-                                 m.get("tabla_medidas"))
+                                 m.get("tabla_medidas"),
+                                 tuple(m.get("ignora_filtros") or ()))
             for m in crudo.get("metricas", [])
         }
 
@@ -1627,7 +1637,7 @@ class Compilador:
         hay_periodo = bool(cols_cal) or any(
             str(f["campo"]).split(".", 1)[0] in cals for f in filtros_cte)
 
-        por_grupo: dict[tuple[str, tuple[str, ...], bool], list[Metrica]] = {}
+        por_grupo: dict[tuple[str, tuple[str, ...], bool, tuple[str, ...]], list[Metrica]] = {}
         vistas: set[str] = set()
         for nombre in pedidas:
             if nombre in vistas:
@@ -1635,18 +1645,24 @@ class Compilador:
             vistas.add(nombre)
             met = self.m.metricas[nombre]
             libre = self.m.ignora_periodo(met) and hay_periodo
-            por_grupo.setdefault((met.entidad, met.uniones, libre), []).append(met)
+            # Las que ignoran el filtro de algun campo van en su propio CTE, que es
+            # donde se aplican los filtros. Solo cuenta lo que de verdad se ignora:
+            # sin filtro sobre ese campo, comparte CTE como cualquier otra.
+            sin = tuple(sorted(str(f["campo"]) for f in filtros_cte
+                               if met.ignora_filtro(str(f["campo"]))))
+            por_grupo.setdefault((met.entidad, met.uniones, libre, sin), []).append(met)
 
         # Cada CTE recuerda por que columnas de dimension quedo agrupado: las del
         # calendario no estan en los que ignoran el periodo, y de eso depende tanto
         # la espina como por donde se unen despues.
         ctes: list[tuple[str, str, list[str], list[str]]] = []
         parametros: list = []
-        for i, ((ent, _u, libre), mets) in enumerate(por_grupo.items()):
+        for i, ((ent, _u, libre, sin), mets) in enumerate(por_grupo.items()):
             dims_cte = [d for d in dims if not (libre and d[0] in cals)]
             filtros_i = [f for f in filtros_cte
                          if not (libre
-                                 and str(f["campo"]).split(".", 1)[0] in cals)]
+                                 and str(f["campo"]).split(".", 1)[0] in cals)
+                         and str(f["campo"]) not in sin]
             cuerpo, params = self._cte_metrica(
                 ent, mets, dims_cte, filtros_i, c.rutas_elegidas, predicados
             )
